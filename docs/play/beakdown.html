@@ -1,0 +1,1314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#150e1c">
+<title>BEAKDOWN</title>
+<script>if(window.self!==window.top)document.documentElement.className='framed';</script>
+<!-- Copy of Beakdown served same-origin so it frames cleanly. The canonical
+     below is what stops it competing with beakdown.fun in search. -->
+<link rel="canonical" href="https://beakdown.fun/">
+<meta name="description" content="Fly, flap and land on your enemies. The higher bird always wins.">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="BEAKDOWN">
+<meta property="og:description" content="Settle the pecking order. Fly, flap and land on your enemies.">
+<meta property="og:url" content="https://beakdown.fun/">
+<meta property="og:image" content="https://beakdown.fun/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="BEAKDOWN">
+<meta name="twitter:description" content="Settle the pecking order. Fly, flap and land on your enemies.">
+<meta name="twitter:image" content="https://beakdown.fun/og.png">
+
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+ {"@type":"Organization","@id":"https://beakdown.fun/#org","name":"Beakdown",
+  "url":"https://beakdown.fun/","logo":"https://beakdown.fun/icon.png",
+  "sameAs":["https://nathanhaslewood.com.au"]},
+ {"@type":"VideoGame","@id":"https://beakdown.fun/#game","name":"Beakdown",
+  "url":"https://beakdown.fun/","image":"https://beakdown.fun/og.png",
+  "description":"A free browser arcade game where you fly by flapping and win every collision by being the higher bird.",
+  "genre":"Arcade","playMode":"SinglePlayer","gamePlatform":"Web browser",
+  "applicationCategory":"Game","operatingSystem":"Any","isAccessibleForFree":true,
+  "inLanguage":"en-AU",
+  "author":{"@type":"Person","name":"Nathan Haslewood","url":"https://nathanhaslewood.com.au"},
+  "publisher":{"@id":"https://beakdown.fun/#org"},
+  "offers":{"@type":"Offer","price":"0","priceCurrency":"AUD",
+            "availability":"https://schema.org/InStock"}},
+ {"@type":"WebPage","@id":"https://beakdown.fun/","url":"https://beakdown.fun/",
+  "name":"BEAKDOWN","description":"Fly, flap and land on your enemies. The higher bird always wins.",
+  "primaryImageOfPage":"https://beakdown.fun/og.png",
+  "about":{"@id":"https://beakdown.fun/#game"},
+  "publisher":{"@id":"https://beakdown.fun/#org"},"inLanguage":"en-AU"}
+]}
+</script>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:#150e1c;
+  font:14px/1.4 system-ui,sans-serif;color:#f2ece0;
+  user-select:none;-webkit-user-select:none;touch-action:none;overscroll-behavior:none}
+canvas{display:block;position:fixed;inset:0}
+#hud{position:fixed;top:0;left:0;right:0;
+  padding:calc(8px + env(safe-area-inset-top)) 15px 8px;
+  display:flex;justify-content:space-between;align-items:baseline;
+  font-variant-numeric:tabular-nums;font-size:11px;letter-spacing:.16em;
+  pointer-events:none;text-shadow:0 2px 6px rgba(0,0,0,.75);opacity:.92}
+#hud b{font-size:18px;font-weight:600;letter-spacing:.03em}
+#msg{position:fixed;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center;gap:16px;padding:28px;
+  background:radial-gradient(ellipse at 50% 46%,rgba(46,22,52,.7),rgba(12,8,16,.95));
+  pointer-events:none}
+#msg.hide{display:none}
+#msg h1{font-size:30px;letter-spacing:.2em;font-weight:600;padding-left:.2em;
+  background:linear-gradient(180deg,#ffd9a0,#e8804f);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+#msg p{opacity:.72;max-width:19em;font-size:14px;line-height:1.6}
+#msg .big{font-size:17px;opacity:.96}
+#msg .k{color:#ffc046}
+#msg .sub{font-size:12.5px;opacity:.5}
+#audio{display:flex;gap:10px;justify-content:center;pointer-events:auto;margin-top:2px}
+#audio button{font:inherit;font-size:13px;letter-spacing:.08em;color:#f2ece0;
+  background:rgba(255,255,255,.05);border:1px solid rgba(242,236,224,.22);
+  border-radius:26px;min-height:48px;padding:0 20px;cursor:pointer;opacity:.62;
+  display:flex;align-items:center;gap:8px;transition:opacity .15s,border-color .15s;
+  touch-action:manipulation}
+#audio button.on{opacity:1;border-color:rgba(255,192,70,.6);color:#ffc046}
+#audio svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round}
+
+/* in-play controls. Circular, ringed and semi-transparent, matching Hurtle.
+   Pause sits far left, audio far right, so nothing is clustered under one thumb.
+   The container spans the width but is pointer-events:none, or the gap between
+   the buttons would swallow flap taps across the whole bottom strip. */
+#atog{position:fixed;left:0;right:0;bottom:0;z-index:6;display:none;
+  justify-content:space-between;align-items:center;pointer-events:none;
+  padding:0 calc(12px + env(safe-area-inset-right))
+          calc(12px + env(safe-area-inset-bottom))
+          calc(12px + env(safe-area-inset-left))}
+#atog .grp{display:flex;gap:11px}
+#atog button{-webkit-appearance:none;appearance:none;pointer-events:auto;
+  width:54px;height:54px;padding:0;border-radius:50%;cursor:pointer;
+  border:1.5px solid rgba(247,230,196,.30);
+  background:rgba(10,7,14,.30);
+  color:rgba(247,230,196,.62);
+  display:flex;align-items:center;justify-content:center;
+  transition:border-color .15s,color .15s,background .15s;
+  touch-action:manipulation}
+#atog button.on{border-color:rgba(255,192,70,.45);color:rgba(255,192,70,.78)}
+#atog button:active{background:rgba(255,192,70,.16);
+  border-color:rgba(255,192,70,.7);color:rgba(255,192,70,.95)}
+#atog svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.85;
+  stroke-linecap:round;stroke-linejoin:round}
+
+/* pause overlay */
+#pause{position:fixed;inset:0;z-index:8;display:none;
+  flex-direction:column;align-items:center;justify-content:center;gap:22px;
+  background:radial-gradient(ellipse at 50% 46%,rgba(46,22,52,.82),rgba(12,8,16,.96))}
+#pause.show{display:flex}
+#pause h2{font-size:22px;letter-spacing:.3em;font-weight:600;padding-left:.3em;
+  color:#ffc046;opacity:.9}
+#pause .row{display:flex;gap:12px}
+#pause button{font:inherit;font-size:14px;letter-spacing:.06em;color:#f2ece0;
+  background:rgba(255,255,255,.05);border:1px solid rgba(242,236,224,.25);
+  border-radius:26px;min-height:52px;padding:0 22px;cursor:pointer;opacity:.72;
+  display:flex;align-items:center;gap:9px;touch-action:manipulation}
+#pause button.on{opacity:1;border-color:rgba(255,192,70,.6);color:#ffc046}
+#pause button.go{min-width:190px;justify-content:center;opacity:1;
+  border-color:rgba(255,192,70,.7);color:#ffc046;font-size:15px}
+#pause svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.9;
+  stroke-linecap:round;stroke-linejoin:round}
+#msg .tag{font-style:italic;font-size:15px;color:#ffc046;
+  opacity:.92;letter-spacing:.01em;margin-top:-9px}
+#stats{display:grid;grid-template-columns:auto auto;gap:5px 26px;
+  font-size:13px;font-variant-numeric:tabular-nums;text-align:left;opacity:.92}
+#stats .v{text-align:right;font-weight:600;color:#ffc046}
+#stats .sw{display:inline-block;width:9px;height:9px;border-radius:2px;
+  margin-right:8px;vertical-align:middle}
+/* menus only. during play the credit is painted onto the ground in the canvas
+   instead, where it sits on flat dark rock rather than straddling the horizon.
+   hidden outright when framed, because the parent page owns its own furniture. */
+#chrome{position:fixed;left:0;right:0;text-align:center;z-index:5;
+  bottom:calc(9px + env(safe-area-inset-bottom));
+  padding:0 14px;pointer-events:auto;
+  text-shadow:0 1px 5px rgba(0,0,0,.85)}
+.framed #chrome{display:none!important}
+#more{font-size:11px;letter-spacing:.04em;opacity:.46;line-height:2;margin-bottom:3px}
+#more a{color:inherit;text-decoration:none;white-space:nowrap;margin:0 3px;
+  border-bottom:1px solid rgba(242,236,224,.2)}
+#more span{opacity:.5;margin:0 2px}
+#credit{font-size:11px;letter-spacing:.07em;opacity:.55}
+#credit a{color:inherit;text-decoration:none;border-bottom:1px solid rgba(242,236,224,.3)}
+#flash{position:fixed;left:0;right:0;top:37%;text-align:center;
+  font-size:15px;letter-spacing:.24em;font-weight:600;pointer-events:none;
+  opacity:0;transition:opacity .2s;text-shadow:0 2px 10px #000}
+#flash.on{opacity:1}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="hud"><span>SCORE <b id="hS">0</b></span><span id="hR"></span></div>
+<div id="flash"></div>
+<div id="atog"><button id="tPau" type="button" aria-label="Pause"><svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg></button><div class="grp"><button id="tSfx" type="button" aria-label="Sound effects"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path class="wv" d="M16.5 8.5a5 5 0 0 1 0 7"/><path class="sl" d="M3 3l18 18"/></svg></button><button id="tMus" type="button" aria-label="Music"><svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/><path class="sl" d="M3 3l18 18"/></svg></button></div></div>
+<div id="pause"><h2>PAUSED</h2><button class="go" id="pGo" type="button"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8V4z"/></svg><span>Resume</span></button><div class="row"><button id="pSfx" type="button"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path class="wv" d="M16.5 8.5a5 5 0 0 1 0 7"/><path class="sl" d="M3 3l18 18"/></svg><span>Sound</span></button><button id="pMus" type="button"><svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/><path class="sl" d="M3 3l18 18"/></svg><span>Music</span></button></div></div>
+<div id="chrome">
+  <nav id="more"><a href="https://beakdown.fun/flappy-bird-online">Flappy Bird unblocked</a><span>&middot;</span><a href="https://beakdown.fun/flappy-bird-2">Flappy Bird 2</a><span>&middot;</span><a href="https://beakdown.fun/what-happened-to-flappy-bird">What happened to Flappy Bird</a><span>&middot;</span><a href="https://beakdown.fun/about-beakdown">About Beakdown</a></nav>
+  <div id="credit">by <a href="https://nathanhaslewood.com.au" target="_blank" rel="noopener noreferrer">Nathan Haslewood</a></div>
+</div>
+<div id="msg">
+  <h1>BEAKDOWN</h1>
+  <p class="tag">Settle the pecking order.</p>
+  <p id="bestline" class="big"></p>
+  <p class="big"><span class="k">Tap or hold</span> the left or right of the screen to fly that way.</p>
+  <p class="big"><span class="k">Land on</span> your enemies.</p>
+  <p class="sub">On a keyboard: <span class="k">arrow keys</span> to fly, <span class="k">space</span> to climb.</p>
+  <div id="audio"><button id="bSfx" type="button"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path class="wv" d="M16.5 8.5a5 5 0 0 1 0 7"/><path class="sl" d="M3 3l18 18"/></svg><span>Sound</span></button><button id="bMus" type="button"><svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/><path class="sl" d="M3 3l18 18"/></svg><span>Music</span></button></div>
+  <p>Tap or press any key to begin.</p>
+</div>
+
+<script>
+// ctx.roundRect is Chrome 99+, Safari 16+, Firefox 112+. Without this the game throws
+// on its first draw and shows a black screen on any older browser, including the
+// managed Chromebooks that a chunk of the search traffic will arrive on.
+if(!CanvasRenderingContext2D.prototype.roundRect){
+  CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+    r=Math.min(typeof r==='number'?r:(r&&r[0])||0, Math.abs(w)/2, Math.abs(h)/2);
+    this.moveTo(x+r,y);
+    this.arcTo(x+w,y,x+w,y+h,r);
+    this.arcTo(x+w,y+h,x,y+h,r);
+    this.arcTo(x,y+h,x,y,r);
+    this.arcTo(x,y,x+w,y,r);
+    this.closePath();
+    return this;
+  };
+}
+/* ---- AUDIO ----------------------------------------------------------------
+   Synthesised at runtime. No files, no fetches. Every sound is layered rather
+   than a single oscillator: a transient, a body and a tail, through a filter
+   with its own envelope, into a shared plate reverb and a soft-clip bus. That
+   layering is the whole difference between a chiptune bleep and something that
+   sounds produced.
+   Defaults to OFF and persists. A large part of this audience is on school
+   hardware, and a game that makes noise in a classroom is closed in one second.
+   --------------------------------------------------------------------------- */
+// On by default when played directly. Off by default inside an iframe, because the
+// embedded copies live on pages aimed at school hardware and unexpected noise in a
+// classroom closes the tab. An explicit choice by the player always wins over both.
+const FRAMED = (function(){ try{ return window.self!==window.top; }catch(e){ return true; } })();
+let sfxOn=!FRAMED, musOn=!FRAMED, actx=null, master=null, sfxBus=null, musBus=null,
+    revBus=null, noiseBuf=null;
+try{
+  const a=localStorage.getItem('beakdown_sfx'); if(a!==null) sfxOn=(a==='1');
+  const b=localStorage.getItem('beakdown_mus'); if(b!==null) musOn=(b==='1');
+}catch(e){}
+function saveAudio(){
+  try{
+    localStorage.setItem('beakdown_sfx',sfxOn?'1':'0');
+    localStorage.setItem('beakdown_mus',musOn?'1':'0');
+  }catch(e){}
+}
+function hz(n){ return 440*Math.pow(2,(n-69)/12); }
+
+function audioInit(){
+  if(actx)return;
+  try{
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC)return;
+    actx=new AC();
+
+    // soft saturation on the master. rounds off transients so nothing spikes.
+    const shaper=actx.createWaveShaper();
+    const n=1024, curve=new Float32Array(n), k=1.6;
+    for(let i=0;i<n;i++){ const x=i*2/n-1; curve[i]=(1+k)*x/(1+k*Math.abs(x)); }
+    shaper.curve=curve; shaper.oversample='2x';
+
+    master=actx.createGain(); master.gain.value=0.5;
+    master.connect(shaper); shaper.connect(actx.destination);
+
+    sfxBus=actx.createGain(); sfxBus.gain.value=0.75; sfxBus.connect(master);
+    musBus=actx.createGain(); musBus.gain.value=0.0;  musBus.connect(master);
+
+    // plate reverb from a generated impulse. this is what gives depth.
+    const conv=actx.createConvolver();
+    const len=Math.floor(actx.sampleRate*1.9);
+    const ir=actx.createBuffer(2,len,actx.sampleRate);
+    for(let c=0;c<2;c++){
+      const d=ir.getChannelData(c);
+      for(let i=0;i<len;i++){
+        const t=i/len;
+        d[i]=(Math.random()*2-1)*Math.pow(1-t,2.6)*(t<0.002?t/0.002:1);
+      }
+    }
+    conv.buffer=ir;
+    const damp=actx.createBiquadFilter();
+    damp.type='lowpass'; damp.frequency.value=3600;
+    revBus=actx.createGain(); revBus.gain.value=0.9;
+    revBus.connect(damp); damp.connect(conv); conv.connect(master);
+
+    const nl=Math.floor(actx.sampleRate*0.5);
+    noiseBuf=actx.createBuffer(1,nl,actx.sampleRate);
+    const nd=noiseBuf.getChannelData(0);
+    for(let i=0;i<nl;i++) nd[i]=Math.random()*2-1;
+  }catch(e){ actx=null; }
+}
+function audioWake(){ if(actx&&actx.state==='suspended') actx.resume(); }
+
+/* one tonal voice: pitch env, filter env, ADSR, pan, reverb send */
+function V(o){
+  if(!actx)return;
+  const t=(o.t||actx.currentTime)+(o.d||0), dur=o.dur||0.2;
+  const osc=actx.createOscillator();
+  osc.type=o.type||'sine';
+  osc.frequency.setValueAtTime(o.f,t);
+  if(o.f2) osc.frequency.exponentialRampToValueAtTime(Math.max(20,o.f2),t+(o.fT||dur));
+  if(o.det) osc.detune.setValueAtTime(o.det,t);
+  let node=osc;
+  if(o.cut){
+    const flt=actx.createBiquadFilter();
+    flt.type=o.ft||'lowpass'; flt.Q.value=o.q||1;
+    flt.frequency.setValueAtTime(o.cut,t);
+    if(o.cut2) flt.frequency.exponentialRampToValueAtTime(Math.max(60,o.cut2),t+(o.cT||dur));
+    osc.connect(flt); node=flt;
+  }
+  const g=actx.createGain(), a=o.a===undefined?0.006:o.a, v=o.v||0.18;
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(v,t+a);
+  g.gain.setValueAtTime(v,t+a);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  node.connect(g);
+  let out=g;
+  if(o.pan!==undefined&&actx.createStereoPanner){
+    const p=actx.createStereoPanner(); p.pan.value=o.pan; g.connect(p); out=p;
+  }
+  out.connect(o.bus||sfxBus);
+  if(o.rev&&revBus){ const r=actx.createGain(); r.gain.value=o.rev; out.connect(r); r.connect(revBus); }
+  osc.start(t); osc.stop(t+dur+0.06);
+}
+/* one noise voice, for transients and air */
+function N(o){
+  if(!actx||!noiseBuf)return;
+  const t=(o.t||actx.currentTime)+(o.d||0), dur=o.dur||0.08;
+  const src=actx.createBufferSource(); src.buffer=noiseBuf; src.loop=true;
+  src.playbackRate.value=o.rate||1;
+  const flt=actx.createBiquadFilter();
+  flt.type=o.ft||'bandpass'; flt.Q.value=o.q||1;
+  flt.frequency.setValueAtTime(o.cut,t);
+  if(o.cut2) flt.frequency.exponentialRampToValueAtTime(Math.max(60,o.cut2),t+dur);
+  const g=actx.createGain(), a=o.a===undefined?0.004:o.a;
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(o.v||0.1,t+a);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  src.connect(flt); flt.connect(g);
+  let out=g;
+  if(o.pan!==undefined&&actx.createStereoPanner){
+    const p=actx.createStereoPanner(); p.pan.value=o.pan; g.connect(p); out=p;
+  }
+  out.connect(o.bus||sfxBus);
+  if(o.rev&&revBus){ const r=actx.createGain(); r.gain.value=o.rev; out.connect(r); r.connect(revBus); }
+  src.start(t); src.stop(t+dur+0.05);
+}
+
+const SND={
+  // air over feathers plus a soft body thump. fires up to 5x a second, so it is
+  // deliberately the quietest thing here and jitters on every repeat.
+  // two bands of moving air with a soft swell. no pitched layer at all: a sine
+  // thump underneath is what made this read as a drum tap.
+  flap(){ if(!sfxOn||!actx)return;
+    const j=0.88+Math.random()*0.3, p=(Math.random()-0.5)*0.4;
+    N({cut:380*j,cut2:1700*j,q:0.75,dur:0.17,v:0.062,a:0.028,pan:p,rev:0.07});
+    N({cut:2400*j,cut2:1000,q:0.6,dur:0.12,v:0.028,a:0.016,pan:p*-0.6});
+  },
+  // impact, weight, then a bell that rings out. the reward sound.
+  kill(){ if(!sfxOn||!actx)return;
+    N({cut:2800,cut2:700,q:0.7,dur:0.05,v:0.11});
+    V({f:230,f2:88,dur:0.17,type:'sine',v:0.24,cut:900,cut2:300});
+    V({f:hz(84),dur:0.42,type:'triangle',v:0.085,a:0.004,rev:0.32,d:0.015});
+    V({f:hz(91),dur:0.34,type:'sine',v:0.055,a:0.004,rev:0.32,d:0.02,det:4});
+  },
+  // wooden knock, no pitch, no drama
+  bounce(){ if(!sfxOn||!actx)return;
+    N({cut:760,cut2:300,q:3.2,dur:0.07,v:0.09});
+    V({f:300,f2:190,dur:0.09,type:'triangle',v:0.11,cut:1400});
+  },
+  // a fall rather than a wah-wah: impact, filtered descent, sub underneath
+  die(){ if(!sfxOn||!actx)return;
+    N({cut:1900,cut2:220,q:0.8,dur:0.14,v:0.15});
+    V({f:340,f2:74,fT:0.62,dur:0.72,type:'sawtooth',v:0.15,
+       cut:1700,cut2:260,cT:0.6,q:5,rev:0.4});
+    V({f:112,f2:46,dur:0.55,type:'sine',v:0.13});
+    V({f:hz(56),dur:0.9,type:'sine',v:0.05,a:0.05,rev:0.5,d:0.1});
+  },
+  // glassy, like a struck bar
+  egg(){ if(!sfxOn||!actx)return;
+    V({f:hz(88),dur:0.34,type:'sine',v:0.13,a:0.003,rev:0.3});
+    V({f:hz(95),dur:0.26,type:'triangle',v:0.07,a:0.003,rev:0.3,det:6});
+    N({cut:5200,cut2:2600,q:1.4,dur:0.03,v:0.05});
+  },
+  // shimmer, not a scale. detuned bell pairs with a rising air sweep under them.
+  star(){ if(!sfxOn||!actx)return;
+    [72,76,79,84,88,91].forEach(function(n,i){
+      V({f:hz(n),dur:0.5,type:'triangle',v:0.09,a:0.004,rev:0.45,d:i*0.042,pan:(i%2?0.3:-0.3)});
+      V({f:hz(n+12),dur:0.32,type:'sine',v:0.035,a:0.004,rev:0.45,d:i*0.042,det:7});
+    });
+    N({cut:600,cut2:7000,q:0.7,dur:0.3,v:0.05,rev:0.4});
+  },
+  // warm, slow, a major third opening out
+  heart(){ if(!sfxOn||!actx)return;
+    V({f:hz(69),dur:0.75,type:'triangle',v:0.13,a:0.03,cut:2200,rev:0.45});
+    V({f:hz(73),dur:0.7,type:'sine',v:0.09,a:0.05,rev:0.45,d:0.05});
+    V({f:hz(76),dur:0.65,type:'sine',v:0.07,a:0.07,rev:0.45,d:0.1});
+  },
+  // filter opening on a detuned saw pair. the modern power-up gesture.
+  // three rising beats, root then fifth then octave, over a filter opening.
+  shroom(){ if(!sfxOn||!actx)return;
+    [[60,0],[67,0.085],[72,0.17]].forEach(function(p){
+      V({f:hz(p[0]),dur:0.3,type:'triangle',v:0.13,a:0.005,cut:3000,rev:0.34,d:p[1]});
+      V({f:hz(p[0]+12),dur:0.2,type:'sine',v:0.05,a:0.004,rev:0.34,d:p[1],det:5});
+    });
+    V({f:hz(36),f2:hz(48),fT:0.24,dur:0.34,type:'sawtooth',v:0.08,
+       cut:300,cut2:2600,cT:0.26,q:6,det:-6});
+    V({f:hz(36),f2:hz(48),fT:0.24,dur:0.34,type:'sawtooth',v:0.08,
+       cut:300,cut2:2600,cT:0.26,q:6,det:6});
+  },
+  // three notes, warm, announces the change of ground
+  wave(){ if(!sfxOn||!actx)return;
+    [67,72,76].forEach(function(n,i){
+      V({f:hz(n),dur:0.4,type:'triangle',v:0.1,a:0.008,cut:2600,rev:0.4,d:i*0.075});
+      V({f:hz(n-12),dur:0.3,type:'sine',v:0.05,a:0.01,d:i*0.075});
+    });
+  },
+  // a falling minor phrase, resigned rather than grim
+  over(){ if(!sfxOn||!actx)return;
+    [76,72,69,64].forEach(function(n,i){
+      V({f:hz(n),dur:0.75,type:'triangle',v:0.11,a:0.01,cut:2400,rev:0.5,d:i*0.17});
+      V({f:hz(n-12),dur:0.6,type:'sine',v:0.06,a:0.02,rev:0.4,d:i*0.17});
+    });
+    V({f:hz(40),dur:1.6,type:'sine',v:0.07,a:0.08,rev:0.5,d:0.5});
+  }
+};
+
+/* ---- MUSIC ----------------------------------------------------------------
+   A sixteen bar loop sequenced with a lookahead scheduler, which is the only
+   reliable way to keep time in Web Audio. Four chords, a syncopated bass, a
+   plucked arpeggio that changes shape each bar, a soft pad and light
+   percussion. Sits well under the effects and is deliberately unhurried.
+   --------------------------------------------------------------------------- */
+const MUS={
+  chords:[
+    {root:45,tones:[57,60,64,67]},   // Am
+    {root:41,tones:[53,57,60,65]},   // F
+    {root:48,tones:[55,60,64,67]},   // C
+    {root:43,tones:[55,59,62,67]}    // G
+  ],
+  arpShape:[[0,1,2,3,2,1,0,2],[0,2,3,2,1,2,0,1],[2,1,0,1,2,3,2,0],[0,1,2,3,1,2,3,1]],
+  // Star mode. Short, fast and looping, which is the structure that makes an
+  // invincibility theme work. The figure is an original major arpeggio: Kondo's
+  // is an active Nintendo copyright and is not being borrowed.
+  starRiff:[72,76,79,84,79,76,72,76],
+  bpm:100, baseBpm:100, starBpm:152, step:0, sstep:0, next:0,
+  timer:null, running:false, starMode:false,
+
+  enterStar(){ this.starMode=true; this.bpm=this.starBpm; this.sstep=0;
+    if(actx&&musBus){ musBus.gain.cancelScheduledValues(actx.currentTime);
+      musBus.gain.setValueAtTime(musBus.gain.value||0.0001,actx.currentTime);
+      musBus.gain.exponentialRampToValueAtTime(0.42,actx.currentTime+0.12); } },
+  exitStar(){ this.starMode=false; this.bpm=this.baseBpm;
+    if(actx&&musBus){ musBus.gain.cancelScheduledValues(actx.currentTime);
+      musBus.gain.setValueAtTime(musBus.gain.value||0.0001,actx.currentTime);
+      musBus.gain.exponentialRampToValueAtTime(0.32,actx.currentTime+0.6); } },
+
+
+  start(){
+    if(this.running||!actx||!musOn)return;
+    this.running=true; this.step=0; this.next=actx.currentTime+0.08;
+    musBus.gain.cancelScheduledValues(actx.currentTime);
+    musBus.gain.setValueAtTime(0.0001,actx.currentTime);
+    musBus.gain.exponentialRampToValueAtTime(0.32,actx.currentTime+1.6);
+    const self=this;
+    this.timer=setInterval(function(){ self.tick(); },25);
+  },
+  stop(){
+    if(!this.running)return;
+    this.running=false;
+    clearInterval(this.timer); this.timer=null;
+    if(actx&&musBus){
+      musBus.gain.cancelScheduledValues(actx.currentTime);
+      musBus.gain.setValueAtTime(musBus.gain.value||0.0001,actx.currentTime);
+      musBus.gain.exponentialRampToValueAtTime(0.0001,actx.currentTime+0.5);
+    }
+  },
+  tick(){
+    if(!actx)return;
+    const spb=60/this.bpm, sixteenth=spb/4;
+    while(this.next < actx.currentTime+0.12){
+      this.play(this.step,this.next);
+      this.step=(this.step+1)%256;      // 16 bars
+      this.next+=sixteenth;
+    }
+  },
+  play(st,t){
+    if(this.starMode){ this.playStar(t); return; }
+    const bar=Math.floor(st/16), s=st%16, ch=this.chords[bar%4];
+    const cyc=Math.floor(bar/4);        // 0..3, used for gentle variation
+    const B={bus:musBus,t:t};
+
+    // pad, once a bar, long and soft
+    if(s===0){
+      ch.tones.slice(0,3).forEach(function(n,i){
+        V(Object.assign({f:hz(n+12),dur:spbLen(),type:'triangle',v:0.028,a:0.5,
+                         cut:1700,rev:0.5,pan:(i-1)*0.4},B));
+      });
+    }
+    // bass, syncopated
+    if(s===0||s===6||s===11){
+      V(Object.assign({f:hz(ch.root),dur:s===0?0.5:0.3,type:'sawtooth',
+                       v:0.11,a:0.01,cut:420,cut2:180,q:3},B));
+    }
+    if(s===14&&cyc>0) V(Object.assign({f:hz(ch.root+7),dur:0.22,type:'sawtooth',
+                                       v:0.075,a:0.01,cut:500,cut2:220,q:3},B));
+    // plucked arpeggio on eighths
+    if(s%2===0){
+      const shape=this.arpShape[bar%4], n=ch.tones[shape[(s/2)%8]];
+      V(Object.assign({f:hz(n+12),dur:0.28,type:'triangle',v:0.055,a:0.004,
+                       cut:2600,cut2:900,q:2,rev:0.34,pan:((s/2)%4-1.5)*0.22},B));
+    }
+    // a counter-line arrives on the second half of the loop
+    if(cyc>=2&&(s===4||s===12)){
+      V(Object.assign({f:hz(ch.tones[3]+12),dur:0.5,type:'sine',v:0.045,a:0.02,
+                       rev:0.45,pan:0.3},B));
+    }
+    // percussion
+    if(s===0||s===8) V(Object.assign({f:120,f2:44,fT:0.09,dur:0.16,type:'sine',v:0.16},B));
+    if(cyc>0&&s%4===2) N(Object.assign({cut:7000,q:0.8,dur:0.035,v:0.028,
+                                        ft:'highpass',pan:0.25},B));
+    if(cyc>1&&s===12) N(Object.assign({cut:2200,cut2:900,q:1.2,dur:0.12,v:0.05},B));
+  },
+  // two bars at 152, so it cycles roughly every three seconds
+  playStar(t){
+    const s=this.sstep%16, B={bus:musBus,t:t};
+    const n=this.starRiff[(this.sstep/1)%8|0];
+    // the riff runs on eighths
+    if(s%2===0){
+      V(Object.assign({f:hz(n),dur:0.16,type:'square',v:0.075,a:0.004,
+                       cut:3200,cut2:1400,q:2,rev:0.2},B));
+      V(Object.assign({f:hz(n-12),dur:0.14,type:'triangle',v:0.05,a:0.004},B));
+    }
+    // bass pumping on every beat
+    if(s%4===0) V(Object.assign({f:hz(s%8===0?36:43),dur:0.2,type:'sawtooth',
+                                 v:0.11,a:0.008,cut:420,cut2:200,q:3},B));
+    // busy kit
+    if(s%4===0) V(Object.assign({f:130,f2:46,fT:0.07,dur:0.14,type:'sine',v:0.15},B));
+    if(s%2===1) N(Object.assign({cut:8000,q:0.8,dur:0.03,v:0.035,ft:'highpass'},B));
+    if(s===14)  N(Object.assign({cut:3000,cut2:1200,q:1,dur:0.1,v:0.055},B));
+    this.sstep++;
+  }
+};
+function spbLen(){ return 60/MUS.bpm*4*0.95; }
+
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const msg=document.getElementById('msg'), flash=document.getElementById('flash');
+const hS=document.getElementById('hS'), hR=document.getElementById('hR');
+const chromeEl=document.getElementById('chrome');
+const atog=document.getElementById('atog');
+const bSfx=document.getElementById('bSfx'), bMus=document.getElementById('bMus');
+const tSfx=document.getElementById('tSfx'), tMus=document.getElementById('tMus');
+const pSfx=document.getElementById('pSfx'), pMus=document.getElementById('pMus');
+const tPau=document.getElementById('tPau'), pGo=document.getElementById('pGo');
+const pauseEl=document.getElementById('pause');
+function setPaused(p){
+  if(state!=='play')return;
+  paused=p;
+  pauseEl.classList.toggle('show',p);
+  atog.style.display = p ? 'none' : 'flex';
+  if(p){ MUS.stop(); }
+  else if(musOn&&actx){ audioWake(); MUS.start(); }
+}
+function paintAudioUI(){
+  [[bSfx,sfxOn],[tSfx,sfxOn],[pSfx,sfxOn],
+   [bMus,musOn],[tMus,musOn],[pMus,musOn]].forEach(function(p){
+    if(!p[0])return;
+    p[0].classList.toggle('on',p[1]);
+    const sl=p[0].querySelector('.sl'), wv=p[0].querySelector('.wv');
+    if(sl) sl.style.display=p[1]?'none':'';
+    if(wv) wv.style.display=p[1]?'':'none';
+  });
+}
+function toggleSfx(e){
+  if(e){e.preventDefault();e.stopPropagation();}
+  sfxOn=!sfxOn; saveAudio(); paintAudioUI();
+  if(sfxOn){ audioInit(); audioWake(); SND.egg(); }
+}
+// silence when the tab is hidden, resume when it comes back
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden){ MUS.stop(); if(state==='play') setPaused(true); }
+  else if(musOn&&actx&&!paused){ audioWake(); MUS.start(); }
+});
+function toggleMus(e){
+  if(e){e.preventDefault();e.stopPropagation();}
+  musOn=!musOn; saveAudio(); paintAudioUI();
+  if(musOn){ audioInit(); audioWake(); MUS.start(); } else { MUS.stop(); }
+}
+[bSfx,tSfx,pSfx].forEach(function(b){ if(b) b.addEventListener('pointerdown',toggleSfx); });
+[bMus,tMus,pMus].forEach(function(b){ if(b) b.addEventListener('pointerdown',toggleMus); });
+if(tPau) tPau.addEventListener('pointerdown',function(e){
+  e.preventDefault(); e.stopPropagation(); setPaused(true); });
+if(pGo) pGo.addEventListener('pointerdown',function(e){
+  e.preventDefault(); e.stopPropagation(); setPaused(false); });
+if(pauseEl) pauseEl.addEventListener('pointerdown',function(e){ e.stopPropagation(); });
+// menus only. during play the canvas paints its own credit onto the ground, which
+// keeps it visible without putting live links in the tap zone.
+function showCredit(on){
+  chromeEl.style.display = on ? 'block' : 'none';
+  atog.style.display     = on ? 'none'  : 'flex';
+  if(on){ paused=false; pauseEl.classList.remove('show'); }
+}
+
+let W=800,H=800,scale=1,cw=0,ch=0,xOff=0,yOff=0;
+function resize(){
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  cw=window.innerWidth; ch=window.innerHeight;
+  cv.width=cw*dpr; cv.height=ch*dpr;
+  cv.style.width=cw+'px'; cv.style.height=ch+'px';
+  W=800; H=Math.max(520,Math.min(1180,800*ch/cw));
+  scale=Math.min(cw/W, ch/H);
+  xOff=(cw/scale-W)/2; yOff=(ch/scale-H)/2;
+  ctx.setTransform(dpr*scale,0,0,dpr*scale,dpr*xOff*scale,dpr*yOff*scale);
+  layout(); makeStars();
+}
+window.addEventListener('resize',resize);
+
+/* ---- FEEL. unchanged since the version that played well. tune only here. ---- */
+const G=1150, FLAP=340, MAXUP=430, MAXFALL=820,
+      PUSH=230, HDRAG=2.6, MAXH=380, FLAPCD=115,
+      HEIGHT_TIE=6, BODY=17,
+      HOLD_CD=200;  // ms between auto-flaps while held. lower = faster climb.
+/* ---- PACING. all new and all guesses. ---- */
+const ARENA_EVERY=3,     // waves between a change of ground
+      FOE_BASE=7,        // enemies per wave before the late ramp
+      FOE_MAX=10,        // hard ceiling, or the screen turns to soup
+      FOE_STEP=10,       // waves per extra enemy once the base is reached
+      FAST_BASE=0.32,    // share of fast enemies early
+      FAST_RAMP=0.012,   // added per wave
+      FAST_MAX=0.70,
+      HATCH_FLOOR=4,     // fastest an egg can ever hatch
+      HATCH_STEP=9,      // waves per second shaved off the hatch timer
+      LIFE_EVERY=5,      // waves between a guaranteed extra life
+      HATCH_WAVE=4,      // eggs only hatch from this wave on
+      HATCH_T=7,         // seconds before a hatch
+      EGG_ROT=9,         // pre-hatch eggs expire after this
+      STAR_CHANCE=0.10, HEART_CHANCE=0.065,
+      STAR_TIME=7,       // seconds of invincibility
+      SHROOM_GAP=4,      // seconds before a fresh mushroom appears
+      PICKUP_LIFE=13,    // pickups vanish after this
+      BIG=1.32,          // size multiplier while plumed
+      IFRAMES=1.3;       // grace after losing the plume
+/* ---------------------------------------------------------------------------- */
+
+const PAL={
+  sky0:'#150e1c', sky1:'#2b1531', sky2:'#5e2439', horizon:'#c4603a',
+  rock:'#1a1222', rockTop:'#3d2843',
+  me:'#f7e6c4', meAcc:'#ffc046',
+  foe:'#2f6f66', foeAcc:'#5fd6b4',
+  fast:'#8e2038', fastAcc:'#ff5e5e',
+  egg:'#b9a58c', eggHot:'#ffce5c',
+  star:'#ffd83d', heart:'#ff5f8d',
+  plume:'#ff4d3d', shroomSpot:'#fff2dc', shroomStem:'#ffe9c8'
+};
+const LANCE=25;
+const RAINBOW=['#ffd83d','#ff8f3d','#ff5f8d','#c07dff','#7fe8ff','#7dffa8'];
+
+const ARENAS=[
+ {name:'TERRACES', starA:1.0, rock:'#2a1d33', top:'#5a4066', lip:'#c98a6a',
+  sky:['#150e1c','#2b1531','#5e2439','#c4603a'],
+  p:[[0.06,0.30,0.22],[0.72,0.30,0.22],[0.36,0.46,0.28],
+     [0.00,0.62,0.20],[0.80,0.62,0.20],[0.24,0.76,0.22],[0.56,0.76,0.22]]},
+
+ {name:'TOWERS', starA:1.0, rock:'#1a2040', top:'#40488a', lip:'#8f9fe0',
+  sky:['#0a1024','#1a2247','#33356e','#6a5aa8'],
+  p:[[0.04,0.22,0.18],[0.78,0.22,0.18],
+     [0.04,0.38,0.18],[0.78,0.38,0.18],
+     [0.04,0.54,0.18],[0.78,0.54,0.18],
+     [0.40,0.70,0.20]]},
+
+ {name:'THE SPINE', starA:0.5, rock:'#2e1c14', top:'#63382a', lip:'#d98a52',
+  sky:['#180d0a','#331812','#63291a','#c9793a'],
+  p:[[0.22,0.44,0.56],
+     [0.00,0.26,0.16],[0.84,0.26,0.16],
+     [0.00,0.68,0.18],[0.82,0.68,0.18],
+     [0.42,0.78,0.16]]},
+
+ {name:'THE STEPS', starA:0.6, rock:'#1a2a1e', top:'#3c5838', lip:'#a8c060',
+  sky:['#0c1410','#14291f','#2c4a2a','#9aa83f'],
+  p:[[0.02,0.72,0.20],[0.20,0.62,0.18],[0.38,0.52,0.18],
+     [0.56,0.42,0.18],[0.74,0.32,0.18],
+     [0.06,0.34,0.14],[0.62,0.78,0.20]]},
+
+ {name:'THE CAVERN', starA:1.0, rock:'#241539', top:'#4e2c68', lip:'#b070c0',
+  sky:['#0d0818','#21103a','#451a5c','#9c3f8e'],
+  p:[[0.00,0.30,0.24],[0.76,0.30,0.24],
+     [0.00,0.50,0.16],[0.84,0.50,0.16],
+     [0.00,0.70,0.24],[0.76,0.70,0.24],
+     [0.38,0.20,0.24]]},
+
+ {name:'THE ISLES', starA:0.35, rock:'#262636', top:'#4e4e60', lip:'#9898b0',
+  sky:['#101a2c','#2a3350','#6b5c72','#e0a77a'],
+  p:[[0.08,0.26,0.13],[0.44,0.20,0.13],[0.78,0.30,0.13],
+     [0.24,0.42,0.13],[0.60,0.46,0.13],
+     [0.04,0.58,0.13],[0.40,0.62,0.13],[0.76,0.58,0.13],
+     [0.20,0.78,0.13],[0.58,0.78,0.13]]},
+
+ {name:'THE LADDER', starA:0.8, rock:'#1c2634', top:'#3e5470', lip:'#7fa8d0',
+  sky:['#0d1420','#1a2838','#2e4a60','#6b9ac4'],
+  p:[[0.05,0.76,0.20],[0.72,0.66,0.20],[0.10,0.56,0.20],
+     [0.68,0.46,0.20],[0.14,0.36,0.20],[0.64,0.26,0.20]]},
+
+ {name:'THE PIT', starA:0.4, rock:'#2e1418', top:'#5e2a2e', lip:'#cf6a4a',
+  sky:['#140608','#2e0c12','#56171c','#a8462e'],
+  p:[[0.00,0.80,0.26],[0.36,0.82,0.28],[0.74,0.80,0.26],
+     [0.14,0.66,0.20],[0.62,0.66,0.20],[0.38,0.54,0.24],
+     [0.00,0.40,0.14],[0.86,0.40,0.14]]},
+
+ {name:'THE CROWN', starA:0.5, rock:'#2e2614', top:'#5c4a26', lip:'#d4aa54',
+  sky:['#1a1408','#33280e','#5c4718','#d4a03a'],
+  p:[[0.04,0.20,0.18],[0.30,0.16,0.18],[0.56,0.16,0.18],[0.80,0.20,0.18],
+     [0.18,0.32,0.16],[0.66,0.32,0.16],[0.42,0.44,0.16]]},
+
+ {name:'THE COMB', starA:0.6, rock:'#1a2622', top:'#38544a', lip:'#7fbfa0',
+  sky:['#0d1614','#182a26','#2c4a42','#6fa88a'],
+  p:[[0.02,0.52,0.10],[0.16,0.52,0.10],[0.30,0.52,0.10],[0.44,0.52,0.10],
+     [0.58,0.52,0.10],[0.72,0.52,0.10],[0.86,0.52,0.10],
+     [0.24,0.28,0.20],[0.58,0.74,0.20]]},
+
+ {name:'THE HOURGLASS', starA:1.0, rock:'#2a1430', top:'#543060', lip:'#c070b8',
+  sky:['#16091c','#2e1038','#56205c','#b0509c'],
+  p:[[0.02,0.24,0.28],[0.70,0.24,0.28],[0.38,0.46,0.24],
+     [0.02,0.72,0.28],[0.70,0.72,0.28],[0.20,0.58,0.12],[0.68,0.58,0.12]]},
+
+ {name:'THE ROOST', starA:0.45, rock:'#2a2418', top:'#544430', lip:'#c8a468',
+  sky:['#14100a','#2a2214','#4e3e22','#c49a52'],
+  p:[[0.28,0.50,0.44],[0.04,0.28,0.12],[0.84,0.28,0.12],
+     [0.04,0.72,0.12],[0.84,0.72,0.12],[0.44,0.24,0.12],[0.44,0.76,0.12]]}
+];
+let plats=[], floorY=0, stars=[], arena=0;
+function A(){ return ARENAS[arena%ARENAS.length]; }
+// every layout is also played mirrored, doubling the pool for two lines of code
+function mirrored(){ return Math.floor(arena/ARENAS.length)%2===1; }
+function layout(){
+  floorY=H-30;
+  const m=mirrored();
+  plats=A().p.map(function(a){
+    return {x:(m?1-a[0]-a[2]:a[0])*W, y:a[1]*H, w:a[2]*W, h:13};
+  });
+}
+function makeStars(){
+  stars=[];
+  for(let i=0;i<46;i++)stars.push({x:Math.random()*W,y:Math.random()*H*0.62,
+    r:Math.random()*1.3+0.4,a:(Math.random()*0.5+0.2)*A().starA,tw:Math.random()*6});
+}
+
+function mk(x,y,kind){
+  return {x:x,y:y,vx:0,vy:0,kind:kind,alive:true,flapT:0,wing:0,
+          tx:x,ty:y,think:0,trail:[]};
+}
+let player,foes=[],eggs=[],pickups=[],sparks=[];
+let score=0,lives=3,wave=0,state='title',respawn=0;
+function loadBest(){ try{ return parseInt(localStorage.getItem('beakdown_best')||'0',10)||0; }catch(e){ return 0; } }
+function saveBest(v){ try{ localStorage.setItem('beakdown_best',String(v)); }catch(e){} }
+let best=loadBest();
+const num=function(n){ return n.toLocaleString(); };
+let hitstop=0,shake=0,clashViz=null,tsec=0,paused=false;
+let skyGrad=null,skyKey='';
+// shadowBlur is the most expensive thing this renderer does. if frames are
+// consistently slow, drop it for the rest of the run. never re-enable mid-run,
+// because oscillating between quality levels reads worse than the lower one.
+let fx=true, slowFrames=0, frameAcc=0, frameN=0;
+function glow2(col,amt){ if(fx){ ctx.shadowColor=col; ctx.shadowBlur=amt; } }
+let starT=0,big=false,invT=0,waveT=0,shroomT=0;
+let st={teal:0,red:0,eggs:0,shroom:0,star:0,heart:0,deaths:0};
+
+function rad(o){ return BODY*(o===player&&big?BIG:1); }
+function lanceY(o){ return o.y - LANCE*(o===player&&big?BIG:1); }
+
+function reset(){
+  score=0; lives=3; wave=0; foes=[]; eggs=[]; pickups=[]; sparks=[];
+  arena=0; layout(); makeStars();
+  player=mk(W*0.5,H*0.5,'player');
+  respawn=0; hitstop=0; shake=0; clashViz=null;
+  starT=0; big=false; invT=0; shroomT=0;
+  st={teal:0,red:0,eggs:0,shroom:0,star:0,heart:0,deaths:0};
+  startWave();
+}
+function startWave(){
+  wave++; waveT=0;
+  const na=Math.floor((wave-1)/ARENA_EVERY);
+  const shifted = na!==arena;
+  if(shifted){ arena=na; layout(); makeStars(); freePlayer();
+    pickups=pickups.filter(function(p){return p.type!=='plume';}); shroomT=2; }
+  const bonus = wave>1 && (wave-1)%LIFE_EVERY===0;
+  if(bonus) lives++;
+  const n=Math.min(2+wave, Math.min(FOE_MAX, FOE_BASE+Math.floor(wave/FOE_STEP)));
+  const fastShare=Math.min(FAST_MAX, FAST_BASE+wave*FAST_RAMP);
+  for(let i=0;i<n;i++) spawnFoe(wave>=3&&Math.random()<fastShare?'fast':'foe');
+  let ft = shifted ? A().name+(mirrored()?'<br>REVERSED':'') : '';
+  if(bonus) ft = ft ? ft+'<br>+1 LIFE' : '+1 LIFE';
+  showFlash(ft||('WAVE '+wave), shifted?A().sky[3]:(bonus?PAL.heart:null)); SND.wave();
+}
+// the ground moves under the player when the arena changes. don't bury them in it.
+function freePlayer(){
+  if(!player)return;
+  for(const p of plats){
+    if(player.x>p.x-rad(player)&&player.x<p.x+p.w+rad(player)&&
+       player.y+rad(player)>p.y&&player.y-rad(player)<p.y+p.h){
+      player.y=p.y-rad(player)-1; player.vy=0;
+    }
+  }
+}
+function spawnFoe(kind){
+  const side=Math.random()<0.5?0.08:0.92;
+  const f=mk(W*side,H*(0.16+Math.random()*0.5),kind);
+  f.vx=(side<0.5?1:-1)*80; foes.push(f);
+}
+function showFlash(t,col){
+  flash.innerHTML=t; flash.style.color=col||'#f2ece0';
+  flash.classList.add('on');
+  clearTimeout(showFlash._t);
+  showFlash._t=setTimeout(function(){flash.classList.remove('on');},950);
+}
+function burst(x,y,c,n,spd){
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2, s=(0.3+Math.random())*(spd||300);
+    sparks.push({x:x,y:y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-70,
+      life:0.45+Math.random()*0.45,max:0.9,c:c});
+  }
+}
+function drop(x,y,type,vx,vy){
+  pickups.push({x:x,y:y,vx:vx||0,vy:vy||-160,type:type,t:0,onGround:false});
+}
+
+let hold=0, pressed=false;
+function press(e){
+  e.preventDefault();
+  if(state==='title'||state==='over'){state='play';msg.classList.add('hide');showCredit(false);
+    if(sfxOn||musOn){audioInit();audioWake(); if(musOn)MUS.start();}
+    reset();return;}
+  hold=aimFrom(e); pressed=true; flapNow();
+}
+function aimFrom(e){
+  if((e.pointerType||'mouse')==='touch') return e.clientX<cw/2?-1:1;
+  if(!player) return e.clientX<cw/2?-1:1;
+  return e.clientX < scale*(player.x+xOff) ? -1 : 1;   // the bird, in screen pixels
+}
+function release(e){e.preventDefault();
+  if(!e.touches||e.touches.length===0){ hold=0; pressed=false; }}
+cv.addEventListener('pointerdown',press);
+cv.addEventListener('pointermove',function(e){
+  if(pressed&&state==='play'&&(e.pointerType||'mouse')!=='touch') hold=aimFrom(e);
+});
+cv.addEventListener('pointerup',release);
+cv.addEventListener('pointercancel',release);
+window.addEventListener('keydown',function(e){
+  if(state!=='play'){state='play';msg.classList.add('hide');showCredit(false);
+    if(sfxOn||musOn){audioInit();audioWake(); if(musOn)MUS.start();}
+    reset();return;}
+  const kr=e.key||'', k=kr.length===1?kr.toLowerCase():kr;
+  if(k==='Escape'||k==='p'){ setPaused(!paused); return; }
+  if(paused) return;   // caps lock must not disarm steering
+  if(k==='ArrowLeft'||k==='a'){hold=-1; pressed=true; if(!e.repeat)flapNow();}
+  if(k==='ArrowRight'||k==='d'){hold=1; pressed=true; if(!e.repeat)flapNow();}
+  if(k===' '){hold=0; pressed=true; if(!e.repeat)flapNow();}
+});
+window.addEventListener('keyup',function(){hold=0; pressed=false;});
+
+function doFlap(sideways){
+  player.flapT=performance.now(); player.wing=1; SND.flap();
+  player.vy=Math.max(player.vy-FLAP,-MAXUP);
+  if(sideways&&hold)player.vx=Math.max(-MAXH,Math.min(MAXH,player.vx+hold*PUSH));
+}
+// a deliberate tap: sharp, and it kicks you sideways too
+function flapNow(){
+  if(state!=='play'||respawn>0)return;
+  if(performance.now()-player.flapT<FLAPCD)return;
+  doFlap(true);
+}
+// holding: steady climb, vertical only, so you drift rather than pinning to top speed
+function holdFlap(){
+  if(!pressed||respawn>0)return;
+  if(performance.now()-player.flapT<HOLD_CD)return;
+  doFlap(false);
+}
+
+function step(o,dt){
+  const r=rad(o);
+  o.vy=Math.min(o.vy+G*dt,MAXFALL);
+  o.vx-=o.vx*Math.min(1,HDRAG*dt);
+  o.x+=o.vx*dt; o.y+=o.vy*dt;
+  if(o.x<-r)o.x+=W+r*2; if(o.x>W+r)o.x-=W+r*2;
+  if(o.y>floorY-r){o.y=floorY-r; if(o.vy>0)o.vy=0;}
+  if(o.y<r){o.y=r; if(o.vy<0)o.vy=0;}
+  for(const p of plats){
+    if(o.x>p.x-r*0.7&&o.x<p.x+p.w+r*0.7){
+      if(o.vy>0&&o.y+r>p.y&&o.y+r<p.y+p.h+18){o.y=p.y-r;o.vy=0;}
+      else if(o.vy<0&&o.y-r<p.y+p.h&&o.y-r>p.y-14){o.y=p.y+p.h+r;o.vy=40;}
+    }
+  }
+  o.wing=Math.max(0,o.wing-dt*5);
+  o.trail.push({x:o.x,y:o.y});
+  if(o.trail.length>(o===player&&starT>0?14:9))o.trail.shift();
+}
+
+function ai(f,dt){
+  f.think-=dt;
+  const fast=f.kind==='fast';
+  if(f.think<=0){
+    f.think=fast?0.35:0.7+Math.random()*0.6;
+    if(fast||Math.random()<0.6){
+      f.tx=player.x+(Math.random()-0.5)*120;
+      f.ty=player.y-(fast?70:40)-Math.random()*40;
+    }else{f.tx=Math.random()*W; f.ty=H*(0.15+Math.random()*0.6);}
+  }
+  let d=f.tx-f.x; if(d>W/2)d-=W; if(d<-W/2)d+=W;
+  const dir=Math.sign(d), now=performance.now(), cd=fast?FLAPCD*1.15:FLAPCD*1.7;
+  if(f.y>f.ty&&now-f.flapT>cd){
+    f.flapT=now; f.wing=1;
+    f.vy=Math.max(f.vy-FLAP*(fast?1:0.92),-MAXUP);
+    f.vx=Math.max(-MAXH,Math.min(MAXH,f.vx+dir*PUSH*(fast?0.95:0.8)));
+  }else if(Math.abs(d)>60&&now-f.flapT>cd*1.6){
+    f.flapT=now; f.wing=1;
+    f.vy=Math.max(f.vy-FLAP*0.6,-MAXUP);
+    f.vx=Math.max(-MAXH,Math.min(MAXH,f.vx+dir*PUSH*0.7));
+  }
+}
+
+function touching(a,b,pad){
+  let dx=Math.abs(a.x-b.x); dx=Math.min(dx,W-dx);
+  return dx<rad(a)*1.7+(pad||0) && Math.abs(a.y-b.y)<rad(a)*1.9+(pad||0);
+}
+function clash(a,b){
+  if(!touching(a,b,0))return 0;
+  const dy=lanceY(a)-lanceY(b);
+  if(Math.abs(dy)<HEIGHT_TIE)return 0.5;
+  return dy<0?1:-1;
+}
+function markClash(a,b,aWon){
+  clashViz={ay:lanceY(a),by:lanceY(b),x:(a.x+b.x)/2,aWon:aWon,t:0};
+}
+
+function killFoe(f,byStar){
+  f.alive=false;
+  if(f.kind==='fast')st.red++; else st.teal++;
+  SND.kill();
+  const pts=byStar?1000:(f.kind==='fast'?750:500);
+  score+=pts;
+  burst(f.x,f.y,byStar?RAINBOW[(tsec*9|0)%6]:(f.kind==='fast'?PAL.fastAcc:PAL.foeAcc),
+        byStar?24:16, byStar?430:340);
+  eggs.push({x:f.x,y:f.y,vx:f.vx*0.3,vy:-120,t:0,onGround:false,hatch:wave>=HATCH_WAVE, ht:Math.max(HATCH_FLOOR,HATCH_T-Math.floor(wave/HATCH_STEP))});
+  const roll=Math.random();
+  if(roll<STAR_CHANCE) drop(f.x,f.y,'star',(Math.random()-0.5)*90,-230);
+  else if(roll<STAR_CHANCE+HEART_CHANCE) drop(f.x,f.y,'heart',(Math.random()-0.5)*90,-230);
+  hitstop=Math.max(hitstop,byStar?0.05:0.08); shake=Math.max(shake,byStar?6:4);
+}
+function loseplume(f){
+  big=false; invT=IFRAMES;
+  const s=player.x<f.x?-1:1;
+  player.vx=s*300; player.vy=-190;
+  burst(player.x,player.y,PAL.plume,20,340);
+  hitstop=0.2; shake=9;
+}
+function killPlayer(){
+  if(respawn>0)return;
+  lives--; st.deaths++;
+  burst(player.x,player.y,PAL.meAcc,22,380);
+  hitstop=0.38; shake=13; respawn=1.7; SND.die();
+  if(MUS.starMode)MUS.exitStar();
+  starT=0; big=false; invT=0;
+}
+
+let last=performance.now();
+function frame(now){
+  const raw=(now-last)/1000; const dt=Math.min(0.033,raw); last=now;
+  if(fx&&state==='play'){
+    frameAcc+=raw; frameN++;
+    if(frameN>=30){
+      if(frameAcc/frameN>0.028) slowFrames++; else slowFrames=0;
+      if(slowFrames>=3) fx=false;      // ~2.7s of sub-36fps before giving up the glow
+      frameAcc=0; frameN=0;
+    }
+  }
+  if(state==='play'&&!paused){
+    if(hitstop>0){ hitstop-=dt; if(clashViz)clashViz.t+=dt; }
+    else { clashViz=null; update(dt); }
+  }
+  shake=Math.max(0,shake-dt*38);
+  draw();
+  requestAnimationFrame(frame);
+}
+
+function update(dt){
+  waveT+=dt;
+  if(starT>0){ starT-=dt; if(starT<=0&&MUS.starMode) MUS.exitStar(); }
+  if(invT>0)invT-=dt;
+
+  // one mushroom at a time, somewhere random. it rots, so it has to be chased.
+  const shroomOut=pickups.some(function(p){return p.type==='plume';});
+  if(big||shroomOut){ shroomT=SHROOM_GAP; }
+  else {
+    shroomT-=dt;
+    if(shroomT<=0){
+      const p=plats[Math.floor(Math.random()*plats.length)];
+      drop(p.x+p.w*(0.2+Math.random()*0.6), p.y-110, 'plume', 0, -30);
+    }
+  }
+
+  if(respawn>0){
+    respawn-=dt;
+    if(respawn<=0){
+      if(lives<0){state='over';showOver();return;}
+      player=mk(W*0.5,H*0.38,'player'); invT=IFRAMES;
+    }
+  }else{
+    holdFlap();
+    if(hold)player.vx=Math.max(-MAXH,Math.min(MAXH,player.vx+hold*PUSH*dt*3.2));
+    step(player,dt);
+  }
+  for(const f of foes){if(f.alive){ai(f,dt);step(f,dt);}}
+
+  for(const e of eggs){
+    e.t+=dt;
+    if(!e.onGround){
+      e.vy+=G*dt; e.x+=e.vx*dt; e.y+=e.vy*dt;
+      if(e.x<0)e.x+=W; if(e.x>W)e.x-=W;
+      if(e.y>floorY-9){e.y=floorY-9;e.onGround=true;e.vx=0;}
+      for(const p of plats)
+        if(e.x>p.x&&e.x<p.x+p.w&&e.vy>0&&e.y+9>p.y&&e.y+9<p.y+p.h+16){
+          e.y=p.y-9;e.onGround=true;e.vx=0;}
+    }
+    if(e.hatch && e.t>e.ht){
+      e.gone=true;
+      foes.push(mk(e.x,e.y,Math.random()<0.3?'fast':'foe'));
+      burst(e.x,e.y,PAL.eggHot,10,220);
+    } else if(!e.hatch && e.t>EGG_ROT){
+      e.gone=true; burst(e.x,e.y,PAL.egg,5,120);
+    }
+  }
+
+  for(const p of pickups){
+    p.t+=dt;
+    if(!p.onGround){
+      p.vy+=G*0.55*dt; p.x+=p.vx*dt; p.y+=p.vy*dt;
+      if(p.x<0)p.x+=W; if(p.x>W)p.x-=W;
+      if(p.y>floorY-11){p.y=floorY-11;p.onGround=true;p.vx=0;}
+      for(const pl of plats)
+        if(p.x>pl.x&&p.x<pl.x+pl.w&&p.vy>0&&p.y+11>pl.y&&p.y+11<pl.y+pl.h+16){
+          p.y=pl.y-11;p.onGround=true;p.vx=0;}
+    }
+    if(p.t>PICKUP_LIFE)p.gone=true;
+  }
+
+  if(respawn<=0){
+    for(const f of foes){
+      if(!f.alive)continue;
+      if(starT>0){
+        if(touching(player,f,4)){ killFoe(f,true); }
+        continue;
+      }
+      const r=clash(player,f);
+      if(r===1){markClash(player,f,true); killFoe(f,false); player.vy=-150;}
+      else if(r===-1){
+        if(invT>0)continue;
+        if(big){ loseplume(f); }
+        else { markClash(player,f,false); killPlayer(); }
+      }
+      else if(r===0.5){
+        const s=player.x<f.x?-1:1;
+        player.vx=s*260; f.vx=-s*260; f.vy-=60;
+        burst((player.x+f.x)/2,(player.y+f.y)/2,'#ffffff',5,150); SND.bounce();
+      }
+    }
+    for(const e of eggs){
+      if(e.gone)continue;
+      let dx=Math.abs(e.x-player.x); dx=Math.min(dx,W-dx);
+      if(dx<rad(player)+10&&Math.abs(e.y-player.y)<rad(player)+10){
+        e.gone=true; score+=250; st.eggs++; SND.egg(); burst(e.x,e.y,PAL.eggHot,9,200);
+      }
+    }
+    for(const p of pickups){
+      if(p.gone)continue;
+      let dx=Math.abs(p.x-player.x); dx=Math.min(dx,W-dx);
+      if(dx<rad(player)+14&&Math.abs(p.y-player.y)<rad(player)+14){
+        p.gone=true;
+        if(p.type==='star'){ starT=STAR_TIME; st.star++; SND.star();
+          if(musOn) MUS.enterStar();
+          burst(p.x,p.y,PAL.star,20,320); shake=Math.max(shake,7); }
+        if(p.type==='heart'){ lives++; st.heart++; SND.heart(); showFlash('+1 LIFE',PAL.heart);
+          burst(p.x,p.y,PAL.heart,16,260); }
+        if(p.type==='plume'){ big=true; st.shroom++; SND.shroom();
+          burst(p.x,p.y,PAL.plume,18,280); }
+      }
+    }
+  }
+
+  foes=foes.filter(function(f){return f.alive;});
+  eggs=eggs.filter(function(e){return !e.gone;});
+  pickups=pickups.filter(function(p){return !p.gone;});
+  for(const s of sparks){s.life-=dt;s.vy+=880*dt;s.x+=s.vx*dt;s.y+=s.vy*dt;}
+  sparks=sparks.filter(function(s){return s.life>0;});
+
+  const pending=eggs.some(function(e){return e.hatch;});
+  if(foes.length===0&&!pending)startWave();
+
+  hS.textContent=num(score);
+  const hearts = lives<=5 ? '\u25c6'.repeat(Math.max(0,lives)) : '\u25c6 \u00d7'+lives;
+  hR.textContent='WAVE '+wave+'   '+hearts;
+}
+
+function showOver(){
+  const beat=score>best;
+  best=Math.max(best,score); saveBest(best);
+  msg.classList.remove('hide'); showCredit(true); SND.over();
+  const row=function(c,label,v){
+    return '<span><i class="sw" style="background:'+c+'"></i>'+label+'</span>'+
+           '<span class="v">'+v+'</span>';
+  };
+  msg.innerHTML='<h1>'+num(score)+'</h1>'+
+    '<p class="big">Wave <span class="k">'+wave+'</span>'+
+      (beat?' &middot; <span class="k">new best</span>':' &middot; Best '+num(best))+'</p>'+
+    '<div id="stats">'+
+      row(PAL.foeAcc,'Teal birds',st.teal)+
+      row(PAL.fastAcc,'Red birds',st.red)+
+      row(PAL.egg,'Eggs',st.eggs)+
+      row(PAL.plume,'Mushrooms',st.shroom)+
+      row(PAL.star,'Stars',st.star)+
+      row(PAL.heart,'Extra lives',st.heart)+
+      row(PAL.me,'Lives spent',st.deaths)+
+    '</div>'+
+    '<p>Tap to fly again.</p>';
+}
+
+function starShape(x,y,r,rot){
+  ctx.beginPath();
+  for(let i=0;i<10;i++){
+    const rr=i%2?r*0.44:r, a=rot+i*Math.PI/5-Math.PI/2;
+    const px=x+Math.cos(a)*rr, py=y+Math.sin(a)*rr;
+    i?ctx.lineTo(px,py):ctx.moveTo(px,py);
+  }
+  ctx.closePath();
+}
+function heartShape(x,y,s){
+  ctx.beginPath();
+  ctx.moveTo(x,y+s*0.75);
+  ctx.bezierCurveTo(x-s*1.35,y-s*0.25,x-s*0.55,y-s*1.1,x,y-s*0.35);
+  ctx.bezierCurveTo(x+s*0.55,y-s*1.1,x+s*1.35,y-s*0.25,x,y+s*0.75);
+  ctx.closePath();
+}
+function shroomShape(x,y,s){
+  ctx.fillStyle=PAL.shroomStem;
+  ctx.beginPath(); ctx.roundRect(x-s*0.33,y-s*0.12,s*0.66,s*0.98,s*0.2); ctx.fill();
+  ctx.fillStyle=PAL.plume;
+  ctx.beginPath(); ctx.ellipse(x,y,s*1.04,s*0.8,0,Math.PI,Math.PI*2);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle=PAL.shroomSpot;
+  ctx.beginPath(); ctx.arc(x-s*0.46,y-s*0.2,s*0.2,0,7); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+s*0.38,y-s*0.3,s*0.16,0,7); ctx.fill();
+  ctx.beginPath(); ctx.arc(x-s*0.02,y-s*0.5,s*0.14,0,7); ctx.fill();
+}
+
+const _sc={};
+function shade(hex,amt){
+  const k=hex+amt; if(_sc[k])return _sc[k];
+  const n=parseInt(hex.slice(1),16), f=1+amt;
+  const c=[(n>>16)&255,(n>>8)&255,n&255].map(function(v){
+    return Math.max(0,Math.min(255,Math.round(v*f)));});
+  return _sc[k]='#'+((1<<24)+(c[0]<<16)+(c[1]<<8)+c[2]).toString(16).slice(1);
+}
+function wingShape(len,lift){
+  ctx.beginPath(); ctx.moveTo(0,0);
+  ctx.quadraticCurveTo(len*0.52,-lift, len,-len*0.07);
+  ctx.quadraticCurveTo(len*0.52, lift*0.55, 0,0);
+  ctx.fill();
+}
+function creature(o,col,acc,glow,sc){
+  sc=sc||1;
+  const blazing=(o===player&&starT>0);
+  const flick=blazing?RAINBOW[(tsec*13|0)%6]:null;
+
+  for(let i=0;i<o.trail.length;i++){
+    const t=o.trail[i];
+    if(Math.abs(t.x-o.x)>W/2)continue;
+    const f=i/o.trail.length;
+    ctx.globalAlpha=f*(blazing?0.4:0.2);
+    ctx.fillStyle=blazing?RAINBOW[(i+(tsec*13|0))%6]:acc;
+    ctx.beginPath(); ctx.arc(t.x,t.y+2,(blazing?6:4.5)*f*sc,0,7); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+
+  ctx.save(); ctx.translate(o.x,o.y); ctx.scale((o.vx<0?-1:1)*sc,sc);
+  if(glow||blazing) glow2(flick||acc, blazing?26:14);
+
+  const body=flick||col, trim=flick?'#ffffff':acc;
+  const wa=2.95+o.wing*1.05;
+
+  ctx.save(); ctx.translate(-1,-1); ctx.rotate(wa-0.24);
+  ctx.fillStyle=shade(body,-0.34); wingShape(18,5.6); ctx.restore();
+
+  ctx.strokeStyle=trim; ctx.lineWidth=2.6; ctx.lineCap='round';
+  ctx.beginPath();
+  ctx.moveTo(-9,1.5); ctx.lineTo(-19,-2);
+  ctx.moveTo(-9,3.5); ctx.lineTo(-20.5,3.5);
+  ctx.moveTo(-9,5.5); ctx.lineTo(-18.5,9);
+  ctx.stroke();
+
+  ctx.fillStyle=body;
+  ctx.beginPath(); ctx.ellipse(-1,3,12,9.5,0,0,7); ctx.fill();
+  ctx.beginPath(); ctx.arc(8,-8,8,0,7); ctx.fill();
+
+  ctx.fillStyle=flick||'#ff9a3d';
+  ctx.beginPath(); ctx.moveTo(14.2,-10.2); ctx.lineTo(23,-6.8);
+  ctx.lineTo(14.2,-3.4); ctx.closePath(); ctx.fill();
+
+  // crest. the tip sits at y = -LANCE, because that is what the height rule compares.
+  ctx.strokeStyle=trim; ctx.lineWidth=3.1; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(9,-14); ctx.lineTo(12.5,-LANCE); ctx.stroke();
+
+  ctx.save(); ctx.translate(-1,-1); ctx.rotate(wa);
+  ctx.fillStyle=trim; wingShape(20.5,7); ctx.restore();
+
+  ctx.shadowBlur=0;
+  ctx.fillStyle='#140f1c';
+  ctx.save(); ctx.translate(8.2,-10.1); ctx.rotate(-0.3);
+  ctx.beginPath(); ctx.roundRect(-5.4,-2,10.8,3.8,1.7); ctx.fill(); ctx.restore();
+  ctx.globalAlpha=0.45; ctx.fillStyle='#ffffff';
+  ctx.beginPath(); ctx.roundRect(4.6,-11.7,2.3,2.5,0.9); ctx.fill();
+  ctx.globalAlpha=1;
+
+  ctx.restore();
+  if(o===player&&big){
+    ctx.globalAlpha=0.35+0.15*Math.sin(tsec*5);
+    ctx.strokeStyle=PAL.shroomStem; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(o.x,o.y,rad(o)+8,0,7); ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+}
+
+function draw(){
+  tsec+=0.016;
+  const sx=(Math.random()-0.5)*shake, sy=(Math.random()-0.5)*shake;
+  ctx.save(); ctx.translate(sx,sy);
+
+  if(!skyGrad||skyKey!==arena+'|'+H+'|'+yOff){
+    const K=A().sky;
+    skyGrad=ctx.createLinearGradient(0,-yOff,0,H);
+    skyGrad.addColorStop(0,K[0]); skyGrad.addColorStop(0.45,K[1]);
+    skyGrad.addColorStop(0.87,K[2]); skyGrad.addColorStop(1,K[3]);
+    skyKey=arena+'|'+H+'|'+yOff;
+  }
+  ctx.fillStyle=skyGrad; ctx.fillRect(-xOff-40,-yOff-40,W+xOff*2+80,H+yOff*2+80);
+
+  for(const s of stars){
+    ctx.globalAlpha=s.a*(0.6+0.4*Math.sin(tsec*1.6+s.tw));
+    ctx.fillStyle='#ffe9c8';
+    ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,7); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+
+  for(const p of plats){
+    ctx.fillStyle='rgba(0,0,0,.42)';
+    ctx.beginPath(); ctx.roundRect(p.x+2,p.y+5,p.w,p.h,6); ctx.fill();
+    ctx.fillStyle=A().rock;
+    ctx.beginPath(); ctx.roundRect(p.x,p.y,p.w,p.h,6); ctx.fill();
+    ctx.fillStyle=A().top;
+    ctx.beginPath(); ctx.roundRect(p.x,p.y,p.w,4.6,3); ctx.fill();
+    ctx.fillStyle=A().lip;
+    ctx.fillRect(p.x+1.5,p.y,p.w-3,1.7);
+  }
+  ctx.fillStyle=A().rock; ctx.fillRect(-xOff-40,floorY,W+xOff*2+80,H-floorY+yOff+40);
+  ctx.fillStyle=A().top; ctx.fillRect(-xOff-40,floorY,W+xOff*2+80,4.6);
+  ctx.fillStyle=A().lip; ctx.fillRect(-xOff-40,floorY,W+xOff*2+80,1.7);
+
+  if(state==='play'){
+    ctx.font='12px system-ui,-apple-system,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+    ctx.fillStyle='rgba(247,230,196,.18)';
+    ctx.fillText('by Nathan Haslewood', W/2, floorY+21);
+    ctx.textAlign='left';
+  }
+
+  for(const e of eggs){
+    const hot=e.hatch&&e.t>e.ht-2;
+    const dying=!e.hatch&&e.t>EGG_ROT-2.5;
+    if(dying&&Math.sin(tsec*22)<0)continue;
+    if(hot) glow2(PAL.eggHot,10+Math.sin(tsec*14)*6);
+    ctx.fillStyle=hot?PAL.eggHot:PAL.egg;
+    ctx.beginPath(); ctx.ellipse(e.x,e.y,7,9.5,0,0,7); ctx.fill();
+    ctx.shadowBlur=0;
+  }
+
+  for(const p of pickups){
+    if(p.t>PICKUP_LIFE-3&&Math.sin(tsec*20)<0)continue;
+    const bob=Math.sin(tsec*3.4+p.x)*3;
+    if(p.type==='star'){
+      glow2(PAL.star,16);
+      ctx.fillStyle=PAL.star; starShape(p.x,p.y+bob,12,tsec*2.2); ctx.fill();
+    }else if(p.type==='heart'){
+      glow2(PAL.heart,14);
+      ctx.fillStyle=PAL.heart; heartShape(p.x,p.y+bob,11*(1+0.07*Math.sin(tsec*6))); ctx.fill();
+    }else{
+      glow2(PAL.plume,15);
+      shroomShape(p.x,p.y+bob,11);
+    }
+    ctx.shadowBlur=0;
+  }
+
+  for(const f of foes)
+    creature(f, f.kind==='fast'?PAL.fast:PAL.foe,
+                f.kind==='fast'?PAL.fastAcc:PAL.foeAcc, f.kind==='fast',1);
+  if(state==='play'&&respawn<=0){
+    const blink=(invT>0&&Math.sin(tsec*30)<0);
+    if(!blink) creature(player,PAL.me,PAL.meAcc,false,big?BIG:1);
+  }
+
+  if(clashViz){
+    const k=Math.min(1,clashViz.t*8);
+    ctx.globalAlpha=0.85*k;
+    ctx.setLineDash([7,6]); ctx.lineWidth=1.6;
+    ctx.strokeStyle=clashViz.aWon?PAL.meAcc:'#7a8493';
+    ctx.beginPath(); ctx.moveTo(0,clashViz.ay); ctx.lineTo(W,clashViz.ay); ctx.stroke();
+    ctx.strokeStyle=clashViz.aWon?'#7a8493':PAL.fastAcc;
+    ctx.beginPath(); ctx.moveTo(0,clashViz.by); ctx.lineTo(W,clashViz.by); ctx.stroke();
+    ctx.setLineDash([]);
+    const hi=Math.min(clashViz.ay,clashViz.by), lo=Math.max(clashViz.ay,clashViz.by);
+    ctx.strokeStyle='#ffffff'; ctx.globalAlpha=0.45*k; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(clashViz.x,hi); ctx.lineTo(clashViz.x,lo); ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+
+  for(const s of sparks){
+    const a=Math.max(0,s.life/s.max);
+    ctx.globalAlpha=a; ctx.fillStyle=s.c;
+    ctx.beginPath(); ctx.arc(s.x,s.y,1.5+a*2.5,0,7); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+
+  // star timer, drawn low so it never fights the HUD
+  if(starT>0){
+    const w=W*0.42, x=(W-w)/2, y=floorY-26;
+    ctx.globalAlpha=starT<1.4?(Math.sin(tsec*24)>0?1:0.25):0.85;
+    ctx.fillStyle='rgba(0,0,0,.35)';
+    ctx.beginPath(); ctx.roundRect(x,y-4,w,7,4); ctx.fill();
+    ctx.fillStyle=RAINBOW[(tsec*13|0)%6];
+    ctx.beginPath(); ctx.roundRect(x,y-4,w*(starT/STAR_TIME),7,4); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+  ctx.restore();
+}
+
+paintAudioUI();
+resize(); reset(); state='title'; showCredit(true);
+if(best>0){ document.getElementById('bestline').innerHTML='Best <span class="k">'+num(best)+'</span>'; }
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

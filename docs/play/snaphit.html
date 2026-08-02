@@ -1,0 +1,3159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#04070e">
+<meta name="robots" content="noindex">
+<title>WE LOVE GAMES</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#04070e}
+  body{position:fixed;inset:0;
+    touch-action:none;overscroll-behavior:none;
+    -webkit-user-select:none;user-select:none;
+    -webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;
+  }
+  canvas{display:block;width:100%;height:100%}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="safe" aria-hidden="true" style="position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)"></div>
+<script>
+"use strict";
+
+/* ============================================================
+   WE LOVE GAMES  ·  SnapHit Studios  ·  playable demo
+   Single file. No dependencies, no assets, no network calls.
+
+   Words are rigid slabs. They carry mass, spin about their
+   vertical axis, topple about their base edge, and land on
+   whatever the arena puts underneath them.
+   ============================================================ */
+
+const DEG = Math.PI / 180;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp  = (a, b, t) => a + (b - a) * t;
+const rnd   = (a, b) => a + Math.random() * (b - a);
+const sgn   = v => v < 0 ? -1 : v > 0 ? 1 : 0;
+
+/* ------------------------------------------------------------
+   FEEL CONSTANTS
+   Set once, verified by playing, not to be changed casually.
+   Every number that shapes how the game feels lives in here,
+   including multipliers used inside the update loop.
+   ------------------------------------------------------------ */
+const K = {
+  // launch
+  GRAV:        950,      // world units / s^2
+  LAUNCH_MIN:  420,      // muzzle speed at the smallest useful pull
+  LAUNCH_MAX:  1650,     // muzzle speed at a full pull
+  LOFT:        34 * DEG, // launch elevation, fixed
+  YAW_LIMIT:   74 * DEG,
+  PULL_PX:     0.26,     // full-power drag, as a fraction of the short screen edge
+  PULL_DEAD:   0.05,     // below this the shot is cancelled
+  PULL_WORLD:  270,      // how far the pouch visibly travels back
+  RELOAD:      0.18,
+  SPIN_LAUNCH: 7.0,      // random tumble put on every shot
+  TIP_LAUNCH:  2.8,
+
+  // ground contact
+  GROUND_REST:  0.30,
+  GROUND_DECEL: 430,     // planar deceleration while grounded
+  LAND_BITE:    0.52,    // planar speed kept on first touchdown
+  LAND_TUMBLE:  0.45,    // how much a landing converts into toppling
+  STOP_SPEED:   6,
+  SPIN_DECEL:   5.2,     // rad / s^2 shed while grounded
+  SPIN_MAX:     14,
+
+  // toppling
+  TIP_G:       26,       // gravity torque scale about the base edge
+  TIP_DAMP:    1.5,
+  HIT_TIP:     0.55,     // how readily a side impact knocks a word over
+
+  // word against word
+  BODY_REST:   0.34,
+  BODY_FRIC:   0.32,
+  WALL_REST:   0.46,
+
+  // merging
+  MERGE_RANGE: 5.20,     // bounding radii scaled up: where attraction starts
+  MERGE_TOUCH: 26,       // world units of grace on the box test
+  MERGE_SNAP:  1.00,     // they merge when their bounding circles meet
+  MERGE_LIFT:  86,       // vertical slack between two words at the same level
+  MERGE_CEIL:  62,       // above this height the magnet lets go, so shots carry
+  MERGE_ARM:   0.35,     // a fresh shot is immune for this long
+  MERGE_PULL:  12500,     // attraction acceleration, world units / s^2
+
+  // sizing
+  SIZE_BASE:   48,       // a single word's height in world units
+  SIZE_STEP:   1.44,     // size multiplier per doubling of absorbed words
+  SIZE_CAP:    0.44,     // hard ceiling, as a fraction of the deck half width
+  UNITS_MAX:   256,
+  THICK:       1.05,     // slab thickness as a fraction of size
+  EXTRUDE:     3.3,      // screen px per extrusion layer
+  FILL_BUDGET: 300000,   // screen px of slab fill allowed per word
+  REFLECT_MAX: 62000,    // big words skip their reflection
+  SPEED_MAX:   2600,     // safety net on the magnet
+  PART_MAX:    1900,     // particle ceiling, trimmed on small screens
+  BG_PAD:      22,       // overdraw margin on the background plate, for shake
+  BG_EVERY:    3,        // repaint the gas plate every Nth frame
+  MAX_BODIES:  70,
+
+  // fairground rail
+  DUCK_H:      46,       // duck height in world units
+  DUCK_R:      27,       // duck collision radius
+  DUCK_SCORE:  200,
+  DUCK_FALL:   2.2,      // seconds of tumbling before a downed duck clears
+  DUCK_HITSPEED: 210,    // impact speed needed to knock one off
+  GX_SPEED:    0.038,    // radians per second at the galaxy's rim
+  SPARK_MIN:   26,       // impulse above which an impact throws sparks
+
+  // the studio joystick
+  JOY_REST:    0.52,     // it is hard and it bounces
+  JOY_SPRING:  16,       // how briskly the stick springs back upright
+  JOY_DAMP:    2.6,
+  JOY_KICK:    0.55,     // how hard an impact throws the stick over
+  JOY_LEAN:    78,       // how far the top of the stick can travel
+  BALL_SCORE:  300,      // for smacking the ball on top
+  CLEAR_BONUS: 1500,     // for downing every duck
+
+  // the finale
+  FIN_CHARGE:  1.10,     // beat before the first word goes
+  FIN_GAP0:    0.32,     // first interval between detonations
+  FIN_GAP1:    0.11,     // it accelerates down to this
+  FIN_BOOM:    3.0,      // the big one
+  FIN_HOLD:    7.4       // fireworks and confetti, then a fresh board
+};
+
+const RAILS = [
+  { fy: 0.330, z:  72, dir:  1, speed: 205, n: 4 },
+  { fy: 0.585, z: 118, dir: -1, speed: 250, n: 4 },
+  { fy: 0.880, z:  94, dir:  1, speed: 175, n: 4 }
+];
+let ducks = [];
+
+/* ------------------------------------------------------------
+   Palette, taken off the SnapHit Studios logo:
+   deep navy void, cyan circuit grid, hot orange edge glow.
+   ------------------------------------------------------------ */
+const PAL = {
+  void0:'#01030a', void1:'#03070f', void2:'#061018',
+  grid:'#1a86c4', gridHot:'#37d0f5',
+  edge:'#ff9424', edgeCore:'#ffd9a2',
+  blockLo:'#08192b', blockHi:'#15395a', blockTop:'#1c4c70'
+};
+
+const WORDS = [
+  { t:'WE',    core:'#e6fbff', body:'#35dcff', glow:'#0b93cf' },
+  { t:'LOVE',  core:'#fff1dc', body:'#ff9424', glow:'#e05c05' },
+  { t:'GAMES', core:'#ffffff', body:'#cfe2f5', glow:'#6f8fb8' }
+];
+
+const FONT = '900 %PXpx "Arial Black","Arial Bold",Impact,"Franklin Gothic Heavy","Nimbus Sans",system-ui,sans-serif';
+
+/* ------------------------------------------------------------
+   The arena. x is a fraction of the half width, y a fraction of
+   the depth, extents likewise. Height is in world units.
+   ------------------------------------------------------------ */
+// No block obstacles. The only thing standing on the deck is the
+// studio's own joystick, which words bounce off and land on top of.
+const ARENA = [];
+let blocks = [];
+
+const JOY = {
+  x: 0, y: 0,
+  r: 138, baseH: 50,          // the circuit base
+  shaftR: 20, shaftTop: 176,  // the stick
+  ballR: 52,
+  tx: 0, ty: 0, vx: 0, vy: 0, // tilt, springs back
+  flare: 0, base: null
+};
+let victory = 0, victoryT = 0, finale = null, flash = 0;
+const GRAD = {};
+
+/* ------------------------------------------------------------
+   State
+   ------------------------------------------------------------ */
+let cv, ctx, VW = 1, VH = 1, DPR = 1;
+/* The canvas is fill bound, not CPU bound, so the backing store is the
+   biggest lever there is. Start conservatively on a phone and let the
+   watchdog walk it down if frames are being missed. */
+const RES_LADDER = [2, 1.6, 1.3, 1.05, 0.85];
+let resStep = 0, resHold = 0, lastVW = -1, lastVH = -1;
+let bg = null, bgx = null, bgFrame = 99, bgDirty = true;
+let fg = null, fgx = null, fgDirty = true;
+const CAM = { dist:1200, height:580, pitch:12*DEG, sin:0, cos:1 };
+const FIELD = { halfW:620, depth:2600 };
+let F = 900, HORIZON = 0, NEAR_SCALE = 1, SLING_Y = -200;
+
+let bodies = [], particles = [], rings = [], pops = [], links = [];
+let score = 0, shake = 0, clock = 0;
+let shotsFired = 0, upcoming = 0, reload = 0;
+let aimYaw = 0, power = 0;
+let hintAlpha = 1, quality = 1;
+const pull = { on:false, keys:false, ax:0, ay:0, x:0, y:0 };
+const SAFE = { t:0, r:0, b:0, l:0 };
+const scratch = document.createElement('canvas').getContext('2d');
+const spriteCache = new Map();
+const edgeFlash = { x:0, y:0, t:0 };
+
+/* ------------------------------------------------------------
+   Camera. Solved from framing targets rather than hand placed,
+   so the composition holds on any aspect ratio.
+   ------------------------------------------------------------ */
+function resize(){
+  const cs = getComputedStyle(document.getElementById('safe'));
+  SAFE.t = parseFloat(cs.paddingTop)    || 0;
+  SAFE.r = parseFloat(cs.paddingRight)  || 0;
+  SAFE.b = parseFloat(cs.paddingBottom) || 0;
+  SAFE.l = parseFloat(cs.paddingLeft)   || 0;
+
+  VW = Math.max(1, window.innerWidth);
+  VH = Math.max(1, window.innerHeight);
+  const want = Math.min(window.devicePixelRatio || 1, VW < 520 ? 1.6 : 2);
+  while (resStep < RES_LADDER.length - 1 && RES_LADDER[resStep] > want) resStep++;
+  DPR = Math.min(want, RES_LADDER[resStep]);
+  cv.width  = Math.round(VW * DPR);
+  cv.height = Math.round(VH * DPR);
+  cv.style.width  = VW + 'px';
+  cv.style.height = VH + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  bg = document.createElement('canvas');
+  bg.width  = Math.round((VW + 2 * K.BG_PAD) * DPR);
+  bg.height = Math.round((VH + 2 * K.BG_PAD) * DPR);
+  bgx = bg.getContext('2d', { alpha: false });
+  bgx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  fg = document.createElement('canvas');
+  fg.width = bg.width; fg.height = bg.height;
+  fgx = fg.getContext('2d');
+  fgx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  bgDirty = fgDirty = true;
+
+  const t = clamp((VW / VH - 0.55) / (1.75 - 0.55), 0, 1);
+  FIELD.halfW = lerp(430, 640, t);
+  FIELD.depth = lerp(2100, 2650, t);
+
+  const pitch      = lerp(20, 12, t) * DEG;
+  const nearBottom = 0.87;   // near edge of the arena
+  const horizonAt  = 0.17;   // where the ground plane vanishes
+  const nearWidth  = 0.45;   // half width of the near edge
+
+  F = (0.5 - horizonAt) * VH / Math.tan(pitch);
+  const nearOff = (nearBottom - 0.5) * VH;
+  const k = Math.tan(pitch + Math.atan(nearOff / F));
+  const ZcN = F * FIELD.halfW / (nearWidth * VW);
+
+  CAM.pitch  = pitch;
+  CAM.sin = Math.sin(pitch);
+  CAM.cos = Math.cos(pitch);
+  CAM.dist   = ZcN / (CAM.cos + k * CAM.sin);
+  CAM.height = k * CAM.dist;
+
+  HORIZON = VH / 2 - F * CAM.sin / CAM.cos;
+  NEAR_SCALE = F / ZcN;
+
+  // Park the slingshot on the apron, just short of the bottom edge.
+  let lo = -CAM.dist * 0.9, hi = 0;
+  for (let i = 0; i < 26; i++){
+    const mid = (lo + hi) / 2;
+    if (proj(0, mid, 0).y > VH * 0.905) lo = mid; else hi = mid;
+  }
+  SLING_Y = (lo + hi) / 2;
+
+  // A resolution change does not move the camera, so nothing that depends on
+  // CSS geometry needs rebuilding. This was costing a 130ms hitch per rung.
+  const geometryChanged = (VW !== lastVW || VH !== lastVH);
+  lastVW = VW; lastVH = VH;
+
+  K.PART_MAX = VW * VH < 420000 ? 900 : 1900;
+  buildGradients();
+  if (geometryChanged){
+    buildArena();
+    buildGalaxy();
+    buildMotes();
+    buildDucks();
+    spriteCache.clear();
+    duckSpr = null; markSpr = null; ballSpr = null;
+    JOY.y = FIELD.depth * 0.5;
+    for (const b of bodies) refit(b);
+  }
+  JOY.base = null;                 // depends on the backing store, so always
+  bgDirty = fgDirty = true;
+}
+
+/* ------------------------------------------------------------
+   Background. A skyline of data towers on the horizon, fairground
+   bunting strung over the arena, and dust drifting in the void.
+   ------------------------------------------------------------ */
+let motes = [];
+
+/* ------------------------------------------------------------
+   A spiral galaxy, simulated rather than painted. Two hundred
+   thousand years of it, anyway. The disc is a live particle
+   field on a logarithmic spiral with differential rotation, so
+   the inner stars lap the outer ones and the arms wind. The
+   diffuse gas is pre-rendered into two annulus plates that
+   turn at their own rates behind the stars.
+   ------------------------------------------------------------ */
+const GX = {
+  cx:0, cy:0, R:1, pa:0, cosPA:1, sinPA:0, sq:0.36,
+  stars: [], runs: [], rings: 28, om: [], rc: [], rs: [],
+  inner: null, outer: null, core: null, bright: [], buf: null, bctx: null, bs: 0.5, bx:0, by:0, bw:0, bh:0
+};
+
+const GX_COLS = [
+  'rgba(255,247,226,0.95)', 'rgba(255,216,155,0.88)', 'rgba(255,186,126,0.72)',
+  'rgba(236,243,255,0.92)', 'rgba(196,218,255,0.82)', 'rgba(154,188,255,0.72)',
+  'rgba(255,160,202,0.78)', 'rgba(255,124,172,0.62)', 'rgba(214,228,255,0.46)',
+  'rgba(182,202,242,0.26)', 'rgba(255,152,116,0.82)', 'rgba(255,232,168,0.80)'
+];
+
+const GX_B  = 2.55;                        // spiral winding
+const gxArm = r => Math.log(r / 0.075) * GX_B;
+const gxOm  = r => K.GX_SPEED * (0.55 + 0.45 / (0.25 + r));
+const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 1.5;
+
+function buildGalaxy(){
+  GX.R  = Math.max(VW * 0.70, VH * 0.52);
+  GX.bs = 0.42;
+  GX.cx = VW * 0.50;
+  GX.cy = proj(0, FIELD.depth, 0).y * 0.50;   // middle of the void above the deck
+  GX.pa = -13 * DEG;
+  GX.cosPA = Math.cos(GX.pa);
+  GX.sinPA = Math.sin(GX.pa);
+  GX.sq = 0.36;
+
+  GX.om = []; GX.rc = []; GX.rs = [];
+  for (let i = 0; i < GX.rings; i++) GX.om.push(gxOm((i + 0.5) / GX.rings));
+
+  // ---- the star field ----
+  const N = Math.round(clamp(VW * VH / 900, VW < 520 ? 620 : 1100, 2400));
+  const raw = [];
+  for (let i = 0; i < N; i++){
+    const roll = Math.random();
+    let r, th, ci, sz;
+
+    if (roll < 0.20){                         // bulge
+      r  = 0.015 + 0.15 * Math.pow(Math.random(), 1.9);
+      th = rnd(0, Math.PI * 2);
+      ci = Math.random() < 0.45 ? 0 : 1;
+      sz = Math.random() < 0.14 ? 2 : 1;
+    } else if (roll < 0.88){                  // disc, hugging the arms
+      r  = 0.10 + 0.90 * Math.sqrt(Math.random());
+      const arm = (Math.random() * 2) | 0;
+      const width = 0.20 + 0.30 * r;
+      th = gxArm(r) + arm * Math.PI + gauss() * width;
+      const k = Math.random();
+      ci = k < 0.08 ? 6 : k < 0.12 ? 7 : k < 0.17 ? 10 : k < 0.22 ? 11
+         : k < 0.38 ? 3 : k < 0.70 ? 4 : 5;
+      if (r < 0.30 && Math.random() < 0.4) ci = 1;
+      sz = Math.random() < 0.12 ? 2 : 1;
+    } else {                                  // halo
+      r  = 0.20 + 1.05 * Math.random();
+      th = rnd(0, Math.PI * 2);
+      ci = Math.random() < 0.5 ? 8 : 9;
+      sz = 1;
+    }
+    const ring = Math.min(GX.rings - 1, (r * GX.rings) | 0);
+    raw.push({ x0: Math.cos(th) * r, y0: Math.sin(th) * r, ring, ci, sz });
+  }
+
+  // grouped by colour so the hot loop sets fillStyle ten times, not three thousand
+  raw.sort((a, b) => a.ci - b.ci || a.sz - b.sz);
+  GX.stars = raw;
+  GX.runs = [];
+  let start = 0;
+  for (let i = 1; i <= raw.length; i++){
+    if (i === raw.length || raw[i].ci !== raw[start].ci || raw[i].sz !== raw[start].sz){
+      GX.runs.push({ from: start, to: i, col: GX_COLS[raw[start].ci], sz: raw[start].sz });
+      start = i;
+    }
+  }
+
+  // a handful of foreground stars that twinkle
+  GX.bright = [];
+  for (let i = 0; i < 40; i++){
+    GX.bright.push({ x: Math.random(), y: Math.random(), r: rnd(0.9, 2.1),
+                     ph: rnd(0, 6.28),
+                     tint: Math.random() < 0.22 ? '255,214,176'
+                         : Math.random() < 0.4 ? '196,220,255' : '255,255,255' });
+  }
+
+  // only the slab of screen the disc can reach needs compositing
+  const exY = GX.R * (GX.sq * Math.abs(GX.cosPA) + Math.abs(GX.sinPA)) * 1.06;
+  GX.bx = 0;
+  GX.by = 0;
+  GX.bw = VW;
+  GX.bh = clamp(GX.cy + exY, VH * 0.20, VH);
+  GX.buf = document.createElement('canvas');
+  GX.buf.width  = Math.max(2, Math.round(GX.bw * GX.bs));
+  GX.buf.height = Math.max(2, Math.round(GX.bh * GX.bs));
+  GX.bctx = GX.buf.getContext('2d');
+
+  GX.dim = GX.bctx.createLinearGradient(0, 0, 0, GX.buf.height);
+  GX.dim.addColorStop(0.00, 'rgba(0,0,0,0)');
+  GX.dim.addColorStop(0.46, 'rgba(0,0,0,0.10)');
+  GX.dim.addColorStop(0.80, 'rgba(0,0,0,0.55)');
+  GX.dim.addColorStop(1.00, 'rgba(0,0,0,1)');
+
+  GX.inner = gxPlate(340, 0.00, 0.52, 240, true);
+  GX.outer = gxPlate(400, 0.34, 1.05, 280, false);
+  GX.core  = gxCore(340);
+}
+
+// One annulus of gas and dust, painted flat then turned as a whole.
+function gxPlate(px, r0, r1, blobs, inner){
+  const c = document.createElement('canvas');
+  c.width = px; c.height = px;
+  const g = c.getContext('2d');
+  const h = px / 2, S = h / r1;
+
+  const soft = (x, y, rad, col, a0, a1) => {
+    const rg = g.createRadialGradient(x, y, 0, x, y, rad);
+    rg.addColorStop(0, 'rgba(' + col + ',' + a0 + ')');
+    rg.addColorStop(0.55, 'rgba(' + col + ',' + (a0 * 0.34).toFixed(3) + ')');
+    rg.addColorStop(1, 'rgba(' + col + ',' + a1 + ')');
+    g.fillStyle = rg;
+    g.beginPath(); g.arc(x, y, rad, 0, 6.284); g.fill();
+  };
+
+  for (let i = 0; i < blobs; i++){
+    const r = r0 + (r1 - r0) * Math.sqrt(Math.random());
+    const arm = (Math.random() * 2) | 0;
+    const th = gxArm(r) + arm * Math.PI + gauss() * (0.18 + 0.26 * r);
+    const x = h + Math.cos(th) * r * S, y = h + Math.sin(th) * r * S;
+    const rad = (0.05 + 0.13 * Math.random()) * r1 * S;
+    const k = Math.random();
+    const col = k < 0.11 ? '255,140,190'          // HII
+              : k < 0.20 ? '255,196,140'          // warm
+              : k < 0.62 ? '150,190,255'          // arm blue
+              :            '206,224,255';
+    soft(x, y, rad, col, 0.16 + Math.random() * 0.16, 0);
+  }
+
+  // bright knots where the arms are forming stars
+  for (let i = 0; i < Math.round(blobs * 0.16); i++){
+    const r = r0 + (r1 - r0) * Math.sqrt(Math.random());
+    const arm = (Math.random() * 2) | 0;
+    const th = gxArm(r) + arm * Math.PI + gauss() * (0.10 + 0.14 * r);
+    const x = h + Math.cos(th) * r * S, y = h + Math.sin(th) * r * S;
+    soft(x, y, (0.012 + 0.026 * Math.random()) * r1 * S,
+         Math.random() < 0.5 ? '255,168,208' : '196,226,255', 0.5 + Math.random() * 0.35, 0);
+  }
+
+  // globular clusters, scattered off the plane
+  if (!inner){
+    for (let i = 0; i < 14; i++){
+      const r = r0 + (r1 - r0) * Math.pow(Math.random(), 0.55);
+      const th = rnd(0, Math.PI * 2);
+      const x = h + Math.cos(th) * r * S, y = h + Math.sin(th) * r * S;
+      soft(x, y, (0.010 + 0.016 * Math.random()) * r1 * S, '255,238,205', 0.42, 0);
+    }
+    // and a few far galaxies behind it all
+    for (let i = 0; i < 7; i++){
+      const x = rnd(px * 0.06, px * 0.94), y = rnd(px * 0.06, px * 0.94);
+      const rr = rnd(px * 0.012, px * 0.03), tilt = rnd(0, Math.PI);
+      g.save(); g.translate(x, y); g.rotate(tilt); g.scale(1, rnd(0.22, 0.55));
+      const rg = g.createRadialGradient(0, 0, 0, 0, 0, rr);
+      rg.addColorStop(0, 'rgba(255,244,226,.5)');
+      rg.addColorStop(0.4, 'rgba(198,214,255,.16)');
+      rg.addColorStop(1, 'rgba(160,180,240,0)');
+      g.fillStyle = rg; g.beginPath(); g.arc(0, 0, rr, 0, 6.284); g.fill();
+      g.restore();
+    }
+  }
+
+  // filaments drawn along the arms
+  g.lineCap = 'round';
+  for (let i = 0; i < Math.round(blobs * 0.10); i++){
+    const r = r0 + (r1 - r0) * Math.sqrt(Math.random());
+    const arm = (Math.random() * 2) | 0;
+    const a0 = gxArm(r) + arm * Math.PI + gauss() * 0.16;
+    const span = rnd(0.10, 0.30);
+    g.beginPath();
+    for (let k2 = 0; k2 <= 6; k2++){
+      const rr = r * (1 + (k2 / 6) * span);
+      const th = gxArm(rr) + arm * Math.PI + (a0 - gxArm(r) - arm * Math.PI);
+      const x = h + Math.cos(th) * rr * S, y = h + Math.sin(th) * rr * S;
+      k2 ? g.lineTo(x, y) : g.moveTo(x, y);
+    }
+    g.strokeStyle = 'rgba(170,206,255,' + (0.05 + Math.random() * 0.09).toFixed(3) + ')';
+    g.lineWidth = rnd(0.6, 1.8);
+    g.stroke();
+  }
+
+  // dust lanes, cut just inside each arm
+  g.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < Math.round(blobs * 0.55); i++){
+    const r = r0 + (r1 - r0) * Math.sqrt(Math.random());
+    const arm = (Math.random() * 2) | 0;
+    const th = gxArm(r) + arm * Math.PI - 0.22 + gauss() * 0.12;
+    const x = h + Math.cos(th) * r * S, y = h + Math.sin(th) * r * S;
+    soft(x, y, (0.03 + 0.09 * Math.random()) * r1 * S, '0,0,0', 0.5, 0);
+  }
+  g.globalCompositeOperation = 'source-over';
+
+  // hollow out the middle so the plates do not stack up on the core
+  if (r0 > 0){
+    g.globalCompositeOperation = 'destination-out';
+    const rg = g.createRadialGradient(h, h, 0, h, h, r0 * S * 1.25);
+    rg.addColorStop(0, 'rgba(0,0,0,1)');
+    rg.addColorStop(0.7, 'rgba(0,0,0,0.9)');
+    rg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = rg; g.fillRect(0, 0, px, px);
+    g.globalCompositeOperation = 'source-over';
+  }
+  return c;
+}
+
+function gxCore(px){
+  const c = document.createElement('canvas');
+  c.width = px; c.height = px;
+  const g = c.getContext('2d');
+  const h = px / 2;
+  let rg = g.createRadialGradient(h, h, 0, h, h, h);
+  rg.addColorStop(0.00, 'rgba(255,252,240,0.95)');
+  rg.addColorStop(0.06, 'rgba(255,240,205,0.80)');
+  rg.addColorStop(0.18, 'rgba(255,206,140,0.42)');
+  rg.addColorStop(0.42, 'rgba(232,150,96,0.16)');
+  rg.addColorStop(1.00, 'rgba(180,120,90,0)');
+  g.fillStyle = rg; g.fillRect(0, 0, px, px);
+  return c;
+}
+
+function gxPlaceLayer(g, k, img, half, ang, alpha){
+  g.save();
+  g.globalAlpha = alpha;
+  g.translate(GX.cx * k, GX.cy * k);
+  g.rotate(GX.pa);
+  g.scale(1, GX.sq);
+  g.rotate(ang);
+  g.drawImage(img, -half * k, -half * k, half * 2 * k, half * 2 * k);
+  g.restore();
+}
+
+function drawNebula(){
+  if (!GX.stars.length) buildGalaxy();
+  const t = clock;
+  const lift = victoryT > 0 ? 1.35 : 1;
+
+  const g = GX.bctx, k = GX.bs;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, GX.buf.width, GX.buf.height);
+  g.globalCompositeOperation = 'lighter';
+  gxPlaceLayer(g, k, GX.outer, GX.R * 1.05, gxOm(0.70) * t, 0.85 * lift);
+  gxPlaceLayer(g, k, GX.inner, GX.R * 0.52, gxOm(0.26) * t, 0.80 * lift);
+  gxPlaceLayer(g, k, GX.core,  GX.R * 0.30, 0, 0.95 * lift);
+  g.globalCompositeOperation = 'destination-out';   // fade it out toward the deck
+  g.globalAlpha = 1;
+  g.fillStyle = GX.dim;
+  g.fillRect(0, 0, GX.buf.width, GX.buf.height);
+  g.globalCompositeOperation = 'source-over';
+
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.drawImage(GX.buf, GX.bx, GX.by, GX.bw, GX.bh);
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* Live, every frame. Six hundred points at one or two pixels each is cheap,
+   and it is the only part of the galaxy where stepping is visible. */
+function drawStars(){
+  if (!GX.stars.length) return;
+  const t = clock;
+  const lift = victoryT > 0 ? 1.35 : 1;
+  ctx.globalCompositeOperation = 'lighter';
+
+  // per-ring rotation, so the disc shears the way a real one does
+  for (let i = 0; i < GX.rings; i++){
+    const a = GX.om[i] * t;
+    GX.rc[i] = Math.cos(a); GX.rs[i] = Math.sin(a);
+  }
+
+  const cp = GX.cosPA, sp = GX.sinPA, sq = GX.sq, R = GX.R, cx = GX.cx, cy = GX.cy;
+  const step = quality ? 1 : 3;
+  const fadeEnd = GX.bh * 0.86;
+  const stars = GX.stars;
+  ctx.globalAlpha = lift > 1 ? 1 : 0.95;
+  for (const run of GX.runs){
+    ctx.fillStyle = run.col;
+    const sz = run.sz;
+    for (let i = run.from; i < run.to; i += step){
+      const s = stars[i];
+      const c = GX.rc[s.ring], n = GX.rs[s.ring];
+      const dx = s.x0 * c - s.y0 * n;
+      const dy = (s.x0 * n + s.y0 * c) * sq;
+      const x = cx + (dx * cp - dy * sp) * R;
+      if (x < -8 || x > VW + 8) continue;
+      const y = cy + (dx * sp + dy * cp) * R;
+      if (y < -8 || y > fadeEnd) continue;
+      ctx.fillRect(x, y, sz, sz);
+    }
+  }
+
+  // foreground stars, fixed to the sky and twinkling
+  for (const b of GX.bright){
+    const a = 0.28 + 0.72 * Math.abs(Math.sin(clock * 1.3 + b.ph));
+    ctx.globalAlpha = a * 0.9;
+    ctx.fillStyle = 'rgb(' + b.tint + ')';
+    const x = b.x * VW, y = b.y * VH * 0.86;
+    ctx.beginPath(); ctx.arc(x, y, b.r * (0.7 + a * 0.5), 0, 6.284); ctx.fill();
+  }
+
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+}
+
+function buildMotes(){
+  motes = [];
+  for (let i = 0; i < 64; i++){
+    motes.push({
+      x: rnd(-FIELD.halfW * 2.4, FIELD.halfW * 2.4),
+      y: rnd(-CAM.dist * 0.3, FIELD.depth * 2.0),
+      z: rnd(90, 1150),
+      v: rnd(5, 26) * (Math.random() < 0.5 ? -1 : 1),
+      r: rnd(0.7, 2.3),
+      ph: rnd(0, 6.28)
+    });
+  }
+}
+
+function drawMotes(dt){
+  ctx.globalCompositeOperation = 'lighter';
+  const span = FIELD.halfW * 2.4;
+  for (const m of motes){
+    m.x += m.v * dt;
+    if (m.x >  span) m.x = -span;
+    if (m.x < -span) m.x =  span;
+    const q = proj(m.x, m.y, m.z);
+    if (q.d < 60) continue;
+    ctx.globalAlpha = (0.18 + 0.30 * Math.abs(Math.sin(clock * 1.1 + m.ph))) * 0.9;
+    ctx.fillStyle = '#8fd8ff';
+    ctx.beginPath(); ctx.arc(q.x, q.y, Math.max(0.5, m.r * q.s * 2.2), 0, 6.284); ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+}
+
+function buildGradients(){
+  const ctx = bgx || window.ctx || document.getElementById('c').getContext('2d');
+  let g = ctx.createLinearGradient(0, 0, 0, VH);
+  g.addColorStop(0, PAL.void0);
+  g.addColorStop(clamp(HORIZON / VH, 0.02, 0.9), PAL.void1);
+  g.addColorStop(1, PAL.void2);
+  GRAD.sky = g;
+
+  g = ctx.createLinearGradient(0, HORIZON - VH*0.16, 0, HORIZON + VH*0.10);
+  g.addColorStop(0, 'rgba(12,80,130,0)');
+  g.addColorStop(0.62, 'rgba(24,124,180,0.13)');
+  g.addColorStop(1, 'rgba(12,80,130,0)');
+  GRAD.horizon = g;
+
+  // keeps the galaxy vivid overhead and calm down where the game is played
+  g = ctx.createLinearGradient(0, 0, 0, VH);
+  g.addColorStop(0.00, 'rgba(2,5,12,0)');
+  g.addColorStop(0.30, 'rgba(2,5,12,0.10)');
+  g.addColorStop(0.62, 'rgba(2,5,12,0.42)');
+  g.addColorStop(1.00, 'rgba(2,5,12,0.66)');
+  GRAD.skyDim = g;
+
+  g = ctx.createLinearGradient(0, proj(0, FIELD.depth, 0).y, 0, proj(0, 0, 0).y);
+  g.addColorStop(0, 'rgba(14,50,80,0.92)');
+  g.addColorStop(1, 'rgba(8,26,45,0.96)');
+  GRAD.deck = g;
+
+  g = ctx.createRadialGradient(VW/2, VH*0.58, Math.min(VW,VH)*0.48,
+                               VW/2, VH*0.58, Math.max(VW,VH)*0.88);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.38)');
+  GRAD.vignette = g;
+
+  g = ctx.createLinearGradient(0, 0, 0, VH);
+  g.addColorStop(0, '#4a2a10'); g.addColorStop(0.55, '#ffb45c'); g.addColorStop(1, '#5a3416');
+  GRAD.flash = g;
+}
+
+function buildArena(){
+  blocks = ARENA.map(a => ({
+    x: a[0] * FIELD.halfW,
+    y: a[1] * FIELD.depth,
+    ehw: a[2] * FIELD.halfW,
+    ehd: a[3] * FIELD.depth,
+    top: a[4],
+    yaw: 0, vx: 0, vy: 0, spin: 0, inv: 0, invI: 0, statik: true
+  }));
+}
+
+function proj(x, y, z){
+  const ry = y + CAM.dist, rz = z - CAM.height;
+  const Yc = ry * CAM.sin + rz * CAM.cos;
+  let   Zc = ry * CAM.cos - rz * CAM.sin;
+  if (Zc < 24) Zc = 24;
+  return { x: VW/2 + F * x / Zc, y: VH/2 - F * Yc / Zc, s: F / Zc, d: Zc };
+}
+
+/* ------------------------------------------------------------
+   Word sprites, drawn once per word and tier, then blitted.
+   Glow is baked in so the hot loop never touches shadowBlur.
+   ------------------------------------------------------------ */
+function sizeFor(units){
+  const s = K.SIZE_BASE * Math.pow(K.SIZE_STEP, Math.log2(units));
+  return Math.min(s, K.SIZE_CAP * FIELD.halfW);
+}
+function levelOf(units){ return clamp(Math.round(Math.log2(units)), 0, 7); }
+
+function sprite(wi, lvl){
+  const key = wi + '|' + lvl;
+  let s = spriteCache.get(key);
+  if (s) return s;
+
+  const W = WORDS[wi];
+  const size = sizeFor(Math.pow(2, lvl));
+  const px = clamp(Math.round(size * NEAR_SCALE * 1.15), 26, 300);
+  const font = FONT.replace('%PX', px);
+
+  scratch.font = font;
+  const tw  = scratch.measureText(W.t).width;
+  const cap = px * 0.72;
+  const pad = px * 0.36;
+
+  const oc = document.createElement('canvas');
+  oc.width  = Math.ceil(tw + pad * 2);
+  oc.height = Math.ceil(cap + pad * 2);
+  const g = oc.getContext('2d');
+  g.font = font;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.lineJoin = 'round';
+  const cx = oc.width / 2, cy = oc.height / 2;
+
+  g.shadowColor = W.glow;
+  g.shadowBlur = px * 0.50; g.strokeStyle = W.body; g.lineWidth = px * 0.20;
+  g.strokeText(W.t, cx, cy);
+  g.shadowBlur = px * 0.34;
+  g.strokeText(W.t, cx, cy);
+  g.shadowBlur = 0;
+  g.lineWidth = px * 0.15;
+  g.strokeText(W.t, cx, cy);
+  g.fillStyle = W.core;
+  g.fillText(W.t, cx, cy);
+
+  // A silhouette on the same canvas geometry, used for the slab body.
+  const spad = px * 0.14;
+  const sc = document.createElement('canvas');
+  sc.width  = Math.ceil(tw + spad * 2);
+  sc.height = Math.ceil(cap + spad * 2);
+  const h2 = sc.getContext('2d');
+  h2.font = font; h2.textAlign = 'center'; h2.textBaseline = 'middle';
+  h2.lineJoin = 'round';
+  h2.strokeStyle = shade(W.glow, 0.26); h2.lineWidth = px * 0.20;
+  h2.strokeText(W.t, sc.width/2, sc.height/2);
+  h2.fillStyle = shade(W.glow, 0.34);
+  h2.fillText(W.t, sc.width/2, sc.height/2);
+
+  s = { canvas:oc, solid:sc, cw:oc.width, ch:oc.height,
+        scw:sc.width, sch:sc.height, px, tw, cap };
+  spriteCache.set(key, s);
+  return s;
+}
+
+function shade(hex, k){
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.round(((n >> 16) & 255) * k);
+  const g = Math.round(((n >> 8) & 255) * k);
+  const b = Math.round((n & 255) * k);
+  return 'rgb(' + r + ',' + g + ',' + b + ')';
+}
+
+/* ------------------------------------------------------------
+   Bodies. A word is a slab: half length hw along its own axis,
+   half thickness hd, height h. yaw spins it about the vertical,
+   tip topples it about its base edge.
+   ------------------------------------------------------------ */
+function refit(b){
+  b.size = sizeFor(b.units);
+  b.tier = 1 + Math.log2(b.units);
+  b.sp  = sprite(b.wi, levelOf(b.units));
+  b.wpp = b.size / b.sp.px;
+  b.hw  = b.sp.tw * 0.5 * b.wpp;
+  b.h   = b.sp.cap * b.wpp;
+  b.hd  = b.size * K.THICK * 0.5;
+  b.mass = (2*b.hw) * (2*b.hd) / 1500 + 0.4;
+  b.inv  = 1 / b.mass;
+  b.invI = 12 / (b.mass * (4*b.hw*b.hw + 4*b.hd*b.hd));
+  b.rad  = Math.hypot(b.hw, Math.max(b.hd, b.h * 0.5));
+  shape(b);
+}
+
+// Ground footprint and standing height for the current tip angle.
+function shape(b){
+  const cf = Math.abs(Math.cos(b.tip)), sf = Math.abs(Math.sin(b.tip));
+  b.ehw = b.hw;
+  b.ehd = b.hd * cf + b.h * 0.5 * sf;
+  b.hgt = b.h  * cf + b.hd * 2  * sf;
+}
+
+function makeBody(wi, units, x, y, z, vx, vy, vz){
+  const b = {
+    wi, units, tier: 1 + Math.log2(units), size: sizeFor(units),
+    x, y, z, vx, vy, vz,
+    yaw: rnd(-0.25, 0.25), spin: 0,
+    tip: 0, tipRate: 0,
+    sup: 0, landed:false, dead:false, pop:0, dying:0, born:clock, statik:false
+  };
+  refit(b);
+  return b;
+}
+
+function spawn(wi, units, x, y, z, vx, vy, vz){
+  const b = makeBody(wi, units, x, y, z, vx, vy, vz);
+  bodies.push(b);
+  return b;
+}
+
+function cull(){
+  if (bodies.length <= K.MAX_BODIES) return;
+  let oldest = null;
+  for (const b of bodies){
+    if (b.dying || b.units > 1) continue;
+    if (!oldest || b.born < oldest.born) oldest = b;
+  }
+  if (oldest) oldest.dying = 0.9;
+}
+
+/* ------------------------------------------------------------
+   Effects
+   ------------------------------------------------------------ */
+const SPARK_RAMP = ['#ffffff','#fff6d8','#ffd98a','#ffab3a','#ff7a1e','#e0430c','#8e1f06'];
+const FIRE_RAMP  = ['#fff8dc','#ffdd7a','#ffab34','#ff7418','#dd400a','#8f2305','#3d1002'];
+const FW_COLOURS = ['#ff4d7d','#ffd23d','#4dffa1','#5cc8ff','#c77dff','#ff8a3d',
+                    '#ffffff','#7dff4d','#ff5cf0','#4d9dff'];
+
+function push(o){ if (particles.length < K.PART_MAX) particles.push(o); }
+
+function burst(x, y, z, col, n, pw){
+  if (quality === 0) n = Math.ceil(n / 2);
+  for (let i = 0; i < n; i++){
+    const a = rnd(0, Math.PI * 2), s = rnd(0.35, 1) * pw;
+    const life = rnd(0.35, 0.85);
+    push({ x, y, z, vx: Math.cos(a)*s, vy: Math.sin(a)*s*0.7, vz: rnd(0.25,1.1)*pw,
+           t: life, life, col, r: rnd(2, 5), k: 0 });
+  }
+}
+
+// Hot, fast, short lived. Sprayed along the contact normal.
+function sparks(x, y, z, nx, ny, n, pw){
+  if (quality === 0) n = Math.ceil(n / 2);
+  for (let i = 0; i < n; i++){
+    const a = rnd(0, Math.PI * 2), s = rnd(0.35, 1) * pw;
+    const life = rnd(0.14, 0.42);
+    push({ x, y, z,
+           vx: (nx * 0.75 + Math.cos(a) * 0.85) * s,
+           vy: (ny * 0.75 + Math.sin(a) * 0.85) * s * 0.8,
+           vz: rnd(0.1, 1.2) * pw * 0.85,
+           t: life, life, col: null, r: rnd(1.1, 2.4), k: 1 });
+  }
+}
+
+// Slow, buoyant, swelling. The body of an explosion.
+function fireball(x, y, z, n, pw){
+  if (quality === 0) n = Math.ceil(n / 2);
+  for (let i = 0; i < n; i++){
+    const a = rnd(0, Math.PI * 2), s = rnd(0.15, 1) * pw;
+    const life = rnd(0.55, 1.35);
+    push({ x, y, z, vx: Math.cos(a)*s*0.5, vy: Math.sin(a)*s*0.4, vz: rnd(0.2,0.9)*pw*0.5,
+           t: life, life, col: null, r: rnd(9, 26), k: 2 });
+  }
+}
+function ring(x, y, z, max, col, dur){
+  rings.push({ x, y, z, max, col, t: dur, life: dur });
+}
+function wallSpark(b, nx, ny){
+  const sp = Math.hypot(b.vx, b.vy);
+  if (sp < 110) return;
+  sparks(b.x, b.y, b.z + b.hgt * 0.4, nx, ny, 9 + Math.min(24, sp * 0.035), 160 + sp * 0.26);
+}
+
+function edgeHit(b){
+  if (Math.hypot(b.vx, b.vy) < 40) return;
+  edgeFlash.x = b.x; edgeFlash.y = b.y; edgeFlash.t = 0.3;
+  SFX.edge();
+}
+
+/* ------------------------------------------------------------
+   The fairground rail. Yellow ducks tracking across the arena
+   with a target roundel on the flank.
+   ------------------------------------------------------------ */
+let duckSpr = null;
+function duckSprite(){
+  if (duckSpr) return duckSpr;
+  const H = 128, W = 160;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const cx = W*0.5, cy = H*0.58;
+
+  g.shadowColor = '#ffcf3a'; g.shadowBlur = 16;
+  g.fillStyle = '#ffd23d';
+  g.beginPath(); g.ellipse(cx + 4, cy + 6, 44, 27, 0, 0, 6.284); g.fill();   // body
+  g.beginPath(); g.moveTo(cx + 40, cy - 4);                                   // tail
+  g.lineTo(cx + 66, cy - 20); g.lineTo(cx + 50, cy + 6); g.closePath(); g.fill();
+  g.beginPath(); g.arc(cx - 32, cy - 24, 22, 0, 6.284); g.fill();             // head
+  g.shadowBlur = 0;
+
+  g.fillStyle = '#ff8a1e';                                                    // beak
+  g.beginPath(); g.moveTo(cx - 50, cy - 22);
+  g.lineTo(cx - 76, cy - 16); g.lineTo(cx - 50, cy - 10); g.closePath(); g.fill();
+
+  g.fillStyle = '#11202e';                                                    // eye
+  g.beginPath(); g.arc(cx - 36, cy - 30, 4.6, 0, 6.284); g.fill();
+  g.fillStyle = '#ffffff';
+  g.beginPath(); g.arc(cx - 37.4, cy - 31.4, 1.6, 0, 6.284); g.fill();
+
+  const tx = cx + 8, ty = cy + 5;                                             // target roundel
+  const rings = [[17,'#f5f7fa'],[13,'#e03b2e'],[9,'#f5f7fa'],[5,'#e03b2e']];
+  for (const [r, col] of rings){
+    g.fillStyle = col; g.beginPath(); g.arc(tx, ty, r, 0, 6.284); g.fill();
+  }
+  g.strokeStyle = 'rgba(17,32,46,0.85)'; g.lineWidth = 1.6;
+  g.beginPath(); g.arc(tx, ty, 17, 0, 6.284); g.stroke();
+
+  duckSpr = { canvas:c, cw:W, ch:H, worldH: K.DUCK_H * (H / 74) };
+  return duckSpr;
+}
+
+function buildDucks(){
+  ducks = [];
+  for (const r of RAILS){
+    const y = r.fy * FIELD.depth;
+    const span = (FIELD.halfW - 60) * 2;
+    for (let i = 0; i < r.n; i++){
+      ducks.push({
+        x: -FIELD.halfW + 60 + span * ((i + 0.5) / r.n),
+        y, z: r.z, dir: r.dir, speed: r.speed,
+        alive: true, down: false, off: 0, rot: 0, spin: 0, vx: 0, vz: 0, fade: 1
+      });
+    }
+  }
+}
+
+/* ------------------------------------------------------------
+   The finale. Every duck down lights a fuse under the joystick,
+   and the words go off one at a time, radiating outward.
+   ------------------------------------------------------------ */
+function triumph(){
+  victory = 1; victoryT = 3.4;
+  SFX.resume(); SFX.charge(K.FIN_CHARGE);
+  tellHost('cleared');
+  score += K.CLEAR_BONUS;
+  JOY.flare = 1.6;
+  shake = 18;
+  flash = 0.5;
+  ring(JOY.x, JOY.y, JOY.baseH, JOY.r * 4.5, PAL.edgeCore, 1.3);
+  burst(JOY.x, JOY.y, JOY.shaftTop, PAL.edge, 44, 340);
+
+  // nearest the logo goes first, so the blast walks outward
+  const q = bodies.filter(b => !b.dead && !b.dying)
+    .sort((a, b) => Math.hypot(a.x-JOY.x, a.y-JOY.y) - Math.hypot(b.x-JOY.x, b.y-JOY.y));
+  finale = { phase:'charge', t: K.FIN_CHARGE, queue:q, i:0, gap:K.FIN_GAP0, total:K.CLEAR_BONUS };
+}
+
+function detonate(b){
+  const W = WORDS[b.wi];
+  const pw = 380 + b.tier * 210;
+  const z  = b.z + b.hgt * 0.5;
+  fireball(b.x, b.y, z, 16 + b.tier * 8,  pw * 0.55);
+  sparks(b.x, b.y, z, 0, 0, 34 + b.tier * 16, pw * 1.5);
+  burst(b.x, b.y, z, W.body,   30 + b.tier * 14, pw);
+  burst(b.x, b.y, z, W.core,   18 + b.tier * 8,  pw * 0.7);
+  burst(b.x, b.y, z, PAL.edge, 14 + b.tier * 6,  pw * 1.35);
+  ring(b.x, b.y, b.z, 320 + b.tier * 230, W.core,   0.6);
+  ring(b.x, b.y, b.z, 520 + b.tier * 320, PAL.edge, 0.85);
+  shake = Math.min(30, shake + 6 + b.tier * 2.8);
+  flash = Math.min(1.6, flash + 0.19 + b.tier * 0.06);
+
+  const gain = Math.round(100 * b.tier * b.tier);
+  score += gain;
+  if (finale) finale.total += gain;
+  pops.push({ x:b.x, y:b.y, z:b.z + 130, txt:'+' + gain, col:W.core, t:0.85, life:0.85 });
+
+  // throw everything still standing
+  const R = 460 + b.tier * 260;
+  for (const o of bodies){
+    if (o === b || o.dead) continue;
+    const dx = o.x - b.x, dy = o.y - b.y;
+    const d = Math.hypot(dx, dy) || 1;
+    if (d > R) continue;
+    const k = (1 - d / R) * (1100 + b.tier * 620);
+    o.vx += dx / d * k * o.inv;
+    o.vy += dy / d * k * o.inv;
+    o.vz += (170 + b.tier * 90) * o.inv * 0.9;
+    o.spin    += rnd(-1, 1) * 7;
+    o.tipRate += rnd(-1, 1) * 5;
+    o.landed = true;
+  }
+
+  const jd = Math.hypot(JOY.x - b.x, JOY.y - b.y) || 1;
+  joyTilt((JOY.x - b.x) / jd, (JOY.y - b.y) / jd, 2600 / (240 + jd));
+  JOY.flare = Math.max(JOY.flare, 0.8);
+  b.dead = true;
+}
+
+function bigBang(){
+  flash = 2.2;
+  SFX.boom(2.1);
+  shake = 34;
+  JOY.flare = 2.6;
+  for (let i = 0; i < 7; i++){
+    ring(JOY.x, JOY.y, JOY.baseH, FIELD.halfW * (1.0 + i * 0.58),
+         i % 2 ? PAL.edgeCore : '#ffffff', 1.0 + i * 0.22);
+  }
+  fireball(JOY.x, JOY.y, JOY.shaftTop * 0.7, 70, 460);
+  sparks(JOY.x, JOY.y, JOY.shaftTop, 0, 0, 150, 900);
+  burst(JOY.x, JOY.y, JOY.shaftTop, PAL.edge,  80, 700);
+  burst(JOY.x, JOY.y, JOY.shaftTop, '#ffffff', 56, 560);
+  for (const W of WORDS) burst(JOY.x, JOY.y, JOY.shaftTop * 0.6, W.body, 30, 600);
+  // a ring of fire around the deck
+  for (let i = 0; i < 14; i++){
+    const a = (i / 14) * Math.PI * 2;
+    fireball(JOY.x + Math.cos(a) * FIELD.halfW * 0.72,
+             JOY.y + Math.sin(a) * FIELD.depth * 0.30, 20, 8, 260);
+  }
+  for (let i = 0; i < 6; i++) launchShell();
+}
+
+/* ------------------------------------------------------------
+   Fireworks over the deck
+   ------------------------------------------------------------ */
+let shells = [];
+
+function launchShell(){
+  shells.push({
+    x: rnd(-FIELD.halfW * 0.92, FIELD.halfW * 0.92),
+    y: rnd(FIELD.depth * 0.12, FIELD.depth * 0.98),
+    z: rnd(0, 50),
+    vz: rnd(480, 680),
+    col: FW_COLOURS[(Math.random() * FW_COLOURS.length) | 0],
+    t: rnd(1.15, 1.85),
+    dead: false
+  });
+}
+
+function popShell(s){
+  // a short bright flash of stars, then a cloud of confetti
+  const stars = quality ? 20 : 12;
+  const sp0 = rnd(190, 300);
+  for (let i = 0; i < stars; i++){
+    const th = rnd(0, Math.PI * 2), ph = Math.acos(rnd(-1, 1));
+    const sp = sp0 * rnd(0.6, 1);
+    const life = rnd(0.35, 0.7);
+    push({ x:s.x, y:s.y, z:s.z,
+           vx: Math.sin(ph)*Math.cos(th)*sp, vy: Math.sin(ph)*Math.sin(th)*sp*0.8,
+           vz: Math.cos(ph)*sp, t: life, life, col: s.col, r: rnd(1.6, 3.0), k: 3 });
+  }
+
+  const n = quality ? 52 + ((Math.random() * 26) | 0) : 26;
+  const pw = rnd(130, 235);
+  const two = Math.random() < 0.5;
+  const alt = FW_COLOURS[(Math.random() * FW_COLOURS.length) | 0];
+  for (let i = 0; i < n; i++){
+    const th = rnd(0, Math.PI * 2), ph = Math.acos(rnd(-1, 1));
+    const sp = pw * rnd(0.45, 1);
+    const life = rnd(6, 10);
+    push({ x:s.x, y:s.y, z:s.z,
+           vx: Math.sin(ph)*Math.cos(th)*sp, vy: Math.sin(ph)*Math.sin(th)*sp*0.8,
+           vz: Math.cos(ph)*sp * 0.8,
+           t: life, life,
+           col: (two && i % 2) ? alt : s.col,
+           r: rnd(2.8, 5.6), k: 4,
+           term: rnd(95, 160),                // how fast it settles
+           sway: rnd(0, 6.28), sw: rnd(1.6, 3.4), amp: rnd(26, 62),
+           flip: rnd(0, 6.28), fs: rnd(3.2, 7.5),
+           ar: rnd(0.35, 1.0) });
+  }
+  ring(s.x, s.y, 0, 150, s.col, 0.45);
+  flash = Math.min(1.4, flash + 0.07);
+  shake = Math.min(14, shake + 1.2);
+}
+
+function updateShells(dt){
+  for (const s of shells){
+    s.z += s.vz * dt;
+    s.vz -= K.GRAV * 0.33 * dt;
+    s.t -= dt;
+    if (Math.random() < 0.85){
+      push({ x:s.x + rnd(-6,6), y:s.y + rnd(-6,6), z:s.z, vx:rnd(-30,30), vy:rnd(-30,30),
+             vz:rnd(-120,-20), t:0.26, life:0.26, col:null, r:rnd(1,2), k:1 });
+    }
+    if (s.t <= 0 || s.vz < 45){ popShell(s); s.dead = true; }
+  }
+  if (shells.length) shells = shells.filter(s => !s.dead);
+}
+
+function updateFinale(dt){
+  if (!finale) return;
+  const f = finale;
+  f.t -= dt;
+
+  if (f.phase === 'charge'){
+    if (f.t <= 0){
+      f.phase = f.queue.length ? 'chain' : 'boom';
+      f.t = f.phase === 'boom' ? K.FIN_BOOM : 0;
+      if (f.phase === 'boom'){ f.rev = 0; bigBang(); }
+    }
+    return;
+  }
+
+  if (f.phase === 'chain'){
+    const nxt = f.queue[f.i];
+    if (nxt && !nxt.dead) nxt.pop = Math.max(nxt.pop, clamp(1 - f.t / Math.max(f.gap, 0.001), 0, 1));
+    while (f.t <= 0 && f.i < f.queue.length){
+      const b = f.queue[f.i++];
+      if (!b.dead){
+        // each blast a little bigger than the last, so the chain crescendos
+        // into the big one rather than running flat
+        const prog = f.i / Math.max(1, f.queue.length);
+        detonate(b);
+        SFX.boom(0.68 + prog * 0.95 + Math.random() * 0.14);
+      }
+      f.gap = Math.max(K.FIN_GAP1, f.gap * 0.958);
+      f.t += f.gap;
+    }
+    if (f.i >= f.queue.length){
+      // sweep up anything the blasts spawned or missed
+      const left = bodies.filter(b => !b.dead);
+      if (left.length){ f.queue = left; f.i = 0; return; }
+      f.phase = 'boom'; f.t = K.FIN_BOOM; f.rev = 0; bigBang();
+    }
+    return;
+  }
+
+  if (f.phase === 'boom' || f.phase === 'hold' || f.phase === 'done'){
+    f.rev = (f.rev || 0) + dt;
+    f.fw = (f.fw || 0) - dt;
+    if (f.fw <= 0){ launchShell(); if (Math.random() < 0.3) launchShell(); f.fw = rnd(0.24, 0.5); }
+  }
+  if (f.phase === 'boom' && f.t <= 0){ f.phase = 'hold'; f.t = K.FIN_HOLD; return; }
+  if (f.phase === 'hold' && f.t <= 0){ f.phase = 'done'; f.t = 0; }
+}
+
+function knockDuck(d, vx, vy){
+  if (d.alive) SFX.duck();
+  d.alive = false;
+  d.down = true;
+  d.off = K.DUCK_FALL;
+  d.vx = vx * 0.30 + sgn(vx || 1) * 120;
+  d.vz = 320;
+  d.spin = rnd(-1, 1) * 16;
+  d.fade = 1;
+  score += K.DUCK_SCORE;
+  ring(d.x, d.y, 0, 150, '#ffd23d', 0.55);
+  burst(d.x, d.y, d.z, '#ffd23d', 18, 220);
+  pops.push({ x:d.x, y:d.y, z:d.z + 60, txt:'+' + K.DUCK_SCORE, col:'#fff0b0', t:0.95, life:0.95 });
+  shake = Math.min(14, shake + 6);
+}
+
+function updateDucks(dt){
+  const lim = FIELD.halfW - 40;
+  for (const d of ducks){
+    if (d.alive){
+      d.x += d.dir * d.speed * dt;
+      if (d.x >  lim) d.x = -lim;
+      if (d.x < -lim) d.x =  lim;
+      continue;
+    }
+    // knocked off the rail for good: tumble away and fade
+    d.off -= dt;
+    if (d.fade > 0){
+      d.x += d.vx * dt;
+      d.z += d.vz * dt;
+      d.vz -= K.GRAV * 0.8 * dt;
+      d.rot += d.spin * dt;
+      if (d.z < 0){ d.z = 0; d.vz *= -0.3; d.vx *= 0.6; d.spin *= 0.6; }
+      d.fade = Math.max(0, d.fade - dt * 0.75);
+    }
+  }
+  // every duck down is the run's climax
+  if (!victory && ducks.length && ducks.every(d => !d.alive)) triumph();
+}
+
+// A word passing through a duck knocks it off the rail.
+function duckHits(){
+  for (const d of ducks){
+    if (!d.alive) continue;
+    for (const b of bodies){
+      if (b.dead || b.dying) continue;
+      if (d.z > b.z + b.hgt || d.z + K.DUCK_H < b.z) continue;
+      const sp = Math.hypot(b.vx, b.vy, b.vz);
+      if (sp < K.DUCK_HITSPEED) continue;
+      const dx = d.x - b.x, dy = d.y - b.y;
+      if (dx*dx + dy*dy > (b.rad + K.DUCK_R) * (b.rad + K.DUCK_R)) continue;
+      // point-in-box distance, in the word's own frame
+      const A = axesOf(b);
+      const lu = clamp(dx*A.ux + dy*A.uy, -b.ehw, b.ehw);
+      const lp = clamp(dx*A.px + dy*A.py, -b.ehd, b.ehd);
+      const qx = b.x + A.ux*lu + A.px*lp, qy = b.y + A.uy*lu + A.py*lp;
+      if (Math.hypot(d.x - qx, d.y - qy) > K.DUCK_R) continue;
+      const s2 = Math.hypot(b.vx, b.vy) || 1;
+      sparks(d.x, d.y, d.z + K.DUCK_H * 0.5, b.vx / s2, b.vy / s2, 28, 300);
+      knockDuck(d, b.vx, b.vy);
+      b.vx *= 0.86; b.vy *= 0.86; b.spin += rnd(-2, 2);
+      break;
+    }
+  }
+}
+
+/* ------------------------------------------------------------
+   Arena support: what is under this point right now
+   ------------------------------------------------------------ */
+function supportAt(x, y){
+  let s = 0;
+  const jx = x - JOY.x, jy = y - JOY.y;
+  if (jx*jx + jy*jy < JOY.r * JOY.r) s = JOY.baseH;
+  for (const o of blocks){
+    if (x > o.x - o.ehw && x < o.x + o.ehw && y > o.y - o.ehd && y < o.y + o.ehd){
+      if (o.top > s) s = o.top;
+    }
+  }
+  return s;
+}
+
+/* ------------------------------------------------------------
+   The studio joystick, standing in the middle of the deck.
+   Three colliders stacked by height: the circuit base, the stick,
+   and the ball on top. It wobbles when something hits it.
+   ------------------------------------------------------------ */
+function joyBands(){
+  return [
+    { r: JOY.r,      lo: 0,             hi: JOY.baseH,               ball: 0 },
+    { r: JOY.shaftR, lo: JOY.baseH,     hi: JOY.shaftTop,            ball: 0 },
+    { r: JOY.ballR,  lo: JOY.shaftTop,  hi: JOY.shaftTop + JOY.ballR*1.8, ball: 1 }
+  ];
+}
+
+function joyTilt(fx, fy, k){
+  JOY.vx += fx * k;
+  JOY.vy += fy * k;
+}
+
+function updateJoy(dt){
+  // spring back to upright
+  JOY.vx += (-K.JOY_SPRING * JOY.tx - K.JOY_DAMP * JOY.vx) * dt;
+  JOY.vy += (-K.JOY_SPRING * JOY.ty - K.JOY_DAMP * JOY.vy) * dt;
+  JOY.tx += JOY.vx * dt;
+  JOY.ty += JOY.vy * dt;
+  const lean = Math.hypot(JOY.tx, JOY.ty);
+  if (lean > K.JOY_LEAN){
+    const q = K.JOY_LEAN / lean;
+    JOY.tx *= q; JOY.ty *= q; JOY.vx *= q; JOY.vy *= q;
+  }
+  if (JOY.flare > 0) JOY.flare = Math.max(0, JOY.flare - dt * 1.6);
+}
+
+// A word against a vertical cylinder. Gives a proper glancing normal,
+// so a clipped shot spins away instead of stopping dead.
+function joyCollide(b){
+  for (const band of joyBands()){
+    if (b.z >= band.hi || b.z + b.hgt <= band.lo) continue;
+    const cx = JOY.x + (band.ball ? JOY.tx : 0);
+    const cy = JOY.y + (band.ball ? JOY.ty : 0);
+    const dx = cx - b.x, dy = cy - b.y;
+    if (dx*dx + dy*dy > (b.rad + band.r) * (b.rad + band.r)) continue;
+
+    const A = axesOf(b);
+    const lu = clamp(dx*A.ux + dy*A.uy, -b.ehw, b.ehw);
+    const lp = clamp(dx*A.px + dy*A.py, -b.ehd, b.ehd);
+    const qx = b.x + A.ux*lu + A.px*lp, qy = b.y + A.uy*lu + A.py*lp;
+    let nx = qx - cx, ny = qy - cy;
+    let d = Math.hypot(nx, ny);
+    if (d < 0.0001){ nx = b.x - cx; ny = b.y - cy; d = Math.hypot(nx, ny) || 1; }
+    if (d > band.r) continue;
+    nx /= d; ny /= d;
+    const pen = band.r - d;
+
+    b.x += nx * pen; b.y += ny * pen;
+    const rax = qx - b.x, ray = qy - b.y;
+    const vpx = b.vx - b.spin*ray, vpy = b.vy + b.spin*rax;
+    const vn = vpx*nx + vpy*ny;
+    if (vn < 0){
+      const rn = rax*ny - ray*nx;
+      const j = -(1 + K.JOY_REST) * vn / (b.inv + rn*rn*b.invI);
+      b.vx += j*nx*b.inv; b.vy += j*ny*b.inv; b.spin += j*rn*b.invI;
+      tipKick(b, -nx, -ny, Math.abs(j));
+
+      const hit = Math.abs(j);
+      joyTilt(-nx * hit, -ny * hit, K.JOY_KICK);
+      if (hit > K.SPARK_MIN){
+        sparks(qx, qy, Math.max(b.z, band.lo) + 10, -nx, -ny,
+               9 + Math.min(34, hit * 0.055), 160 + hit * 0.26);
+      }
+      if (hit > 200){
+        shake = Math.min(14, shake + hit * 0.005);
+        burst(qx, qy, Math.max(b.z, band.lo) + 8, PAL.edge, band.ball ? 22 : 8, 120);
+        if (band.ball){
+          JOY.flare = 1;
+          score += K.BALL_SCORE;
+          pops.push({ x: JOY.x, y: JOY.y, z: JOY.shaftTop + 90,
+                      txt: '+' + K.BALL_SCORE, col: PAL.edgeCore, t: 1.05, life: 1.05 });
+          ring(JOY.x, JOY.y, JOY.baseH, JOY.r * 1.8, PAL.edgeCore, 0.7);
+        }
+      }
+    }
+    return;
+  }
+}
+
+/* ------------------------------------------------------------
+   Oriented box collision, by separating axis
+   ------------------------------------------------------------ */
+const _ax = { ux:1, uy:0, px:0, py:1 };
+const _bx = { ux:1, uy:0, px:0, py:1 };
+function axesInto(b, o){
+  const c = Math.cos(b.yaw), s = Math.sin(b.yaw);
+  o.ux = c; o.uy = s; o.px = -s; o.py = c;
+  return o;
+}
+function axesOf(b){ return axesInto(b, { ux:1, uy:0, px:0, py:1 }); }
+
+const _sat = { nx:0, ny:0, pen:0 };
+function sat(a, b, pad){
+  pad = pad || 0;
+  const A = axesInto(a, _ax), B = axesInto(b, _bx);
+  const dx = b.x - a.x, dy = b.y - a.y;
+  let best = Infinity, nx = 0, ny = 0;
+  for (let i = 0; i < 8; i += 2){
+    const ax = i === 0 ? A.ux : i === 2 ? A.px : i === 4 ? B.ux : B.px;
+    const ay = i === 0 ? A.uy : i === 2 ? A.py : i === 4 ? B.uy : B.py;
+    const ra = Math.abs(A.ux*ax + A.uy*ay) * a.ehw + Math.abs(A.px*ax + A.py*ay) * a.ehd;
+    const rb = Math.abs(B.ux*ax + B.uy*ay) * b.ehw + Math.abs(B.px*ax + B.py*ay) * b.ehd;
+    const d = dx*ax + dy*ay;
+    const o = ra + rb + pad - Math.abs(d);
+    if (o <= 0) return null;
+    if (o < best){ best = o; const g = d < 0 ? -1 : 1; nx = ax*g; ny = ay*g; }
+  }
+  _sat.nx = nx; _sat.ny = ny; _sat.pen = best;
+  return _sat;
+}
+
+const _sp = { x:0, y:0 };
+const _sq = { x:0, y:0 };
+function supportPoint(b, nx, ny, out){
+  const A = axesInto(b, _ax);
+  const su = (A.ux*nx + A.uy*ny) >= 0 ?  b.ehw : -b.ehw;
+  const sp = (A.px*nx + A.py*ny) >= 0 ?  b.ehd : -b.ehd;
+  out.x = b.x + A.ux*su + A.px*sp;
+  out.y = b.y + A.uy*su + A.py*sp;
+  return out;
+}
+
+// A side impulse tips a slab about its base edge.
+function tipKick(b, nx, ny, j){
+  if (b.statik) return;
+  const A = axesOf(b);
+  b.tipRate += 1.6 * j * b.inv * (nx*A.px + ny*A.py) / b.h * K.HIT_TIP;
+}
+
+function collide(a, b, s){
+  const nx = s.nx, ny = s.ny;
+  const imA = a.inv, imB = b.inv, imS = imA + imB;
+  if (imS <= 0) return 0;
+
+  const corr = s.pen * 0.78 / imS;
+  a.x -= nx*corr*imA; a.y -= ny*corr*imA;
+  b.x += nx*corr*imB; b.y += ny*corr*imB;
+
+  const pa = supportPoint(a, nx, ny, _sp), pb = supportPoint(b, -nx, -ny, _sq);
+  const cx = (pa.x + pb.x) * 0.5, cy = (pa.y + pb.y) * 0.5;
+  const rax = cx - a.x, ray = cy - a.y;
+  const rbx = cx - b.x, rby = cy - b.y;
+
+  const vax = a.vx - a.spin*ray, vay = a.vy + a.spin*rax;
+  const vbx = b.vx - b.spin*rby, vby = b.vy + b.spin*rbx;
+  const rvx = vbx - vax, rvy = vby - vay;
+  const vn = rvx*nx + rvy*ny;
+  if (vn > 0) return 0;
+
+  const rnA = rax*ny - ray*nx, rnB = rbx*ny - rby*nx;
+  const den = imS + rnA*rnA*a.invI + rnB*rnB*b.invI;
+  const j = -(1 + K.BODY_REST) * vn / den;
+
+  a.vx -= j*nx*imA; a.vy -= j*ny*imA; a.spin -= j*rnA*a.invI;
+  b.vx += j*nx*imB; b.vy += j*ny*imB; b.spin += j*rnB*b.invI;
+
+  const tx = -ny, ty = nx;
+  const vt = rvx*tx + rvy*ty;
+  const rtA = rax*ty - ray*tx, rtB = rbx*ty - rby*tx;
+  const dt2 = imS + rtA*rtA*a.invI + rtB*rtB*b.invI;
+  const lim = K.BODY_FRIC * Math.abs(j);
+  const jt = clamp(-vt / dt2, -lim, lim);
+  a.vx -= jt*tx*imA; a.vy -= jt*ty*imA; a.spin -= jt*rtA*a.invI;
+  b.vx += jt*tx*imB; b.vy += jt*ty*imB; b.spin += jt*rtB*b.invI;
+
+  const hit = Math.abs(j);
+  if (hit > 45){
+    tipKick(a, -nx, -ny, hit);
+    tipKick(b,  nx,  ny, hit);
+  }
+  if (hit > K.SPARK_MIN){
+    const z = Math.max(a.z, b.z) + Math.min(a.hgt, b.hgt) * 0.5;
+    sparks(cx, cy, z, nx, ny, 6 + Math.min(30, hit * 0.045), 110 + hit * 0.22);
+  }
+  if (hit > 260){
+    shake = Math.min(13, shake + hit * 0.004);
+    burst(cx, cy, Math.max(a.z, b.z) + 10,
+          WORDS[(a.statik ? b : a).wi].body, 6, 70 + hit * 0.08);
+  }
+  return hit;
+}
+
+/* ------------------------------------------------------------
+   Simulation
+   ------------------------------------------------------------ */
+function land(b, hard){
+  SFX.land(b.units ? Math.log2(b.units) / 8 : 0.2);
+  const A = axesOf(b);
+  b.vx *= K.LAND_BITE;
+  b.vy *= K.LAND_BITE;
+  const across = b.vx*A.px + b.vy*A.py;   // travelling face first turns into a topple
+  b.tipRate += (across / Math.max(1, b.h)) * K.LAND_TUMBLE + rnd(-0.6, 0.6);
+  ring(b.x, b.y, b.z, b.hw * 1.9, WORDS[b.wi].body, 0.4);
+  burst(b.x, b.y, b.z + 3, WORDS[b.wi].glow, hard ? 10 : 6, 70);
+  const sp = Math.hypot(b.vx, b.vy) + 1;
+  if (hard || sp > 130) sparks(b.x, b.y, b.z + 4, b.vx/sp, b.vy/sp, hard ? 24 : 12, 180);
+}
+
+function merge(a, b){
+  const units = Math.min(K.UNITS_MAX, a.units + b.units);
+  SFX.merge(units);
+  const mt = a.mass + b.mass;
+  const x  = (a.x*a.mass + b.x*b.mass) / mt;
+  const y  = (a.y*a.mass + b.y*b.mass) / mt;
+  const vx = (a.vx*a.mass + b.vx*b.mass) / mt;
+  const vy = (a.vy*a.mass + b.vy*b.mass) / mt;
+  const heavy = a.mass >= b.mass ? a : b;
+  a.dead = b.dead = true;
+
+  const nb = spawn(a.wi, units, x, y, Math.max(a.z, b.z), vx*0.45, vy*0.45, 110);
+  nb.yaw = heavy.yaw;
+  nb.spin = (a.spin + b.spin) * 0.4;
+  nb.tip = 0; nb.tipRate = 0;    // a merge stands the new word back up
+  shape(nb);
+  nb.landed = true;
+  nb.pop = 1;
+
+  const gain = Math.round(units * 14);
+  score += gain;
+  const W = WORDS[a.wi];
+  ring(x, y, nb.z, nb.hw * 3.2, W.body, 0.6);
+  burst(x, y, nb.z + nb.h*0.4, W.body, 22, 150 + nb.tier * 30);
+  sparks(x, y, nb.z + nb.h*0.5, 0, 0, 20 + (nb.tier*6|0), 220 + nb.tier * 40);
+  pops.push({ x, y, z: nb.z + nb.h * 1.15, txt: '+' + gain, col: W.core, t: 0.95, life: 0.95 });
+  shake = Math.min(16, shake + 3 + nb.tier * 1.7);
+}
+
+function physics(dt, record){
+  for (const b of bodies){
+    const sup = supportAt(b.x, b.y);
+    b.sup = sup;
+
+    b.vz -= K.GRAV * dt;
+    b.z  += b.vz * dt;
+
+    if (b.z <= sup){
+      const hard = b.vz < -520;
+      b.z = sup;
+      if (!b.landed){ b.landed = true; land(b, hard); }
+      if (b.vz < -70) b.vz = -b.vz * K.GROUND_REST;
+      else b.vz = 0;
+    }
+    const grounded = b.z <= sup + 0.5;
+
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+
+    // Toppling. Below the critical lean gravity stands it back up,
+    // beyond it gravity takes it all the way down.
+    const crit = Math.atan(b.hd / (b.h * 0.5));
+    if (grounded){
+      const a = b.tip;
+      b.tipRate += sgn(a) * K.TIP_G * (K.SIZE_BASE / b.size) * Math.sin(Math.abs(a) - crit) * dt;
+      b.tipRate /= (1 + K.TIP_DAMP * dt);
+
+      const A = axesOf(b);
+      const sw = b.h * 0.5 * Math.cos(b.tip) * b.tipRate * dt;   // the mass swings sideways
+      b.x += A.px * sw; b.y += A.py * sw;
+
+      const sp = Math.hypot(b.vx, b.vy);
+      if (sp < K.STOP_SPEED){ b.vx = 0; b.vy = 0; }
+      else {
+        const cut = Math.min(sp, K.GROUND_DECEL * dt) / sp;
+        b.vx -= b.vx * cut; b.vy -= b.vy * cut;
+      }
+      const as = Math.abs(b.spin);
+      b.spin = as < 0.05 ? 0 : b.spin - sgn(b.spin) * Math.min(as, K.SPIN_DECEL * dt);
+    }
+
+    b.tip += b.tipRate * dt;
+    if (Math.abs(b.tip) >= Math.PI/2){
+      b.tip = sgn(b.tip) * Math.PI/2;
+      b.tipRate *= -0.18;
+      if (Math.abs(b.tipRate) < 0.5) b.tipRate = 0;
+    }
+    if (grounded && Math.abs(b.tip) < 0.02 && Math.abs(b.tipRate) < 0.35){ b.tip = 0; b.tipRate = 0; }
+
+    const spd = Math.hypot(b.vx, b.vy);
+    if (spd > K.SPEED_MAX){ const q = K.SPEED_MAX / spd; b.vx *= q; b.vy *= q; }
+    b.spin = clamp(b.spin, -K.SPIN_MAX, K.SPIN_MAX);
+    b.yaw += b.spin * dt;
+    shape(b);
+
+    // the glowing border contains the arena
+    const lx = Math.max(20, FIELD.halfW - b.rad * 0.7);
+    if (b.x >  lx){ b.x =  lx; b.vx = -Math.abs(b.vx) * K.WALL_REST; b.spin *= 0.7; edgeHit(b); wallSpark(b, -1, 0); }
+    if (b.x < -lx){ b.x = -lx; b.vx =  Math.abs(b.vx) * K.WALL_REST; b.spin *= 0.7; edgeHit(b); wallSpark(b,  1, 0); }
+    const ly = Math.max(20, FIELD.depth - b.rad * 0.7);
+    if (b.y > ly){ b.y = ly; b.vy = -Math.abs(b.vy) * K.WALL_REST; b.spin *= 0.7; edgeHit(b); wallSpark(b, 0, -1); }
+    if (b.landed && b.y < b.rad * 0.7){ b.y = b.rad * 0.7; b.vy = Math.abs(b.vy) * K.WALL_REST; edgeHit(b); }
+  }
+
+  // words against the joystick
+  for (const b of bodies){
+    if (b.dead || b.dying) continue;
+    joyCollide(b);
+  }
+
+  // words against words
+  const n = bodies.length;
+  for (let i = 0; i < n; i++){
+    const a = bodies[i];
+    if (a.dead || a.dying) continue;
+    for (let j = i + 1; j < n; j++){
+      const b = bodies[j];
+      if (b.dead || b.dying) continue;
+      // A word high in the air is out of reach of the magnet. Without this a
+      // shot aimed at the back rail gets snatched by a blob on the way past.
+      const twin = a.wi === b.wi
+        && a.z - a.sup < K.MERGE_CEIL && b.z - b.sup < K.MERGE_CEIL
+        && clock - a.born > K.MERGE_ARM && clock - b.born > K.MERGE_ARM;
+      const lift = twin ? K.MERGE_LIFT : 0;
+      if (a.z >= b.z + b.hgt + lift || b.z >= a.z + a.hgt + lift) continue;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const far = (a.rad + b.rad) * (twin ? K.MERGE_RANGE : 1);
+      if (dx*dx + dy*dy > far*far) continue;
+
+      const d = Math.hypot(dx, dy) || 1;
+      if (twin){
+        const reach = (a.rad + b.rad) * K.MERGE_RANGE;
+        if (d < reach){
+          const g = d / reach;
+          const p = K.MERGE_PULL * dt * (1 - g);
+          a.vx += dx/d * p;  a.vy += dy/d * p;
+          b.vx -= dx/d * p;  b.vy -= dy/d * p;
+          if (record && 1 - g > 0.06) links.push({ a, b, k: 1 - g });
+        }
+        // close proximity is enough. They do not have to touch.
+        if (d < (a.rad + b.rad) * K.MERGE_SNAP){ merge(a, b); continue; }
+      }
+
+      const s = sat(a, b, twin ? K.MERGE_TOUCH : 0);
+      if (!s) continue;
+      if (twin) merge(a, b);
+      else collide(a, b, s);
+    }
+  }
+}
+
+/* ------------------------------------------------------------
+   The slingshot
+   ------------------------------------------------------------ */
+const SLING = { postX: 46, postH: 74, pouchZ: 58 };
+
+function aimDir(){
+  const c = Math.cos(K.LOFT);
+  return { x: Math.sin(aimYaw) * c, y: Math.cos(aimYaw) * c, z: Math.sin(K.LOFT) };
+}
+function pouchPos(){
+  const d = aimDir();
+  const back = power * K.PULL_WORLD;
+  return { x: -d.x * back, y: SLING_Y - d.y * back, z: SLING.pouchZ - power * 12 };
+}
+function launchPos(){
+  return { x: 0, y: SLING_Y, z: SLING.pouchZ };
+}
+
+function updatePull(){
+  if (pull.keys) return;                // keyboard drives aimYaw and power directly
+  if (!pull.on){ power = 0; return; }
+  const dx = pull.x - pull.ax, dy = pull.y - pull.ay;
+  if (Math.hypot(dx, dy) < 4){ power = 0; return; }
+  aimYaw = clamp(Math.atan2(-dx, dy), -K.YAW_LIMIT, K.YAW_LIMIT);
+  const maxPull = K.PULL_PX * Math.min(VW, VH);
+  power = clamp((dx * -Math.sin(aimYaw) + dy * Math.cos(aimYaw)) / maxPull, 0, 1);
+}
+
+function fire(){
+  if (finale || reload > 0 || power < K.PULL_DEAD) return;
+  const sp = lerp(K.LAUNCH_MIN, K.LAUNCH_MAX, power);
+  const d = aimDir(), m = launchPos();
+  const b = spawn(upcoming, 1, m.x, m.y, m.z, d.x*sp, d.y*sp, d.z*sp);
+  b.spin    = rnd(-1, 1) * K.SPIN_LAUNCH * (0.4 + power * 0.6);
+  b.tipRate = rnd(-1, 1) * K.TIP_LAUNCH  * (0.4 + power * 0.6);
+  burst(m.x, m.y, m.z, WORDS[upcoming].body, 10, 140);
+  shake = Math.min(11, shake + 2 + power * 4);
+  reload = K.RELOAD;
+  shotsFired++;
+  upcoming = shotsFired < 3 ? shotsFired : (Math.random() * 3) | 0;
+  cull();
+  if (shotsFired >= 2) hintAlpha = -1;
+}
+
+/* ------------------------------------------------------------
+   Trajectory preview, stopped by the arena
+   ------------------------------------------------------------ */
+function traj(){
+  const sp = lerp(K.LAUNCH_MIN, K.LAUNCH_MAX, Math.max(power, 0.0001));
+  const d = aimDir(), m = launchPos();
+  let x = m.x, y = m.y, z = m.z;
+  let vx = d.x*sp, vy = d.y*sp, vz = d.z*sp;
+  const dt = 1/56, pts = [];
+  for (let i = 0; i < 140; i++){
+    vz -= K.GRAV * dt;
+    x += vx*dt; y += vy*dt; z += vz*dt;
+    let stop = z <= supportAt(x, y);
+    if (!stop){
+      const jx = x - JOY.x, jy = y - JOY.y, jd = Math.hypot(jx, jy);
+      if (z < JOY.baseH && jd < JOY.r) stop = true;
+      else if (z > JOY.baseH && z < JOY.shaftTop && jd < JOY.shaftR) stop = true;
+      else if (z >= JOY.shaftTop && z < JOY.shaftTop + JOY.ballR*1.8 && jd < JOY.ballR) stop = true;
+    }
+    if (stop){ z = Math.max(z, supportAt(x, y)); pts.push({x, y, z}); break; }
+    pts.push({x, y, z});
+  }
+  return pts;
+}
+
+/* ------------------------------------------------------------
+   Drawing
+   ------------------------------------------------------------ */
+function groundEllipse(x, y, z, r){
+  const p0 = proj(x, y, z), p1 = proj(x + r, y, z), p2 = proj(x, y + r, z);
+  return { x:p0.x, y:p0.y, rx:Math.abs(p1.x - p0.x), ry:Math.max(1, Math.abs(p2.y - p0.y)) };
+}
+
+function drawBackdrop(){
+  ctx.fillStyle = GRAD.sky;
+  ctx.fillRect(-40, -40, VW + 80, VH + 80);
+  drawNebula();
+  ctx.fillStyle = GRAD.horizon;
+  ctx.fillRect(-40, HORIZON - VH*0.16, VW + 80, VH*0.26);
+}
+
+function drawGrid(){
+  const gx = FIELD.halfW * 2.4, step = FIELD.halfW / 4;
+  const y0 = -CAM.dist * 0.62, d = FIELD.depth;
+  // three depth bands, each fainter, so the lattice thins into the distance
+  // without anything being painted over the sky
+  const bands = [[y0, d * 0.55, 0.20], [d * 0.55, d * 1.15, 0.115], [d * 1.15, d * 1.85, 0.05]];
+  ctx.lineWidth = 1;
+  for (const bnd of bands){
+    const ya = bnd[0], yb = bnd[1];
+    ctx.strokeStyle = 'rgba(26,134,196,' + bnd[2] + ')';
+    ctx.beginPath();
+    for (let x = -gx; x <= gx + 1; x += step){
+      const a = proj(x, ya, 0), b = proj(x, yb, 0);
+      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+    }
+    for (let y = Math.ceil(ya / step) * step; y <= yb; y += step){
+      const a = proj(-gx, y, 0), b = proj(gx, y, 0);
+      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+    }
+    ctx.stroke();
+  }
+}
+
+// The deck outline, rounded like the studio logo.
+function deckOutline(){
+  const hw = FIELD.halfW, d = FIELD.depth, r = Math.min(hw, d) * 0.13;
+  const pts = [];
+  const arc = (cx, cy, a0, a1) => {
+    for (let i = 0; i <= 7; i++){
+      const a = a0 + (a1 - a0) * i / 7;
+      pts.push(proj(cx + Math.cos(a)*r, cy + Math.sin(a)*r, 0));
+    }
+  };
+  arc(-hw + r,     r, Math.PI,       Math.PI*1.5);
+  arc( hw - r,     r, Math.PI*1.5,   Math.PI*2);
+  arc( hw - r, d - r, 0,             Math.PI*0.5);
+  arc(-hw + r, d - r, Math.PI*0.5,   Math.PI);
+  return pts;
+}
+
+// Flat sprite lying on the deck, laid out by its own axes.
+function blitFlat(spr, x, y, z, worldW, yaw, alpha){
+  const ux = Math.cos(yaw), uy = Math.sin(yaw);
+  const vx = -Math.sin(yaw), vy = Math.cos(yaw);
+  const Wo = worldW * 0.5, Ho = Wo * spr.ch / spr.cw;
+  const C = proj(x, y, z);
+  if (C.d < 40) return;
+  const Pu = proj(x + ux*Wo, y + uy*Wo, z);
+  const Pv = proj(x + vx*Ho, y + vy*Ho, z);
+  const hx = spr.cw * 0.5, hy = spr.ch * 0.5;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(C.x, C.y);
+  ctx.transform((Pu.x-C.x)/hx, (Pu.y-C.y)/hx, -(Pv.x-C.x)/hy, -(Pv.y-C.y)/hy, 0, 0);
+  ctx.drawImage(spr.canvas, -hx, -hy, spr.cw, spr.ch);
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+
+/* ------------------------------------------------------------------
+   The wordmark. Not type: the letter outlines with their overlapping
+   pieces already merged, so a stroke traces the silhouette and nothing
+   else. Identical on every device, and it needs no font at all.
+   ------------------------------------------------------------------ */
+const WM = { d: 'M122 512H0Q0 572 32 617Q64 662 120 686.5Q176 711 246 711Q320 711 374.5 682.5Q429 654 457.5 607Q486 560 486 507Q486 441 455.5 401.5Q425 362 381.5 343Q338 324 269 305Q217 291 187 279Q157 267 137.5 246.5Q118 226 118 194Q118 147 149 122Q180 97 229 97Q283 97 316 124Q349 151 352 189H478Q471 101 406.5 50.5Q342 0 241 0Q170 0 116 24Q62 48 32 93Q2 138 2 198Q2 263 32 302Q62 341 104.5 359.5Q147 378 215 396Q269 410 299.5 422Q330 434 350.5 456Q371 478 371 513Q371 558 338 586.5Q305 615 246 615Q189 615 157.5 586Q126 557 122 512ZM1178 704H1292V8H1178V526L835 8H721V704H835V185L1178 704ZM1670 562H1961L2011 704H2131L1882 8H1750L1501 704H1620L1670 562ZM1816 146 1929 469H1702L1816 146ZM2453 422H2579Q2665 422 2720 392.5Q2775 363 2800 316Q2825 269 2825 216Q2825 158 2797.5 111Q2770 64 2714.5 36.5Q2659 9 2579 9H2339V704H2453V422ZM2579 102Q2708 102 2708 216Q2708 270 2676 299.5Q2644 329 2579 329H2453V102H2579ZM3589 704V9H3475V307H3148V9H3034V704H3148V400H3475V704H3589ZM3839 9V704H3953V9ZM4652 102V9H4167V102H4353V704H4467V102H4652Z', w: 4652, h: 711, ratio: 4652 / 711 };
+let wmPath;
+function wordmarkPath(){
+  if (wmPath === undefined){
+    try { wmPath = new Path2D(WM.d); } catch (e){ wmPath = null; }
+  }
+  return wmPath;
+}
+
+/* Stroke it at a given height, centred on cx. lw and blur are screen pixels. */
+function strokeWordmark(cx, cy, h, lw, colour, alpha, blur){
+  const path = wordmarkPath();
+  if (!path) return false;
+  const k = h / WM.h;
+  ctx.save();
+  ctx.translate(cx - WM.w * k / 2, cy - h / 2);
+  ctx.scale(k, k);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.lineWidth = lw / k;
+  ctx.strokeStyle = colour;
+  ctx.globalAlpha = alpha;
+  if (blur){ ctx.shadowColor = colour; ctx.shadowBlur = blur; }
+  ctx.stroke(path);
+  ctx.shadowBlur = 0;
+  ctx.restore();
+  ctx.globalAlpha = 1;
+  return true;
+}
+
+// SNAPHIT STUDIOS, painted into the deck.
+let markSpr = null;
+function wordmark(){
+  if (markSpr) return markSpr;
+  const W = 900, H = 250;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.textAlign = 'center'; g.lineJoin = 'round';
+
+  // The wordmark is 6.55 wide for every 1 tall. Set the height off the width
+  // available, or it runs off the ends of its own canvas.
+  const wp = wordmarkPath();
+  if (wp){
+    const h = (W * 0.70) / WM.ratio, k = h / WM.h;
+    g.save();
+    g.translate(W/2 - WM.w * k / 2, 52);
+    g.scale(k, k);
+    g.lineJoin = 'round'; g.lineCap = 'round'; g.lineWidth = (h * 0.055) / k;
+    g.shadowColor = '#e0640c';
+    g.globalAlpha = 0.34; g.shadowBlur = 22; g.strokeStyle = '#ff9424'; g.stroke(wp);
+    g.globalAlpha = 0.85; g.shadowBlur = 6;  g.stroke(wp);
+    g.globalAlpha = 1;    g.shadowBlur = 0;  g.strokeStyle = '#ffe0b4'; g.stroke(wp);
+    g.restore();
+  }
+  g.globalAlpha = 1;
+  if ('letterSpacing' in g) g.letterSpacing = '0px';
+  g.font = '700 44px system-ui,"Segoe UI",Roboto,sans-serif';
+  const sub = 'S T U D I O S';
+  g.shadowColor = '#e0640c'; g.shadowBlur = 14;
+  g.fillStyle = '#ffe6c4'; g.fillText(sub, W/2, 205);
+  g.shadowBlur = 0; g.fillText(sub, W/2, 205);
+
+  markSpr = { canvas:c, cw:W, ch:H };
+  return markSpr;
+}
+
+function drawField(){
+  const hw = FIELD.halfW, d = FIELD.depth;
+  const c = deckOutline();
+  const path = () => {
+    ctx.beginPath();
+    ctx.moveTo(c[0].x, c[0].y);
+    for (let i = 1; i < c.length; i++) ctx.lineTo(c[i].x, c[i].y);
+    ctx.closePath();
+  };
+
+  path();
+  ctx.fillStyle = GRAD.deck;
+  ctx.fill();
+
+  ctx.save();
+  ctx.clip();
+  ctx.strokeStyle = 'rgba(55,208,245,0.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  const sx = hw / 4, sy = d / 8;
+  for (let x = -hw + sx; x < hw; x += sx){
+    const a = proj(x, 0, 0), b = proj(x, d, 0);
+    ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+  }
+  for (let y = sy; y < d; y += sy){
+    const a = proj(-hw, y, 0), b = proj(hw, y, 0);
+    ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+  }
+  ctx.stroke();
+
+  // darker inset panels, the way the logo's deck is plated
+  ctx.fillStyle = 'rgba(4,14,26,0.55)';
+  for (const q of [[-0.74, 0.10, 0.22, 0.10], [0.74, 0.10, 0.22, 0.10],
+                   [-0.80, 0.72, 0.17, 0.16], [0.80, 0.72, 0.17, 0.16],
+                   [0.00, 0.955, 0.52, 0.035]]){
+    const x0 = (q[0]-q[2])*hw, x1 = (q[0]+q[2])*hw;
+    const y0 = (q[1]-q[3])*d,  y1 = (q[1]+q[3])*d;
+    const a = proj(x0,y0,0), b2 = proj(x1,y0,0), c2 = proj(x1,y1,0), d2 = proj(x0,y1,0);
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b2.x,b2.y);
+    ctx.lineTo(c2.x,c2.y); ctx.lineTo(d2.x,d2.y); ctx.closePath(); ctx.fill();
+  }
+
+  const glow = victoryT > 0 ? 1 : 0.62 + 0.07 * Math.sin(clock * 1.5);
+  blitFlat(wordmark(), hw * 0.44, d * 0.135, 0.4, hw * 0.80, 0, glow);
+  ctx.restore();
+
+  path();
+  ctx.shadowColor = PAL.edge;
+  ctx.shadowBlur = 26 + (victoryT > 0 ? 26 * Math.abs(Math.sin(clock*7)) : 0);
+  ctx.strokeStyle = PAL.edge; ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.shadowBlur = 12;
+  ctx.strokeStyle = PAL.edgeCore; ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+}
+
+function drawEdgeFlash(){
+  if (edgeFlash.t <= 0) return;
+  const e = groundEllipse(edgeFlash.x, edgeFlash.y, 0, 120);
+  ctx.globalAlpha = edgeFlash.t / 0.3 * 0.5;
+  ctx.fillStyle = PAL.edgeCore;
+  ctx.beginPath();
+  ctx.ellipse(e.x, e.y, e.rx, e.ry, 0, 0, 6.284);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function drawBlock(o){
+  const x0 = o.x - o.ehw, x1 = o.x + o.ehw;
+  const y0 = o.y - o.ehd, y1 = o.y + o.ehd;
+  const t = o.top;
+  const quad = (p, fill, stroke) => {
+    ctx.beginPath();
+    ctx.moveTo(p[0].x, p[0].y);
+    for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y);
+    ctx.closePath();
+    ctx.fillStyle = fill; ctx.fill();
+    if (stroke){ ctx.strokeStyle = stroke; ctx.lineWidth = 1.1; ctx.stroke(); }
+  };
+
+  if (x1 < 0){
+    quad([proj(x1,y0,0), proj(x1,y1,0), proj(x1,y1,t), proj(x1,y0,t)],
+         PAL.blockLo, 'rgba(55,208,245,0.20)');
+  } else if (x0 > 0){
+    quad([proj(x0,y0,0), proj(x0,y1,0), proj(x0,y1,t), proj(x0,y0,t)],
+         PAL.blockLo, 'rgba(55,208,245,0.20)');
+  }
+  quad([proj(x0,y0,0), proj(x1,y0,0), proj(x1,y0,t), proj(x0,y0,t)],
+       PAL.blockHi, 'rgba(55,208,245,0.28)');
+
+  const tp = [proj(x0,y0,t), proj(x1,y0,t), proj(x1,y1,t), proj(x0,y1,t)];
+  quad(tp, PAL.blockTop, null);
+  ctx.beginPath();
+  ctx.moveTo(tp[0].x, tp[0].y);
+  for (let i = 1; i < 4; i++) ctx.lineTo(tp[i].x, tp[i].y);
+  ctx.closePath();
+  ctx.strokeStyle = 'rgba(255,168,72,0.95)'; ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,226,180,0.55)'; ctx.lineWidth = 0.9;
+  ctx.stroke();
+}
+
+// Affine frame for a slab. u runs along the text, v is its up, w is the
+// thickness axis. wOff slides the drawn slice through the slab.
+function blit(b, mirror, wOff){
+  const cy_ = Math.cos(b.yaw), sy_ = Math.sin(b.yaw);
+  const cf  = Math.cos(b.tip),  sf = Math.sin(b.tip);
+  const ux = cy_, uy = sy_;
+  let vx = -sf * sy_, vy = sf * cy_, vz = cf;
+  let wx =  sy_ * cf, wy = -cy_ * cf, wz = sf;
+
+  let cz = b.z + b.hgt * 0.5;
+  if (mirror){ cz = 2 * b.sup - cz; vz = -vz; wz = -wz; }
+  const px_ = b.x + wx * wOff, py_ = b.y + wy * wOff, pz_ = cz + wz * wOff;
+
+  const grow = 1 + b.pop * 0.45;
+  const Wo = b.sp.cw * 0.5 * b.wpp * grow;
+  const Ho = b.sp.ch * 0.5 * b.wpp * grow;
+
+  const C = proj(px_, py_, pz_);
+  if (C.d < 40) return null;
+  const Pu = proj(px_ + ux*Wo, py_ + uy*Wo, pz_);
+  const Pv = proj(px_ + vx*Ho, py_ + vy*Ho, pz_ + vz*Ho);
+
+  const hx = b.sp.cw * 0.5, hy = b.sp.ch * 0.5;
+  return {
+    C, s: C.s,
+    ax:  (Pu.x - C.x) / hx, ay:  (Pu.y - C.y) / hx,
+    bx: -(Pv.x - C.x) / hy, by: -(Pv.y - C.y) / hy
+  };
+}
+
+// Which face of the slab is turned toward the camera.
+function frontSign(b){
+  const cf = Math.cos(b.tip);
+  const wx = Math.sin(b.yaw) * cf, wy = -Math.cos(b.yaw) * cf, wz = Math.sin(b.tip);
+  const tx = -b.x, ty = -CAM.dist - b.y, tz = CAM.height - (b.z + b.hgt * 0.5);
+  return (wx*tx + wy*ty + wz*tz) >= 0 ? 1 : -1;
+}
+
+function paste(b, m, img, alpha, w, h){
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(m.C.x, m.C.y);
+  ctx.transform(m.ax, m.ay, m.bx, m.by, 0, 0);
+  ctx.drawImage(img, -w/2, -h/2, w, h);
+  ctx.restore();
+}
+
+function layerArea(m, sp){
+  return Math.abs(m.ax * m.by - m.ay * m.bx) * sp.scw * sp.sch;
+}
+
+function drawWord(b, alpha, mirror){
+  if (mirror){
+    const m = blit(b, true, 0);
+    if (m && layerArea(m, b.sp) < K.REFLECT_MAX)
+      paste(b, m, b.sp.canvas, alpha, b.sp.cw, b.sp.ch);
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  const f = frontSign(b);
+  const back  = blit(b, false, -f * b.hd);
+  const front = blit(b, false,  f * b.hd);
+  if (!back || !front) return;
+  const probe = front;
+
+  // Layers are only needed across the gap the two faces actually leave on
+  // screen. Face on, that gap is nearly nothing and two layers will do.
+  const sep = Math.hypot(front.C.x - back.C.x, front.C.y - back.C.y);
+  let n = clamp(Math.round(sep / K.EXTRUDE), 2, quality ? 7 : 3);
+  const area = layerArea(probe, b.sp);
+  n = Math.max(2, Math.min(n, Math.floor(K.FILL_BUDGET / Math.max(1, area))));
+
+  for (let i = 0; i < n; i++){
+    const t = -f * b.hd + (2 * b.hd * f) * (i / n);
+    const m = blit(b, false, t);
+    if (m) paste(b, m, b.sp.solid, alpha, b.sp.scw, b.sp.sch);
+  }
+  const m = front;
+  paste(b, m, b.sp.canvas, alpha, b.sp.cw, b.sp.ch);
+  if (b.pop > 0.01){
+    ctx.globalCompositeOperation = 'lighter';
+    paste(b, m, b.sp.canvas, b.pop * 0.8, b.sp.cw, b.sp.ch);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  ctx.globalAlpha = 1;
+}
+
+// The circuit base is static in screen space, so it is rendered once
+// and blitted. Only the stick and the ball move.
+function buildJoyBase(){
+  const B = proj(JOY.x, JOY.y, 0);
+  const Bx = Math.abs(proj(JOY.x + JOY.r, JOY.y, 0).x - B.x);
+  const By = Math.abs(proj(JOY.x, JOY.y + JOY.r, 0).y - B.y);
+  const T = proj(JOY.x, JOY.y, JOY.baseH);
+  const Tx = Math.abs(proj(JOY.x + JOY.r, JOY.y, JOY.baseH).x - T.x);
+  const Ty = Math.abs(proj(JOY.x, JOY.y + JOY.r, JOY.baseH).y - T.y);
+
+  const pad = 26;
+  const minX = Math.min(B.x - Bx, T.x - Tx) - pad, maxX = Math.max(B.x + Bx, T.x + Tx) + pad;
+  const minY = Math.min(T.y - Ty, B.y - By) - pad, maxY = Math.max(B.y + By, T.y + Ty) + pad;
+  const w = Math.ceil(maxX - minX), h = Math.ceil(maxY - minY);
+  if (w < 8 || h < 8 || w > 4000 || h > 4000){ JOY.base = null; return; }
+
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const bx = B.x - minX, by = B.y - minY, tx = T.x - minX, ty = T.y - minY;
+
+  // the side wall of the puck
+  g.beginPath();
+  g.ellipse(bx, by, Bx, By, 0, 0, Math.PI);
+  g.lineTo(tx - Tx, ty);
+  g.ellipse(tx, ty, Tx, Ty, 0, Math.PI, 0, true);
+  g.closePath();
+  const side = g.createLinearGradient(bx - Bx, 0, bx + Bx, 0);
+  side.addColorStop(0.00, '#050d18');
+  side.addColorStop(0.30, '#16324c');
+  side.addColorStop(0.55, '#20486b');
+  side.addColorStop(1.00, '#061020');
+  g.fillStyle = side; g.fill();
+  g.strokeStyle = 'rgba(255,148,36,0.85)'; g.lineWidth = 1.6; g.stroke();
+
+  // orange trace lines wrapping the wall
+  g.save(); g.clip();
+  g.strokeStyle = 'rgba(255,168,72,0.55)'; g.lineWidth = 1.2;
+  for (const f of [0.28, 0.52, 0.76]){
+    g.beginPath();
+    g.ellipse(bx, by - (by - ty) * f, Bx + (Tx - Bx) * f, By + (Ty - By) * f, 0, 0, Math.PI);
+    g.stroke();
+  }
+  g.fillStyle = 'rgba(55,208,245,0.35)';
+  for (let i = 0; i < 22; i++){
+    const a = Math.PI * (0.06 + 0.88 * (i / 21));
+    const px = tx + Math.cos(a) * Tx * 0.93, py = ty + Math.sin(a) * Ty * 0.93 + (by - ty) * 0.42;
+    g.fillRect(px - 2, py - 4, 4, 9);
+  }
+  g.restore();
+
+  // the lit top face
+  g.beginPath(); g.ellipse(tx, ty, Tx, Ty, 0, 0, 6.284);
+  const top = g.createRadialGradient(tx, ty - Ty*0.3, Tx*0.1, tx, ty, Tx);
+  top.addColorStop(0, '#24557d'); top.addColorStop(0.7, '#132f4a'); top.addColorStop(1, '#0a1d31');
+  g.fillStyle = top; g.fill();
+
+  g.strokeStyle = 'rgba(55,208,245,0.30)'; g.lineWidth = 1;
+  for (const f of [0.86, 0.66, 0.44]){
+    g.beginPath(); g.ellipse(tx, ty, Tx*f, Ty*f, 0, 0, 6.284); g.stroke();
+  }
+  g.strokeStyle = 'rgba(255,148,36,0.9)'; g.lineWidth = 2;
+  g.beginPath(); g.ellipse(tx, ty, Tx*0.55, Ty*0.55, 0, 0, 6.284); g.stroke();
+  g.beginPath(); g.ellipse(tx, ty, Tx*0.30, Ty*0.30, 0, 0, 6.284); g.stroke();
+
+  // scattered circuitry on the face
+  for (let i = 0; i < 40; i++){
+    const a = rnd(0, 6.284), rr = Math.sqrt(rnd(0.36, 0.92));
+    const px = tx + Math.cos(a) * Tx * rr, py = ty + Math.sin(a) * Ty * rr;
+    g.fillStyle = i % 3 ? 'rgba(55,208,245,0.5)' : 'rgba(255,168,72,0.6)';
+    g.fillRect(px, py, 3.2, 2.2);
+  }
+
+  // hub
+  g.beginPath(); g.ellipse(tx, ty, Tx*0.17, Ty*0.17, 0, 0, 6.284);
+  g.fillStyle = '#08151f'; g.fill();
+  g.strokeStyle = 'rgba(255,168,72,0.95)'; g.lineWidth = 1.6; g.stroke();
+
+  // the bright rim
+  g.beginPath(); g.ellipse(tx, ty, Tx, Ty, 0, 0, 6.284);
+  g.shadowColor = PAL.edge; g.shadowBlur = 22;
+  g.strokeStyle = PAL.edge; g.lineWidth = 2.6; g.stroke();
+  g.shadowBlur = 0;
+  g.strokeStyle = PAL.edgeCore; g.lineWidth = 1; g.stroke();
+
+  JOY.base = { canvas:c, x:minX, y:minY, hubX:T.x, hubY:T.y };
+}
+
+let ballSpr = null;
+function joyBall(){
+  if (ballSpr) return ballSpr;
+  const R = 128, S = R*2 + 40;
+  const c = document.createElement('canvas');
+  c.width = S; c.height = S;
+  const g = c.getContext('2d');
+  const cx = S/2, cy = S/2;
+
+  g.save();
+  g.beginPath(); g.arc(cx, cy, R, 0, 6.284); g.clip();
+  const gr = g.createRadialGradient(cx - R*0.35, cy - R*0.42, R*0.08, cx, cy, R*1.12);
+  gr.addColorStop(0, '#2b6a92'); gr.addColorStop(0.45, '#0e2338'); gr.addColorStop(1, '#04101c');
+  g.fillStyle = gr; g.fillRect(0, 0, S, S);
+
+  // hex facets, brighter toward the lit side
+  const hr = R * 0.17;
+  for (let row = -5; row <= 5; row++){
+    for (let col = -5; col <= 5; col++){
+      const hx = cx + col * hr * 1.72 + (row % 2 ? hr * 0.86 : 0);
+      const hy = cy + row * hr * 1.5;
+      const dd = Math.hypot(hx - cx, hy - cy) / R;
+      if (dd > 1.02) continue;
+      g.beginPath();
+      for (let i = 0; i < 6; i++){
+        const a = i * Math.PI/3 + Math.PI/6;
+        const px = hx + Math.cos(a)*hr*0.92, py = hy + Math.sin(a)*hr*0.92;
+        i ? g.lineTo(px, py) : g.moveTo(px, py);
+      }
+      g.closePath();
+      const lit = clamp(1 - Math.hypot(hx - (cx - R*0.3), hy - (cy - R*0.35)) / (R*1.5), 0, 1);
+      g.fillStyle = 'rgba(255,150,40,' + (0.06 + lit * 0.42 * (1 - dd*0.7)) + ')';
+      g.fill();
+      g.strokeStyle = 'rgba(90,190,230,0.22)'; g.lineWidth = 1; g.stroke();
+    }
+  }
+  g.restore();
+
+  g.beginPath(); g.arc(cx, cy, R, 0, 6.284);
+  g.shadowColor = '#ff9424'; g.shadowBlur = 26;
+  g.strokeStyle = 'rgba(255,148,36,0.9)'; g.lineWidth = 3; g.stroke();
+  g.shadowBlur = 0;
+
+  const sp = g.createRadialGradient(cx - R*0.38, cy - R*0.46, 1, cx - R*0.38, cy - R*0.46, R*0.42);
+  sp.addColorStop(0, 'rgba(220,245,255,0.85)'); sp.addColorStop(1, 'rgba(220,245,255,0)');
+  g.fillStyle = sp;
+  g.beginPath(); g.arc(cx, cy, R, 0, 6.284); g.fill();
+
+  ballSpr = { canvas:c, cw:S, ch:S, r:R };
+  return ballSpr;
+}
+
+function drawJoy(){
+  if (!JOY.base) buildJoyBase();
+  if (JOY.base) ctx.drawImage(JOY.base.canvas, JOY.base.x, JOY.base.y);
+
+  const hub = proj(JOY.x, JOY.y, JOY.baseH);
+  const topZ = JOY.shaftTop;
+  const T = proj(JOY.x + JOY.tx, JOY.y + JOY.ty, topZ);
+
+  // The stick bends: the foot stays planted in the base, the top swings.
+  const M = proj(JOY.x + JOY.tx * 0.22, JOY.y + JOY.ty * 0.22, JOY.baseH + (topZ - JOY.baseH) * 0.55);
+  const stick = () => {
+    ctx.beginPath();
+    ctx.moveTo(hub.x, hub.y);
+    ctx.quadraticCurveTo(M.x, M.y, T.x, T.y);
+    ctx.stroke();
+  };
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#0a1728'; ctx.lineWidth = 15 * hub.s; stick();
+  const sg = ctx.createLinearGradient(T.x - 9, 0, T.x + 9, 0);
+  sg.addColorStop(0, '#20456a'); sg.addColorStop(0.5, '#7fb0d8'); sg.addColorStop(1, '#16304c');
+  ctx.strokeStyle = sg; ctx.lineWidth = 9 * hub.s; stick();
+  ctx.strokeStyle = 'rgba(255,148,36,0.75)'; ctx.lineWidth = 2.4 * hub.s; stick();
+  ctx.lineCap = 'butt';
+
+  // the ball
+  const sp = joyBall();
+  const B = proj(JOY.x + JOY.tx, JOY.y + JOY.ty, topZ + JOY.ballR * 0.55);
+  const sc = (JOY.ballR / sp.r) * B.s * (1 + JOY.flare * 0.14);
+  const w = sp.cw * sc;
+  if (JOY.flare > 0){
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = JOY.flare * 0.7;
+    ctx.drawImage(sp.canvas, B.x - w/2, B.y - w/2, w, w);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+  }
+  ctx.drawImage(sp.canvas, B.x - w/2, B.y - w/2, w, w);
+}
+
+function drawRails(){
+  ctx.globalCompositeOperation = 'lighter';
+  for (const r of RAILS){
+    const y = r.fy * FIELD.depth, hw = FIELD.halfW;
+    const a = proj(-hw, y, r.z), b = proj(hw, y, r.z);
+    ctx.globalAlpha = 0.30;
+    ctx.strokeStyle = PAL.gridHot; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.globalAlpha = 0.5;
+    for (const e of [[-hw, a], [hw, b]]){
+      const foot = proj(e[0], y, 0);
+      ctx.strokeStyle = PAL.edge; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(e[1].x, e[1].y); ctx.lineTo(foot.x, foot.y); ctx.stroke();
+    }
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+}
+
+function drawDuck(d){
+  const sp = duckSprite();
+  const p = proj(d.x, d.y, d.z + K.DUCK_H * 0.5);
+  if (p.d < 40) return;
+  const sc = (K.DUCK_H / (sp.ch * 0.58)) * p.s;
+  const w = sp.cw * sc, h = sp.ch * sc;
+
+  if (d.alive){
+    const e = groundEllipse(d.x, d.y, 0, K.DUCK_R * 0.9);   // shadow on the floor
+    ctx.globalAlpha = 0.26;
+    ctx.fillStyle = '#000814';
+    ctx.beginPath(); ctx.ellipse(e.x, e.y, e.rx, Math.max(2, e.ry*1.5), 0, 0, 6.284); ctx.fill();
+  }
+
+  ctx.save();
+  ctx.globalAlpha = d.alive ? 1 : Math.max(0, d.fade);
+  ctx.translate(p.x, p.y);
+  if (d.rot) ctx.rotate(d.rot);
+  if (d.dir < 0) ctx.scale(-1, 1);
+  ctx.drawImage(sp.canvas, -w/2, -h/2, w, h);
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+function drawShadow(b){
+  const air = b.z - b.sup;
+  const lift = clamp(1 - air / 300, 0.22, 1);
+  const e = groundEllipse(b.x, b.y, b.sup, b.ehw * 0.95 + air * 0.25);
+  ctx.globalAlpha = 0.36 * lift * (b.dying ? b.dying / 0.9 : 1);
+  ctx.fillStyle = '#000814';
+  ctx.beginPath();
+  ctx.ellipse(e.x, e.y, e.rx, Math.max(2, e.ry * 1.5), 0, 0, 6.284);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function drawRings(){
+  ctx.globalCompositeOperation = 'lighter';
+  for (const r of rings){
+    const k = 1 - r.t / r.life;
+    const e = groundEllipse(r.x, r.y, r.z, r.max * k);
+    ctx.globalAlpha = (1 - k) * 0.55;
+    ctx.strokeStyle = r.col; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(e.x, e.y, e.rx, Math.max(1, e.ry * 1.5), 0, 0, 6.284);
+    ctx.stroke();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+}
+
+function drawLinks(){
+  if (!links.length) return;
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineCap = 'round';
+  for (const l of links){
+    const pa = proj(l.a.x, l.a.y, l.a.z + l.a.hgt * 0.5);
+    const pb = proj(l.b.x, l.b.y, l.b.z + l.b.hgt * 0.5);
+    const W = WORDS[l.a.wi];
+    ctx.globalAlpha = 0.10 + l.k * 0.55;
+    ctx.strokeStyle = W.body; ctx.lineWidth = 1 + l.k * 4;
+    ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+    ctx.globalAlpha = 0.25 + l.k * 0.6;
+    ctx.strokeStyle = W.core; ctx.lineWidth = 0.8 + l.k * 1.4;
+    ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+  }
+  ctx.lineCap = 'butt';
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+}
+
+function drawParticles(){
+  ctx.globalCompositeOperation = 'lighter';
+  let lf = null, la = -1;
+  const fill = c => { if (c !== lf){ ctx.fillStyle = c; lf = c; } };
+  const alpha = a => { const q = (a * 32 | 0) / 32; if (q !== la){ ctx.globalAlpha = q; la = q; } };
+  for (const p of particles){
+    const q = proj(p.x, p.y, p.z);
+    const u = clamp(p.t / p.life, 0, 1);
+    const k = p.k || 0;
+
+    if (k === 1){                                   // spark: hot, tiny, cooling
+      alpha(u);
+      fill(SPARK_RAMP[Math.min(6, ((1 - u) * 7) | 0)]);
+      const r = Math.max(0.8, p.r * q.s);
+      ctx.fillRect(q.x - r, q.y - r * 0.7, r * 2, r * 1.4);
+      continue;
+    }
+    if (k === 2){                                   // fire: swelling, cooling
+      alpha(u * u * 0.7);
+      fill(FIRE_RAMP[Math.min(6, ((1 - u) * 7) | 0)]);
+      ctx.beginPath();
+      ctx.arc(q.x, q.y, Math.max(1, p.r * (0.5 + (1 - u) * 2.1) * q.s), 0, 6.284);
+      ctx.fill();
+      continue;
+    }
+    if (k === 4){                                   // confetti flake
+      ctx.globalAlpha = Math.min(1, u * 3);
+      ctx.fillStyle = p.col;
+      const w = Math.max(1, p.r * q.s * 1.6);
+      const h = Math.max(0.6, w * p.ar * Math.abs(Math.cos(p.flip)) + 0.5);
+      ctx.fillRect(q.x - w * 0.5, q.y - h * 0.5, w, h);
+      continue;
+    }
+    if (k === 3){                                   // firework star, twinkling
+      alpha(u * (0.65 + 0.35 * Math.sin(clock * 47 + p.r * 9)));
+      fill(p.col);
+      ctx.beginPath();
+      ctx.arc(q.x, q.y, Math.max(0.8, p.r * q.s), 0, 6.284);
+      ctx.fill();
+      continue;
+    }
+    alpha(u * 0.9);
+    fill(p.col);
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, Math.max(0.7, p.r * q.s), 0, 6.284);
+    ctx.fill();
+  }
+
+  for (const s of shells){                          // the rising shell itself
+    const q = proj(s.x, s.y, s.z);
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = s.col;
+    ctx.beginPath(); ctx.arc(q.x, q.y, Math.max(1.6, 4 * q.s), 0, 6.284); ctx.fill();
+    ctx.globalAlpha = 0.35;
+    ctx.beginPath(); ctx.arc(q.x, q.y, Math.max(3, 10 * q.s), 0, 6.284); ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+}
+
+function drawTrajectory(){
+  if (finale) return;
+  const pts = traj();
+  if (pts.length < 2) return;
+  const hot = pull.on || pull.keys;
+
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < pts.length; i += 3){
+    const p = pts[i], q = proj(p.x, p.y, p.z);
+    const k = i / pts.length;
+    ctx.globalAlpha = (hot ? 0.8 : 0.26) * (1 - k * 0.5);
+    ctx.fillStyle = hot ? PAL.edgeCore : PAL.gridHot;
+    ctx.beginPath();
+    ctx.arc(q.x, q.y, Math.max(1.1, (hot ? 3.6 : 2.2) * q.s), 0, 6.284);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+
+  const last = pts[pts.length - 1];
+  const e = groundEllipse(last.x, last.y, last.z, 64);
+  ctx.globalAlpha = hot ? 0.9 : 0.32;
+  ctx.strokeStyle = hot ? PAL.edge : PAL.gridHot; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(e.x, e.y, e.rx, Math.max(2, e.ry * 1.5), 0, 0, 6.284);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function drawSling(){
+  if (finale) return;
+  const base = proj(0, SLING_Y, 0);
+  const e = groundEllipse(0, SLING_Y, 0, 74);
+  ctx.globalAlpha = 0.9;
+  ctx.fillStyle = '#0a1626';
+  ctx.beginPath();
+  ctx.ellipse(e.x, e.y, e.rx, Math.max(3, e.ry * 1.5), 0, 0, 6.284);
+  ctx.fill();
+  ctx.shadowColor = PAL.edge; ctx.shadowBlur = 20;
+  ctx.strokeStyle = PAL.edge; ctx.lineWidth = 2.4;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
+
+  const L  = proj(-SLING.postX, SLING_Y, SLING.postH);
+  const R  = proj( SLING.postX, SLING_Y, SLING.postH);
+  const Lb = proj(-SLING.postX, SLING_Y, 0);
+  const Rb = proj( SLING.postX, SLING_Y, 0);
+  const p  = pouchPos();
+  const P  = proj(p.x, p.y, p.z);
+  const W  = WORDS[upcoming];
+
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#12233a'; ctx.lineWidth = 11 * base.s;
+  ctx.beginPath();
+  ctx.moveTo(Lb.x, Lb.y); ctx.lineTo(L.x, L.y);
+  ctx.moveTo(Rb.x, Rb.y); ctx.lineTo(R.x, R.y);
+  ctx.stroke();
+  ctx.shadowColor = PAL.edge; ctx.shadowBlur = 12;
+  ctx.strokeStyle = PAL.edge; ctx.lineWidth = 4 * base.s;
+  ctx.beginPath();
+  ctx.moveTo(Lb.x, Lb.y); ctx.lineTo(L.x, L.y);
+  ctx.moveTo(Rb.x, Rb.y); ctx.lineTo(R.x, R.y);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  ctx.globalAlpha = 0.55 + power * 0.45;
+  ctx.strokeStyle = W.body; ctx.lineWidth = (1.6 + power * 2.4) * base.s;
+  ctx.beginPath();
+  ctx.moveTo(L.x, L.y); ctx.lineTo(P.x, P.y); ctx.lineTo(R.x, R.y);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.lineCap = 'butt';
+
+  const sp = sprite(upcoming, 1);
+  const s = (K.SIZE_BASE * 0.62 / sp.px) * P.s;
+  ctx.globalAlpha = 0.97;
+  ctx.drawImage(sp.canvas, P.x - sp.cw*s/2, P.y - sp.ch*s/2, sp.cw*s, sp.ch*s);
+  ctx.globalAlpha = 1;
+
+  if (pull.on){
+    ctx.globalAlpha = 0.28;
+    ctx.strokeStyle = PAL.edgeCore; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(pull.ax, pull.ay, 13, 0, 6.284); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(pull.ax, pull.ay); ctx.lineTo(pull.x, pull.y); ctx.stroke();
+    ctx.globalAlpha = 0.75;
+    ctx.fillStyle = PAL.edgeCore;
+    ctx.beginPath(); ctx.arc(pull.x, pull.y, 4 + power * 5, 0, 6.284); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+let popFs = -1;
+function drawPops(){
+  popFs = -1;
+  for (const p of pops){
+    const k = 1 - p.t / p.life;
+    const q = proj(p.x, p.y, p.z + k * 110);
+    ctx.globalAlpha = clamp(p.t / p.life, 0, 1);
+    const fs = Math.max(10, Math.round(22 * q.s));
+    if (fs !== popFs){ ctx.font = '700 ' + fs + 'px system-ui,sans-serif'; popFs = fs; }
+    ctx.textAlign = 'center';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(6,14,24,0.85)';
+    ctx.lineWidth = Math.max(2, 4 * q.s);
+    ctx.strokeText(p.txt, q.x, q.y);
+    ctx.fillStyle = p.col;
+    ctx.fillText(p.txt, q.x, q.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawUI(){
+  /* Sound control, top left. It was a 22% alpha glyph in a corner and
+     nobody found it, so until it has been used once it is a labelled pill
+     that breathes. After that it settles down to a quiet icon. */
+  const pad = 12, sx = 14 + SAFE.l, sy = 14 + SAFE.t;
+  const label = SFX.on ? 'SOUND ON' : 'SOUND OFF';
+  const shy = SFX.touched;
+  const fs = shy ? 9 : 10;
+  ctx.font = '800 ' + fs + 'px system-ui,"Segoe UI",Roboto,sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  if (ctx.letterSpacing !== undefined) ctx.letterSpacing = '1.6px';
+  const tw = ctx.measureText(label).width;
+  const h = shy ? 26 : 30, w = 22 + tw + pad * 2;
+  const cy = sy + h / 2;
+  const breathe = shy ? 1 : 0.72 + 0.28 * Math.abs(Math.sin(clock * 1.7));
+
+  ctx.globalAlpha = (shy ? 0.34 : 0.60) * breathe;
+  ctx.fillStyle = 'rgba(6,14,26,0.72)';
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(sx, sy, w, h, h / 2);
+  else ctx.rect(sx, sy, w, h);
+  ctx.fill();
+  ctx.lineWidth = 1.1;
+  ctx.strokeStyle = SFX.on ? PAL.edge : '#7fb6dd';
+  ctx.stroke();
+
+  const gx = sx + pad + 5, gy = cy;
+  ctx.globalAlpha = (shy ? 0.55 : 0.95) * breathe;
+  ctx.fillStyle = ctx.strokeStyle = SFX.on ? PAL.edgeCore : '#bcd9f0';
+  ctx.lineWidth = 1.3; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(gx - 6, gy - 2.5); ctx.lineTo(gx - 3, gy - 2.5); ctx.lineTo(gx + 1, gy - 6);
+  ctx.lineTo(gx + 1, gy + 6); ctx.lineTo(gx - 3, gy + 2.5); ctx.lineTo(gx - 6, gy + 2.5);
+  ctx.closePath(); ctx.fill();
+  if (SFX.on){
+    ctx.beginPath(); ctx.arc(gx + 1.5, gy, 4.6, -0.85, 0.85); ctx.stroke();
+    ctx.beginPath(); ctx.arc(gx + 1.5, gy, 7.6, -0.85, 0.85); ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(gx + 4, gy - 3.4); ctx.lineTo(gx + 9, gy + 3.4);
+    ctx.moveTo(gx + 9, gy - 3.4); ctx.lineTo(gx + 4, gy + 3.4);
+    ctx.stroke();
+  }
+  ctx.fillText(label, sx + pad + 20, cy + 0.5);
+  if (ctx.letterSpacing !== undefined) ctx.letterSpacing = '0px';
+  SFX.hit = { x: sx, y: sy, w, h };
+
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.globalAlpha = 0.22;
+  ctx.strokeStyle = '#9fd8ff'; ctx.lineWidth = 1.4;
+  const rx = VW - 30 - SAFE.r, ry = 30 + SAFE.t;
+  ctx.beginPath(); ctx.arc(rx, ry, 9, 0.6, 5.4); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(rx + 6, ry - 8); ctx.lineTo(rx + 8.5, ry - 1); ctx.lineTo(rx + 1, ry - 2.5);
+  ctx.closePath();
+  ctx.fillStyle = '#9fd8ff'; ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+
+/* A full screen additive wash on a big hit. Skipped below the quality
+   threshold, because it is a whole screen of fill for a frame or two. */
+function drawFlash(){
+  if (flash <= (quality ? 0.002 : 0.14)) return;
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = Math.min(1, flash) * 0.55;
+  ctx.fillStyle = GRAD.flash;
+  ctx.fillRect(0, 0, VW, VH);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+}
+
+/* The studio mark, in canvas. Same geometry as the SVG in the footer. */
+function drawGlyph(cx, cy, h, alpha){
+  const k = h / 60, X = v => cx + (v - 32) * k, Y = v => cy + (v - 30) * k;
+  const ring = (rx, ry) => { ctx.beginPath();
+    ctx.ellipse(X(32), Y(46), rx * k, ry * k, 0, 0, 6.284); ctx.stroke(); };
+  const stem = () => { ctx.beginPath();
+    ctx.moveTo(X(32), Y(43.5)); ctx.lineTo(X(32), Y(25)); ctx.stroke(); };
+  const ball = () => { ctx.beginPath();
+    ctx.arc(X(32), Y(17), 8.5 * k, 0, 6.284); ctx.stroke(); };
+  ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#00e5ff';
+  ctx.globalAlpha = alpha * 0.28; ctx.lineWidth = 6 * k;
+  ring(21, 7.5); stem(); ball();
+  ctx.globalAlpha = alpha; ctx.lineWidth = 2.2 * k;
+  ring(21, 7.5); stem(); ball();
+  ctx.globalAlpha = alpha * 0.55; ring(11, 3.9);
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+function drawFinaleText(){
+  if (!finale || finale.phase === 'charge' || finale.phase === 'chain') return;
+  const rev = finale.rev || 0;
+  // four lines, revealed one after another, then held
+  const out = 1;
+  const f0 = clamp((rev - 0.15) / 0.90, 0, 1) * out;   // the mark
+  const fa = clamp((rev - 0.75) / 1.05, 0, 1) * out;   // WELCOME TO
+  const fb = clamp((rev - 1.35) / 1.35, 0, 1) * out;   // SNAPHIT
+  const fc = clamp((rev - 2.75) / 1.00, 0, 1) * out;   // STUDIOS
+  const fd = clamp((rev - 3.70) / 1.15, 0, 1) * out;   // INSTANT PLAY
+  if (f0 <= 0.001) return;
+
+  ctx.textAlign = 'center';
+  ctx.lineJoin = 'round';
+
+  // Real tracking keeps the full stops attached to the words they end.
+  const track = ('letterSpacing' in ctx);
+  const line = (txt, px, base, alpha, spread) => {
+    if (alpha <= 0.001) return;
+    let size = px;
+    const set = () => {
+      ctx.font = '800 ' + size + 'px system-ui,"Segoe UI",Roboto,sans-serif';
+      if (track){
+        ctx.letterSpacing = (size * 0.26).toFixed(2) + 'px';
+        ctx.wordSpacing   = (size * 0.55).toFixed(2) + 'px';
+      }
+    };
+    set();
+    const w = ctx.measureText(txt).width;
+    if (w > VW * spread){ size = Math.max(9, Math.floor(size * VW * spread / w)); set(); }
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = PAL.edge; ctx.shadowBlur = 22;
+    ctx.fillStyle = PAL.edge;
+    ctx.fillText(txt, VW/2, base);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = PAL.edgeCore;
+    ctx.fillText(txt, VW/2, base);
+    if (track){ ctx.letterSpacing = '0px'; ctx.wordSpacing = '0px'; }
+  };
+
+  const s1  = Math.round(Math.min(VW * 0.040, VH * 0.023));
+  const sSt = Math.round(Math.min(VW * 0.050, VH * 0.028));
+  const s3  = Math.round(Math.min(VW * 0.038, VH * 0.022));
+
+  // block = glyph, WELCOME TO, wordmark, STUDIOS, tagline. Everything but the
+  // wordmark is viewport derived, so its height solves in one step.
+  const deckFar = proj(0, FIELD.depth, 0).y;
+  const room = (deckFar - 16) * 0.92;
+  const fixed = s1 * 2.3 + sSt * 2.9 + s3;
+  let wmH = Math.min((VW * 0.66) / WM.ratio, (room - fixed) / 2.63);
+  wmH = Math.max(10, wmH);
+
+  const gh = wmH * 0.95;
+  const H  = wmH * 2.63 + fixed;
+  const top = clamp(deckFar * 0.5 - H / 2, 6, VH * 0.45);
+
+  if (f0 > 0.001) drawGlyph(VW / 2, top + gh / 2, gh * (1 + 0.22 * (1 - f0)), f0);
+
+  const y   = top + gh + s1 * 1.3 + s1;
+  const wmY = y + wmH * 0.30 + wmH / 2;
+  const ySt = wmY + wmH * 0.50 + wmH * 0.38 + sSt;
+
+  line(track ? 'WELCOME TO' : 'W E L C O M E   T O', s1, y, fa, 0.46);
+
+  if (fb > 0.001){
+    const grow = 1 + 0.22 * Math.pow(1 - fb, 2);
+    const h = wmH * grow;
+    const lw = Math.max(1, h * 0.055);
+    strokeWordmark(VW/2, wmY, h, lw, PAL.edge, fb * 0.34, h * (0.20 + 0.20 * (1 - fb)));
+    strokeWordmark(VW/2, wmY, h, lw, PAL.edge, fb * 0.85, h * 0.09);
+    strokeWordmark(VW/2, wmY, h, lw, PAL.edgeCore, fb, 0);
+  }
+
+  line(track ? 'STUDIOS' : 'S T U D I O S', sSt, ySt, fc, 0.56);
+  line(track ? 'INSTANT. PLAY.' : 'I N S T A N T.  P L A Y.', s3, ySt + sSt * 1.9, fd, 0.60);
+
+  ctx.globalAlpha = 1;
+
+  if (finale.phase === 'done'){
+    const s4 = Math.round(Math.min(VW * 0.030, VH * 0.017));
+    ctx.font = '700 ' + s4 + 'px system-ui,"Segoe UI",Roboto,sans-serif';
+    ctx.globalAlpha = 0.30 + 0.30 * Math.abs(Math.sin(clock * 1.8));
+    ctx.fillStyle = '#bfe6ff';
+    ctx.fillText('T A P   T O   P L A Y   A G A I N', VW/2, VH - 34 - SAFE.b);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawVignette(){
+  ctx.fillStyle = GRAD.vignette;
+  ctx.fillRect(0, 0, VW, VH);
+}
+
+/* Sky, galaxy, grid, dust, deck, rails and vignette all move slowly or not at
+   all. They are painted onto a plate a few times a second and blitted after
+   that, which collapses roughly five full-screen fills per frame into one. */
+/* Live stars are what make the drift smooth, and they cost a second
+   composite. Keep them while there is headroom; fold them back onto the
+   plate on a device that has already had to give up resolution. */
+let smoothStars = true;
+function starsAreLive(){ return smoothStars; }
+
+function paintSky(){
+  const main = ctx, P = K.BG_PAD;
+  ctx = bgx;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.translate(P, P);
+  drawBackdrop();
+  drawMotes(1 / 15);
+  if (!starsAreLive()){
+    drawStars();
+    if (fgDirty) { ctx = main; paintDeck(); ctx = bgx; ctx.setTransform(DPR,0,0,DPR,0,0); ctx.translate(P,P); }
+    ctx.drawImage(fg, -P, -P, VW + 2 * P, VH + 2 * P);
+  }
+  ctx = main;
+  bgFrame = 0;
+  bgDirty = false;
+}
+
+function paintDeck(){
+  const main = ctx, P = K.BG_PAD;
+  ctx = fgx;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(-P, -P, VW + 2 * P, VH + 2 * P);
+  ctx.translate(P, P);
+  drawGrid();
+  drawField();
+  drawRails();
+  drawVignette();
+  ctx = main;
+  fgDirty = false;
+}
+
+function draw(){
+  if (bgDirty || ++bgFrame >= (smoothStars ? 7 : 2)) paintSky();
+  if (fgDirty) paintDeck();
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (shake > 0.2) ctx.translate(rnd(-shake, shake), rnd(-shake, shake) * 0.6);
+  const P2 = K.BG_PAD, W2 = VW + 2 * P2, H2 = VH + 2 * P2;
+  ctx.drawImage(bg, -P2, -P2, W2, H2);
+  if (starsAreLive()){
+    drawStars();
+    ctx.drawImage(fg, -P2, -P2, W2, H2);
+  }
+  drawEdgeFlash();
+  drawRings();
+
+  // one depth-sorted pass over words and arena blocks, by nearest edge
+  const scene = [];
+  for (const o of blocks) scene.push({ o, key: proj(o.x, o.y - o.ehd, 0).d });
+  for (const b of bodies) scene.push({ b, key: proj(b.x, b.y - b.ehd, 0).d });
+  for (const d of ducks)  scene.push({ d, key: proj(d.x, d.y - K.DUCK_R, 0).d });
+  scene.push({ j: 1, key: proj(JOY.x, JOY.y - JOY.r, 0).d });
+  scene.sort((p, q) => q.key - p.key);
+
+  for (const it of scene){
+    if (it.o){ drawBlock(it.o); continue; }
+    if (it.d){ drawDuck(it.d); continue; }
+    if (it.j){ drawJoy(); continue; }
+    const b = it.b, a = b.dying ? b.dying / 0.9 : 1;
+    if (quality && b.z <= b.sup + 3) drawWord(b, 0.16 * a, true);
+    drawShadow(b);
+    drawWord(b, a, false);
+  }
+
+  drawLinks();
+  drawParticles();
+  drawTrajectory();
+  drawSling();
+  drawPops();
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  drawFlash();
+  drawFinaleText();
+  drawUI();
+}
+
+/* ------------------------------------------------------------
+   Host bridge. When this runs inside the site it tells the page
+   when the run is cleared, and parks itself when scrolled away.
+   ------------------------------------------------------------ */
+const FRAMED = (() => { try { return window.parent !== window; } catch(e){ return false; } })();
+let running = true;
+function tellHost(what){
+  if (!FRAMED) return;
+  try { parent.postMessage({ snaphit: what }, '*'); } catch(e){}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden){ running = false; SFX.suspend(); }
+  else { running = true; last = 0; SFX.resume(); }
+});
+addEventListener('message', e => {
+  const m = e.data && e.data.snaphit;
+  if (m === 'pause'){ running = false; SFX.suspend(); }
+  else if (m === 'resume'){ running = true; last = 0; SFX.resume(); }
+});
+
+
+/* ------------------------------------------------------------------
+   Sound. Entirely synthesised: oscillators, filtered noise, saturation
+   and a generated reverb. No sample files, no fetch, no external
+   request of any kind.
+
+   OFF UNTIL ASKED. This game sits on a page with other games and plays
+   by itself the moment it loads, so noise by default would be rude.
+   The AudioContext is not created until the control is tapped.
+   ------------------------------------------------------------------ */
+const SFX = {
+  ac: null, bus: null, wet: null, sat: null, noise: null, ir: null,
+  on: false, ready: false, touched: false, voices: 0, last: 0, lastBoom: -9,
+
+  load(){
+    // On unless it has been turned off. A browser will not let anything
+    // sound before a gesture anyway, so the first tap is the real switch.
+    try {
+      const v = localStorage.getItem('snaphit_sound');
+      this.on = v !== '0';
+      this.touched = v !== null;
+    } catch (e){ this.on = true; }
+  },
+
+  /* Called on the first pointer event of any kind, since that is the
+     earliest a browser will allow an AudioContext to start. */
+  wake(){
+    if (!this.on || this.ready) { this.resume(); return; }
+    this.boot(); this.resume();
+  },
+  save(){
+    try { localStorage.setItem('snaphit_sound', this.on ? '1' : '0'); } catch (e){}
+  },
+
+  boot(){
+    if (this.ready) return true;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return false;
+    try {
+      const ac = this.ac = new AC();
+
+      const comp = ac.createDynamicsCompressor();
+      comp.threshold.value = -16; comp.knee.value = 10; comp.ratio.value = 10;
+      comp.attack.value = 0.002; comp.release.value = 0.25;
+      comp.connect(ac.destination);
+
+      this.bus = ac.createGain(); this.bus.gain.value = 0.8;
+      this.bus.connect(comp);
+
+      // A real explosion is mostly the room answering it. One short
+      // generated impulse response, shared by everything.
+      const dur = 1.5, n = Math.floor(ac.sampleRate * dur);
+      const ir = ac.createBuffer(2, n, ac.sampleRate);
+      for (let c = 0; c < 2; c++){
+        const d = ir.getChannelData(c);
+        for (let i = 0; i < n; i++){
+          const decay = Math.pow(1 - i / n, 2.6);
+          d[i] = (Math.random() * 2 - 1) * decay * (i < 400 ? i / 400 : 1);
+        }
+      }
+      const conv = ac.createConvolver(); conv.buffer = ir;
+      const tame = ac.createBiquadFilter();
+      tame.type = 'lowpass'; tame.frequency.value = 4200;
+      this.wet = ac.createGain(); this.wet.gain.value = 1;
+      this.wet.connect(conv); conv.connect(tame); tame.connect(this.bus);
+
+      // soft clip, so the loud parts grit up the way loud things do
+      const sat = this.sat = ac.createWaveShaper();
+      const curve = new Float32Array(1024);
+      for (let i = 0; i < 1024; i++){
+        const x = i * 2 / 1024 - 1;
+        curve[i] = Math.tanh(2.2 * x) / Math.tanh(2.2);
+      }
+      sat.curve = curve; sat.oversample = '2x';
+      sat.connect(this.bus);
+
+      const ln = ac.sampleRate * 2;
+      this.noise = ac.createBuffer(1, ln, ac.sampleRate);
+      const nd = this.noise.getChannelData(0);
+      for (let i = 0; i < ln; i++) nd[i] = Math.random() * 2 - 1;
+
+      this.ready = true;
+      return true;
+    } catch (e){ return false; }
+  },
+
+  toggle(){
+    this.on = !this.on; this.touched = true;
+    if (this.on){ this.boot(); this.resume(); this.blip(680, 0.09, 0.18, 'triangle', 900); }
+    this.save();
+  },
+  resume(){ if (this.ac && this.ac.state === 'suspended') this.ac.resume(); },
+  suspend(){ if (this.ac && this.ac.state === 'running') this.ac.suspend(); },
+
+  gate(cost){
+    if (!this.on || !this.ready) return false;
+    const t = this.ac.currentTime;
+    if (t !== this.last){ this.voices = Math.max(0, this.voices - 8); this.last = t; }
+    if (this.voices > 30) return false;
+    this.voices += (cost || 1);
+    return true;
+  },
+
+  /* one panner per sound, splitting to dry and to the room */
+  route(node, pan, send, satur){
+    const ac = this.ac;
+    const pn = ac.createStereoPanner ? ac.createStereoPanner() : null;
+    const head = pn || ac.createGain();
+    if (pn) pn.pan.value = clamp(pan || 0, -1, 1);
+    node.connect(head);
+    const dry = ac.createGain(); dry.gain.value = 1 - (send || 0) * 0.35;
+    head.connect(dry); dry.connect(satur ? this.sat : this.bus);
+    if (send > 0){
+      const sd = ac.createGain(); sd.gain.value = send;
+      head.connect(sd); sd.connect(this.wet);
+    }
+    return head;
+  },
+
+  env(g, t, a, hold, rel, peak){
+    g.setValueAtTime(0.0001, t);
+    g.linearRampToValueAtTime(Math.max(0.0002, peak), t + a);
+    g.setValueAtTime(Math.max(0.0002, peak), t + a + hold);
+    g.exponentialRampToValueAtTime(0.0001, t + a + hold + rel);
+  },
+
+  blip(freq, dur, vol, type, slideTo, pan, send){
+    if (!this.gate(1)) return;
+    const t = this.ac.currentTime, o = this.ac.createOscillator(), g = this.ac.createGain();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t + dur);
+    this.env(g.gain, t, 0.004, dur * 0.2, dur, vol);
+    o.connect(g); this.route(g, pan, send || 0, false);
+    o.start(t); o.stop(t + dur + 0.1);
+  },
+
+  /* filtered noise: the body of every impact */
+  hiss(o){
+    if (!this.gate(o.cost || 1)) return;
+    const ac = this.ac, t = ac.currentTime + (o.at || 0);
+    const src = ac.createBufferSource();
+    src.buffer = this.noise;
+    src.playbackRate.value = 0.75 + Math.random() * 0.6;
+    const f = ac.createBiquadFilter();
+    f.type = o.type; f.Q.value = o.q || 1;
+    f.frequency.setValueAtTime(o.f0, t);
+    if (o.f1) f.frequency.exponentialRampToValueAtTime(Math.max(30, o.f1), t + o.dur);
+    const g = ac.createGain();
+    this.env(g.gain, t, o.attack || 0.002, o.dur * (o.hold || 0.08), o.dur, o.vol);
+    src.connect(f); f.connect(g);
+    this.route(g, o.pan, o.send || 0, o.sat);
+    src.start(t); src.stop(t + o.dur + 0.1);
+  },
+
+  /* ---- the game ---- */
+
+  land(size){
+    const t = this.ac ? this.ac.currentTime : 0;
+    if (t - (this.landAt || -9) < 0.055) return;
+    this.landAt = t;
+    const s = clamp(size || 0.4, 0, 1);
+    this.blip(470 - s * 120, 0.13, 0.15, 'sine', 240, 0, 0.14);
+    this.hiss({ dur:0.10, vol:0.13, type:'bandpass', f0:1500 - s*400, f1:520, q:0.8, send:0.12 });
+  },
+
+  merge(units){
+    const step = Math.min(11, Math.log2(Math.max(2, units)));
+    const f = 392 * Math.pow(2, step / 7);
+    this.blip(f, 0.22, 0.13, 'triangle', f * 1.5, 0, 0.20);
+    this.blip(f * 2, 0.13, 0.045, 'sine', 0, 0, 0.20);
+  },
+
+  /* A duck going over. A knock, then a reward that climbs a step for every
+     duck taken inside a second and a bit, so a run of them pays off. */
+  duck(){
+    const t = this.ac ? this.ac.currentTime : 0;
+    if (t - (this.duckAt || -9) > 1.25) this.duckN = 0;
+    this.duckAt = t;
+    const SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19];
+    const n = Math.min(SCALE.length - 1, this.duckN || 0);
+    this.duckN = (this.duckN || 0) + 1;
+    const f = 620 * Math.pow(2, SCALE[n] / 12);
+    const pan = (Math.random() * 2 - 1) * 0.4;
+    this.hiss({ dur:0.05, vol:0.17, type:'lowpass', f0:1600, f1:420, q:0.8, pan, send:0.10 });
+    this.blip(f, 0.22, 0.16, 'triangle', f, pan, 0.32);
+    this.blip(f * 2, 0.17, 0.055, 'sine', 0, pan, 0.32);
+    this.hiss({ dur:0.24, vol:0.05, type:'highpass', f0:5200, f1:8200, q:0.6,
+                attack:0.012, at:0.02, pan, send:0.45, cost:0 });
+  },
+
+  edge(){
+    const t = this.ac ? this.ac.currentTime : 0;
+    if (t - (this.edgeAt || -9) < 0.09) return;
+    this.edgeAt = t;
+    this.blip(360, 0.17, 0.16, 'sine', 165, 0, 0.24);
+    this.hiss({ dur:0.06, vol:0.09, type:'bandpass', f0:900, f1:400, q:1.2, send:0.2 });
+  },
+
+  /* ------------------------------------------------------------------
+     The explosion, when a word goes up.
+
+     MIXED FOR A PHONE SPEAKER. The first version put most of its energy
+     in a sub falling to 26Hz and a rumble at 62Hz, which a phone simply
+     cannot move air at, so on a handset it was nearly silent while the
+     fireworks sat right in the speaker's best octave. The weight now
+     lives between 400Hz and 4kHz where a phone is loudest, and the sub
+     is doubled at its second and third harmonics so the ear infers the
+     fundamental the speaker cannot produce.
+     ------------------------------------------------------------------ */
+  boom(scale){
+    const k = clamp(scale || 1, 0.4, 2.2);
+    const now = this.ac ? this.ac.currentTime : 0;
+    if (now - this.lastBoom < 0.04) return;
+    if (!this.gate(6)) return;
+    this.lastBoom = now;
+
+    const pan = (Math.random() * 2 - 1) * 0.55;
+    const jt = 1 + (Math.random() - 0.5) * 0.22;
+
+    // 1. shock front, right in the middle of what a phone can shout
+    this.hiss({ dur:0.026*k, vol:0.52*k, type:'highpass', f0:520, f1:1700,
+                q:0.4, attack:0.0005, hold:0.02, pan, send:0.16 });
+    // 2. the crack
+    this.hiss({ dur:0.12*k*jt, vol:0.40*k, type:'bandpass', f0:3000, f1:1200,
+                q:0.9, attack:0.001, pan, send:0.26 });
+    // 3. the body: the whump, and the loudest thing here
+    this.hiss({ dur:0.62*k*jt, vol:0.76*k, type:'bandpass', f0:1350, f1:165,
+                q:0.75, attack:0.004, at:0.004, pan, send:0.44, sat:true, cost:0 });
+    // 4. the drop, written as a fundamental plus two harmonics. Headphones
+    //    hear the bottom octave; a phone hears the harmonics and infers it.
+    const t = this.ac.currentTime;
+    for (const [f0, f1, d, v] of [[132, 34, 1.15*k, 0.34*k],
+                                  [264, 68, 0.90*k, 0.36*k],
+                                  [396, 102, 0.58*k, 0.19*k]]){
+      const o = this.ac.createOscillator(), g = this.ac.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(f0 * jt, t);
+      o.frequency.exponentialRampToValueAtTime(f1, t + d);
+      this.env(g.gain, t, 0.003, 0.02, d, v);
+      o.connect(g); this.route(g, pan, 0.26, true);
+      o.start(t); o.stop(t + d + 0.12);
+    }
+    // 5. debris
+    this.hiss({ dur:0.70*k, vol:0.075*k, type:'highpass', f0:1800, f1:5000,
+                q:0.5, attack:0.025, at:0.04, pan, send:0.5, cost:0 });
+    // 6. rumble, lifted into the range a handset can actually reach
+    this.hiss({ dur:1.65*k, vol:0.54*k, type:'bandpass', f0:400, f1:135,
+                q:0.7, attack:0.26*k, hold:0.16, at:0.02, pan, send:0.55, cost:0 });
+    this.hiss({ dur:2.40*k, vol:0.50*k, type:'bandpass', f0:180, f1:68,
+                q:0.6, attack:0.60*k, hold:0.16, at:0.08, pan, send:0.65, cost:0 });
+  },
+
+  charge(dur){
+    if (!this.gate(2)) return;
+    const t = this.ac.currentTime, o = this.ac.createOscillator(), g = this.ac.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(68, t);
+    o.frequency.exponentialRampToValueAtTime(700, t + dur);
+    const lp = this.ac.createBiquadFilter();
+    lp.type = 'lowpass'; lp.Q.value = 7;
+    lp.frequency.setValueAtTime(280, t);
+    lp.frequency.exponentialRampToValueAtTime(4400, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.15, t + dur * 0.86);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.14);
+    o.connect(lp); lp.connect(g); this.route(g, 0, 0.3, false);
+    o.start(t); o.stop(t + dur + 0.25);
+  },
+};
+SFX.load();
+
+/* ------------------------------------------------------------
+   Loop
+   ------------------------------------------------------------ */
+let last = 0, fpsAcc = 0, fpsN = 0, fpsT0 = 0, lastDt = 0.016;
+
+function frame(now){
+  requestAnimationFrame(frame);
+  if (!running) return;
+  if (!last) last = now;
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > 1/20) dt = 1/20;
+  if (dt <= 0) return;
+  clock += dt;
+  lastDt = dt;
+
+  if (!fpsT0) fpsT0 = now;
+  fpsN++;
+  fpsAcc = (now - fpsT0) / 1000;
+  if (fpsAcc > 1.2){
+    const fps = fpsN / fpsAcc;
+    quality = fps < 48 ? 0 : (fps > 56 ? 1 : quality);
+    const wasSmooth = smoothStars;
+    if (fps < 40) smoothStars = false;
+    else if (fps > 50) smoothStars = true;
+    if (smoothStars !== wasSmooth) bgDirty = true;
+    if (resHold > 0) resHold--;
+    else if (fps < 34 && resStep < RES_LADDER.length - 1){ resStep++; resHold = 2; resize(); }
+    else if (fps > 52 && resStep > 0){ resStep--; resHold = 7; resize(); }
+    fpsT0 = now; fpsN = 0;
+  }
+
+  if (reload > 0) reload -= dt;
+  if (hintAlpha < 0) hintAlpha = 0;
+  else if (hintAlpha > 0 && shotsFired >= 2) hintAlpha = Math.max(0, hintAlpha - dt * 0.8);
+  if (shake > 0) shake = Math.max(0, shake - dt * 42);
+  if (edgeFlash.t > 0) edgeFlash.t -= dt;
+
+  updatePull();
+  updateDucks(dt);
+  updateJoy(dt);
+  updateShells(dt);
+  updateFinale(dt);
+  if (victoryT > 0){ victoryT -= dt; bgDirty = true; }
+  if (flash > 0) flash = Math.max(0, flash - dt * 1.55);
+
+  const steps = Math.min(5, Math.ceil(dt / (1/150)));
+  const sdt = dt / steps;
+  links.length = 0;
+  for (let i = 0; i < steps; i++) physics(sdt, i === steps - 1);
+  duckHits();
+
+  for (const b of bodies){
+    if (b.pop > 0) b.pop = Math.max(0, b.pop - dt * 3.2);
+    if (b.dying > 0){ b.dying -= dt; if (b.dying <= 0) b.dead = true; }
+  }
+  bodies = bodies.filter(b => !b.dead);
+
+  for (const p of particles){
+    const k = p.k || 0;
+    if (k === 2){                       // fire rises and swells
+      p.vz += 130 * dt;
+      const drag = 1 / (1 + 3.4 * dt);
+      p.vx *= drag; p.vy *= drag; p.vz *= drag;
+    } else if (k === 1){                // sparks are light and drag hard
+      p.vz -= K.GRAV * 0.85 * dt;
+      const drag = 1 / (1 + 2.6 * dt);
+      p.vx *= drag; p.vy *= drag;
+    } else if (k === 4){                // confetti: light, draggy, fluttering
+      p.vz -= K.GRAV * 0.10 * dt;
+      if (p.vz < -p.term) p.vz = -p.term;
+      const drag = 1 / (1 + 2.9 * dt);
+      p.vx *= drag; p.vy *= drag;
+      p.sway += p.sw * dt;
+      p.flip += p.fs * dt;
+      p.x += Math.sin(p.sway) * p.amp * dt;
+      p.y += Math.cos(p.sway * 0.7) * p.amp * 0.45 * dt;
+    } else if (k === 3){                // firework stars hang in the air
+      p.vz -= K.GRAV * 0.30 * dt;
+      const drag = 1 / (1 + 1.5 * dt);
+      p.vx *= drag; p.vy *= drag; p.vz *= drag;
+    } else {
+      p.vz -= K.GRAV * 0.45 * dt;
+    }
+    p.x += p.vx*dt; p.y += p.vy*dt; p.z += p.vz*dt;
+    if (p.z < 0){
+      p.z = 0;
+      if (k === 2){ p.vz = 0; }
+      else if (k === 4){ p.vz = 0; p.vx *= 0.55; p.vy *= 0.55; p.amp *= 0.5;
+                         if (p.t > 1.1) p.t = 1.1; }
+      else { p.vz *= -0.3; p.vx *= 0.7; p.vy *= 0.7; }
+    }
+    p.t -= dt;
+  }
+  particles = particles.filter(p => p.t > 0);
+  for (const r of rings) r.t -= dt;
+  rings = rings.filter(r => r.t > 0);
+  for (const p of pops) p.t -= dt;
+  pops = pops.filter(p => p.t > 0);
+
+  draw();
+}
+
+/* ------------------------------------------------------------
+   Input
+   ------------------------------------------------------------ */
+function reset(){
+  bodies = []; particles = []; rings = []; pops = []; links = [];
+  score = 0; shotsFired = 0; upcoming = 0;
+  power = 0; aimYaw = 0; reload = 0; shake = 0; hintAlpha = 1;
+  pull.on = false; pull.keys = false;
+  victory = 0; victoryT = 0; finale = null; flash = 0; shells = [];
+  JOY.tx = JOY.ty = JOY.vx = JOY.vy = 0; JOY.flare = 0;
+  buildDucks();
+}
+
+const held = {};
+function bind(){
+  cv.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    SFX.wake();
+    const sh = SFX.hit;
+    if (sh && e.clientX >= sh.x - 6 && e.clientX <= sh.x + sh.w + 6 &&
+             e.clientY >= sh.y - 6 && e.clientY <= sh.y + sh.h + 6){ SFX.toggle(); return; }
+    if (finale && finale.phase === 'done'){ reset(); return; }
+    if (e.clientX > VW - 46 - SAFE.r && e.clientY < 46 + SAFE.t){ reset(); return; }
+    cv.setPointerCapture && cv.setPointerCapture(e.pointerId);
+    pull.on = true; pull.keys = false;
+    pull.ax = pull.x = e.clientX;
+    pull.ay = pull.y = e.clientY;
+    power = 0;
+  }, { passive:false });
+
+  cv.addEventListener('pointermove', e => {
+    if (!pull.on) return;
+    pull.x = e.clientX; pull.y = e.clientY;
+  }, { passive:true });
+
+  const release = () => {
+    if (!pull.on) return;
+    pull.on = false;
+    fire();
+    power = 0;
+  };
+  cv.addEventListener('pointerup', release);
+  cv.addEventListener('pointercancel', () => { pull.on = false; power = 0; });
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+
+  addEventListener('keydown', e => {
+    if (e.key.toLowerCase() === 'r'){ reset(); return; }
+    if (['ArrowLeft','ArrowRight','KeyA','KeyD','Space'].includes(e.code)){
+      held[e.code] = true;
+      if (e.code === 'Space'){ pull.keys = true; pull.on = false; }
+      e.preventDefault();
+    }
+  });
+  addEventListener('keyup', e => {
+    held[e.code] = false;
+    if (e.code === 'Space' && pull.keys){ fire(); power = 0; pull.keys = false; e.preventDefault(); }
+  });
+  setInterval(() => {
+    const d = 1/60;
+    if (held.ArrowLeft  || held.KeyA) aimYaw = clamp(aimYaw - 1.3*d, -K.YAW_LIMIT, K.YAW_LIMIT);
+    if (held.ArrowRight || held.KeyD) aimYaw = clamp(aimYaw + 1.3*d, -K.YAW_LIMIT, K.YAW_LIMIT);
+    if (pull.keys && held.Space) power = clamp(power + d * 0.62, 0, 1);
+  }, 16);
+
+  addEventListener('resize', resize);
+  addEventListener('orientationchange', () => setTimeout(resize, 120));
+}
+
+/* ------------------------------------------------------------
+   Boot. The game is live the moment the page paints.
+   ------------------------------------------------------------ */
+cv = document.getElementById('c');
+ctx = cv.getContext('2d', { alpha:false });
+resize();
+bind();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
