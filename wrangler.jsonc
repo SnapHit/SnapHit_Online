@@ -1,0 +1,21 @@
+{
+  // Workers Static Assets, with NO Worker script.
+  //
+  // The absence of a "main" field is the entire cost model: static asset
+  // requests are free and unlimited. Adding a script, a framework or a build
+  // step quietly undoes that. Do not add one without a reason.
+  "name": "snap-hit",
+  "compatibility_date": "2025-01-01",
+
+  "assets": {
+    // Everything served lives here. Anything at the repo root is never
+    // published, which is why README.md and NOTES.md are safe where they are.
+    "directory": "./docs",
+
+    // /play/hurtle serves play/hurtle.html, and /about serves about.html.
+    "html_handling": "auto-trailing-slash",
+
+    // A miss serves docs/404.html rather than a bare Cloudflare error.
+    "not_found_handling": "404-page"
+  }
+}
