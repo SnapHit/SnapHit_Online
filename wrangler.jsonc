@@ -4,15 +4,25 @@
   // The absence of a "main" field is the entire cost model: static asset
   // requests are free and unlimited. Adding a script, a framework or a build
   // step quietly undoes that. Do not add one without a reason.
-  "name": "snap-hit",
+
+  // Must match the Worker Cloudflare actually created. The first deploy used
+  // "snap-hit", did not match, and was silently overridden by the CI name.
+  "name": "snaphit-online",
   "compatibility_date": "2025-01-01",
+
+  // Both default to ON when absent, so the dashboard toggles do not survive
+  // the next deploy. Named here, the site has exactly one public address.
+  "workers_dev": false,
+  "preview_urls": false,
 
   "assets": {
     // Everything served lives here. Anything at the repo root is never
     // published, which is why README.md and NOTES.md are safe where they are.
     "directory": "./docs",
 
-    // /play/hurtle serves play/hurtle.html, and /about serves about.html.
+    // /play/hurtle serves play/hurtle.html. Requests that keep the .html
+    // take a 307 to the clean form first; measured at about 10ms off an
+    // already-open edge connection, which is why it is left alone.
     "html_handling": "auto-trailing-slash",
 
     // A miss serves docs/404.html rather than a bare Cloudflare error.
