@@ -1715,7 +1715,7 @@ function blitFlat(spr, x, y, z, worldW, yaw, alpha){
    pieces already merged, so a stroke traces the silhouette and nothing
    else. Identical on every device, and it needs no font at all.
    ------------------------------------------------------------------ */
-const WM = { d: 'M122 512H0Q0 572 32 617Q64 662 120 686.5Q176 711 246 711Q320 711 374.5 682.5Q429 654 457.5 607Q486 560 486 507Q486 441 455.5 401.5Q425 362 381.5 343Q338 324 269 305Q217 291 187 279Q157 267 137.5 246.5Q118 226 118 194Q118 147 149 122Q180 97 229 97Q283 97 316 124Q349 151 352 189H478Q471 101 406.5 50.5Q342 0 241 0Q170 0 116 24Q62 48 32 93Q2 138 2 198Q2 263 32 302Q62 341 104.5 359.5Q147 378 215 396Q269 410 299.5 422Q330 434 350.5 456Q371 478 371 513Q371 558 338 586.5Q305 615 246 615Q189 615 157.5 586Q126 557 122 512ZM1178 704H1292V8H1178V526L835 8H721V704H835V185L1178 704ZM1670 562H1961L2011 704H2131L1882 8H1750L1501 704H1620L1670 562ZM1816 146 1929 469H1702L1816 146ZM2453 422H2579Q2665 422 2720 392.5Q2775 363 2800 316Q2825 269 2825 216Q2825 158 2797.5 111Q2770 64 2714.5 36.5Q2659 9 2579 9H2339V704H2453V422ZM2579 102Q2708 102 2708 216Q2708 270 2676 299.5Q2644 329 2579 329H2453V102H2579ZM3589 704V9H3475V307H3148V9H3034V704H3148V400H3475V704H3589ZM3839 9V704H3953V9ZM4652 102V9H4167V102H4353V704H4467V102H4652Z', w: 4652, h: 711, ratio: 4652 / 711 };
+const WM = { d: 'M182 502H0Q2 571 38.5 620Q75 669 136 694Q197 719 274 719Q353 719 411 690Q469 661 499.5 612Q530 563 530 503Q530 440 499 400Q468 360 425.5 339Q383 318 315 295Q247 273 215 254Q183 235 183 201Q183 170 202 153.5Q221 137 252 137Q288 137 311 156.5Q334 176 336 210H521Q516 111 445 55.5Q374 0 258 0Q144 0 73 55.5Q2 111 2 209Q2 275 33 316Q64 357 107 378Q150 399 218 420Q265 434 290.5 445Q316 456 333.5 473Q351 490 351 516Q351 547 329 564.5Q307 582 269 582Q232 582 209 561.5Q186 541 182 502ZM1177 712H1348V10H1177V445L891 10H720V712H891V279L1177 712ZM1732 588H1994L2036 712H2217L1963 10H1765L1511 712H1690L1732 588ZM1863 199 1950 456H1777L1863 199ZM2550 460H2656Q2742 460 2800 429Q2858 398 2886 347.5Q2914 297 2914 236Q2914 170 2885 119Q2856 68 2798 39Q2740 10 2656 10H2379V712H2550V460ZM2716 171Q2740 194 2740 236Q2740 278 2716 301Q2692 324 2643 324H2550V148H2643Q2692 148 2716 171ZM3696 712V10H3525V285H3259V10H3088V712H3259V423H3525V712H3696ZM3904 10V712H4075V10ZM4789 147V10H4246V147H4432V712H4603V147H4789Z', w: 4789, h: 719, ratio: 4789 / 719 };
 let wmPath;
 function wordmarkPath(){
   if (wmPath === undefined){
@@ -1724,8 +1724,11 @@ function wordmarkPath(){
   return wmPath;
 }
 
-/* Stroke it at a given height, centred on cx. lw and blur are screen pixels. */
-function strokeWordmark(cx, cy, h, lw, colour, alpha, blur){
+/* Paint it at a given height, centred on cx. Stroke width is in path units so
+   it scales with the mark; blur is screen pixels. Stroke first, then fill: the
+   fill covers the inner half of the stroke and leaves a clean outer edge, so
+   what you get is a sticker rather than a tube. */
+function paintWordmark(cx, cy, h, edge, fill, alpha, blur, sw){
   const path = wordmarkPath();
   if (!path) return false;
   const k = h / WM.h;
@@ -1733,12 +1736,15 @@ function strokeWordmark(cx, cy, h, lw, colour, alpha, blur){
   ctx.translate(cx - WM.w * k / 2, cy - h / 2);
   ctx.scale(k, k);
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-  ctx.lineWidth = lw / k;
-  ctx.strokeStyle = colour;
+  ctx.lineWidth = sw || 62;
   ctx.globalAlpha = alpha;
-  if (blur){ ctx.shadowColor = colour; ctx.shadowBlur = blur; }
-  ctx.stroke(path);
-  ctx.shadowBlur = 0;
+  if (edge){
+    ctx.strokeStyle = edge;
+    if (blur){ ctx.shadowColor = edge; ctx.shadowBlur = blur / k; }
+    ctx.stroke(path);
+    ctx.shadowBlur = 0;
+  }
+  if (fill){ ctx.fillStyle = fill; ctx.fill(path); }
   ctx.restore();
   ctx.globalAlpha = 1;
   return true;
@@ -1762,11 +1768,11 @@ function wordmark(){
     g.save();
     g.translate(W/2 - WM.w * k / 2, 52);
     g.scale(k, k);
-    g.lineJoin = 'round'; g.lineCap = 'round'; g.lineWidth = (h * 0.055) / k;
-    g.shadowColor = '#e0640c';
-    g.globalAlpha = 0.34; g.shadowBlur = 22; g.strokeStyle = '#ff9424'; g.stroke(wp);
-    g.globalAlpha = 0.85; g.shadowBlur = 6;  g.stroke(wp);
-    g.globalAlpha = 1;    g.shadowBlur = 0;  g.strokeStyle = '#ffe0b4'; g.stroke(wp);
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    g.shadowColor = '#e0640c'; g.strokeStyle = '#ff9424';
+    g.globalAlpha = 0.40; g.lineWidth = 74; g.shadowBlur = 26 / k; g.stroke(wp);
+    g.globalAlpha = 1;     g.lineWidth = 62; g.shadowBlur = 0;     g.stroke(wp);
+    g.fillStyle = '#ffe9cf'; g.fill(wp);
     g.restore();
   }
   g.globalAlpha = 1;
@@ -2572,10 +2578,9 @@ function drawFinaleText(){
   if (fb > 0.001){
     const grow = 1 + 0.22 * Math.pow(1 - fb, 2);
     const h = wmH * grow;
-    const lw = Math.max(1, h * 0.055);
-    strokeWordmark(VW/2, wmY, h, lw, PAL.edge, fb * 0.34, h * (0.20 + 0.20 * (1 - fb)));
-    strokeWordmark(VW/2, wmY, h, lw, PAL.edge, fb * 0.85, h * 0.09);
-    strokeWordmark(VW/2, wmY, h, lw, PAL.edgeCore, fb, 0);
+    // halo first, then the mark: orange edge with a white core
+    paintWordmark(VW/2, wmY, h, PAL.edge, null, fb * 0.40, h * (0.14 + 0.16 * (1 - fb)), 74);
+    paintWordmark(VW/2, wmY, h, PAL.edge, '#ffffff', fb, h * 0.045, 62);
   }
 
   line(track ? 'STUDIOS' : 'S T U D I O S', sSt, ySt, fc, 0.56);
