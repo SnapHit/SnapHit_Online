@@ -735,34 +735,65 @@ for (const g of GAMES){
 }
 
 /* ---------------- unloading whatever scrolled away ---------------- */
-function watch(el){
-  if (!('IntersectionObserver' in window)) return;
-  const io = new IntersectionObserver(en => {
-    for (const e of en){
-      if (document.body.classList.contains('zoomed')) continue;
-      if (!e.isIntersecting && e.target.src){
-        e.target.removeAttribute('src');            // stop the loop dead
-        const rec = frames.find(f => f.el === e.target);
-        if (rec){
-          const again = document.createElement('button');
-          again.className = 'attract';
-          again.type = 'button';
-          again.setAttribute('aria-label', 'Play ' + rec.name);
-          again.innerHTML =
-            '<span class="title">' + rec.name + '</span>' +
-            '<span class="play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3 L21 12 L6 21 Z"/></svg></span>' +
-            '<span class="hint">TAP TO PLAY</span>';
-          again.addEventListener('click', () => {
-            rec.el.src = rec.src; again.remove(); rec.phone.classList.add('live');
-          });
-          rec.phone.classList.remove('live');
-          rec.screen.appendChild(again);
-        }
-        io.unobserve(e.target);
-      }
-    }
-  }, { rootMargin: '120px' });
-  io.observe(el);
+/* One observer for every cabinet, and nothing is ever unobserved. A frame that
+   was unloaded and then revived is therefore still being watched, which is the
+   whole point: the old code observed per frame and unobserved on the way out,
+   so a cabinet played a second time ran off screen forever. The callback reads
+   current state rather than trusting the record, because a record only ever
+   says what changed, not what is true now. */
+const MARGIN = 120;
+const io = ('IntersectionObserver' in window)
+  ? new IntersectionObserver(() => sweep(), { rootMargin: MARGIN + 'px' })
+  : null;
+
+function watch(el){ if (io) io.observe(el); }
+
+/* The observer is only a nudge. A record says what changed at the moment it was
+   queued, which is not the same as what is true by the time it is delivered: a
+   cabinet that scrolled away while another was full screen arrives here after
+   the collapse has already brought it back on screen. So the record is thrown
+   away unread and every frame is judged on its current rectangle. */
+function offScreen(el){
+  const r = el.getBoundingClientRect();
+  return r.bottom < -MARGIN || r.top  > innerHeight + MARGIN ||
+         r.right  < -MARGIN || r.left > innerWidth  + MARGIN;
+}
+/* Deferred to the next frame, and only ever once per frame. Collapsing moves a
+   phone back into flow and the page settles over the frames that follow, so a
+   sweep run the instant the class comes off reads a rectangle that is already
+   out of date and unloads a cabinet the player is looking at. */
+let sweepQueued = false;
+function sweep(){
+  if (sweepQueued) return;
+  sweepQueued = true;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    sweepQueued = false;
+    for (const rec of frames) if (offScreen(rec.el)) park(rec);
+  }));
+}
+
+/* Unload one cabinet and put its card back. Safe to call at any time and as
+   often as you like: it does nothing to a frame that is already unloaded, and
+   nothing to the one being played full screen. Guarding that single frame is
+   what lets every other cabinet still unload while one is expanded — the old
+   blanket skip threw the record away, and no replacement ever arrived. */
+function park(rec){
+  if (!rec.el.src) return;           // already unloaded
+  if (rec.phone === zoomed) return;  // the run the player is in, full screen
+  rec.el.removeAttribute('src');     // stop the loop dead
+  const again = document.createElement('button');
+  again.className = 'attract';
+  again.type = 'button';
+  again.setAttribute('aria-label', 'Play ' + rec.name);
+  again.innerHTML =
+    '<span class="title">' + rec.name + '</span>' +
+    '<span class="play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3 L21 12 L6 21 Z"/></svg></span>' +
+    '<span class="hint">TAP TO PLAY</span>';
+  again.addEventListener('click', () => {
+    rec.el.src = rec.src; again.remove(); rec.phone.classList.add('live');
+  });
+  rec.phone.classList.remove('live');
+  rec.screen.appendChild(again);
 }
 
 /* ---------------- full screen, without the Fullscreen API ---------------- */
@@ -782,6 +813,11 @@ function unzoom(){
   const g = zoomed.querySelector('.grow');
   zoomed = null;
   if (g) g.focus();
+  /* The cabinet may be out of view now that the phone is back in flow. Chrome
+     does report that as a change, so this is belt and braces, but it keeps the
+     decision here rather than resting on a record arriving. Harmless either
+     way: sweep judges by the rectangle, and does nothing to a frame on screen. */
+  sweep();
 }
 shrinkBtn.addEventListener('click', unzoom);
 addEventListener('keydown', e => { if (e.key === 'Escape') unzoom(); });
