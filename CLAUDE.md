@@ -145,10 +145,38 @@ as a finding.
 
 ## Working style
 
-Investigate before patching when asked to. A diagnosis that rules out three
+**Commit directly to `main`.** Do not push a branch and do not open a pull
+request unless explicitly asked. `main` deploys to snap-hit.online
+automatically, so whatever you commit is public within about a minute.
+
+**That makes verification the only safety net, so it is not optional.** There
+is no review step between your commit and the live site. Verify in a browser
+BEFORE you commit, not after. If you cannot verify a change, do not commit it:
+say what you would have done, say what you could not test, and stop.
+
+**One change per commit.** If a commit turns out to be wrong it has to be
+revertable on its own, from a phone, by someone who is not at a computer.
+
+**Never leave the site broken.** If a change is half finished at the end of a
+session, do not commit it. A working site with the bug still in it beats a
+broken site with the fix half applied.
+
+**The commit message is now the only record.** There is no pull request
+description to explain the reasoning. Say what changed, why, and what you
+measured. "Fix observer" is useless in six months; "Share one observer and
+judge frames by live rectangle, so a revived frame can unload again — verified
+unload #2 in headless Chromium" is not.
+
+**Investigate before patching when asked to.** A diagnosis that rules out three
 hypotheses is worth more than a fix for the wrong cause.
 
-Push a branch. Do not merge, and do not open a PR unless asked.
+**Stop and report if a requirement conflicts with something already in the
+code.** That has already saved this project once, when a brief asked for Escape
+to close the expanded view and both games were already using Escape to pause.
 
-Stop and report if a requirement turns out to conflict with something already
-in the code. That has already saved this project once.
+## If you break the live site
+
+Do not panic and do not start layering fixes on top. Revert the single commit
+that caused it, push, and confirm the site is back. Then work out what went
+wrong. A live site restored in one minute is worth more than a clever fix
+twenty minutes later.
