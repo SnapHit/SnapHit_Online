@@ -800,11 +800,16 @@ function park(rec){
 const shrinkBtn = document.getElementById('shrink');
 let zoomed = null;
 
+/* Focus is deliberately left where it is. Pulling it to the close button meant
+   a desktop player's arrow keys stopped reaching the game the moment they went
+   full screen, and Hurtle clears its steering state on blur, so a run died
+   mid-flight. The keyboard exit is Tab, which carries out of the frame and into
+   the parent, and Escape while the parent holds focus. Escape is not bound
+   inside the frame on purpose: both games already use it to pause. */
 function zoom(phone){
   zoomed = phone;
   phone.classList.add('big');
   document.body.classList.add('zoomed');
-  shrinkBtn.focus();
 }
 function unzoom(){
   if (!zoomed) return;
