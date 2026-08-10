@@ -256,7 +256,7 @@
   rather than a sentence, which keeps the page free of explanation:
 
      GAMES SHIPPED ........ 04
-     IN DEVELOPMENT ....... 01
+     IN DEVELOPMENT ....... 03
      ADS SERVED ........... 00
      SIGN-UPS REQUIRED .... 00
      INSTALL SIZE ....... 0 MB
