@@ -394,9 +394,33 @@
   }
   @media (max-width:599px){ .coin{display:none} }
 
-  /* The quieter of the two routes out: the same arcade button as the studio
-     card, centred under the machine. The marquee is the loud one. */
-  .cab .visit{display:flex;margin:13px auto 0;width:max-content}
+  /* The quieter of the two routes out: the studio card's arcade button,
+     centred under the machine. The marquee is the loud one, and this stays
+     below it: same 11px type, a fifth of the marquee's lit area.
+
+     position:relative IS LOAD BEARING and is the whole reason this read as
+     switched off. .cab-body is positioned, so its 0 40px 80px -30px
+     rgba(0,0,0,.95) drop shadow paints over anything in flow beneath it, and
+     the button sits 13px under that edge. Measured: a flat rgb(255,0,0) test
+     fill rendered rgb(172,12,13) there, a third of the brightness eaten by a
+     shadow nobody could see. Lifting it into the positioned layer is what
+     turns it on; the warmer fill below is the smaller half of the change.
+
+     The fill keeps #ff9424 across the face instead of falling away to
+     #a04d06, and the outer amber shadow puts it in the same light as the
+     marquee and the cabinet outline. Size is deliberately unchanged so the
+     cabinet still fits a 412x915 screen. */
+  .cab .visit{
+    position:relative;z-index:1;
+    display:flex;margin:13px auto 0;width:max-content;
+    background:radial-gradient(circle at 34% 26%,#ffd9a2,#ff9424 62%,#d06a0c);
+    color:#1c0c00;
+    box-shadow:0 0 0 1px rgba(255,214,150,.65),
+               0 0 18px -4px rgba(255,148,36,.6),
+               0 0 40px -16px rgba(255,148,36,.45),
+               inset 0 1px 0 rgba(255,255,255,.55);
+  }
+  .cab .visit:hover,.cab .visit:focus-visible{filter:brightness(1.06)}
 
   /* The studio. Its own mark across the top, the facts underneath, in the
      same materials as the machines. */
