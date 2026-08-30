@@ -663,6 +663,20 @@ const GAMES = [
 const rack = document.getElementById('rack');
 const frames = [];
 
+/* Hold a cabinet's card up until its frame has actually loaded, so a heavy game
+   is the card you just tapped rather than a black rectangle. The card is
+   absolutely positioned over the frame, and the "is there an iframe already"
+   guard makes a second tap a no-op while it is up. The timer is the last
+   resort: if load never arrives the card goes anyway, which is exactly the
+   behaviour this replaced, rather than leaving someone tapping a card that
+   cannot answer. Both the first tap and the tap that revives an unloaded
+   cabinet go through here, because both of them are a wait. */
+function holdUntilLoaded(f, card){
+  const drop = () => { clearTimeout(timer); card.remove(); };
+  const timer = setTimeout(drop, 20000);
+  f.addEventListener('load', drop, { once: true });
+}
+
 for (const g of GAMES){
   const cab = document.createElement('article');
   cab.className = 'cab';
@@ -718,7 +732,7 @@ for (const g of GAMES){
     f.setAttribute('scrolling', 'no');
     f.setAttribute('allow', 'accelerometer; gyroscope; fullscreen');
     screen.appendChild(f);
-    attract.remove();
+    holdUntilLoaded(f, attract);
     phone.classList.add('live');
     frames.push({ el: f, src: g.src, screen, phone, name: g.name });
     watch(f);
@@ -790,7 +804,9 @@ function park(rec){
     '<span class="play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3 L21 12 L6 21 Z"/></svg></span>' +
     '<span class="hint">TAP TO PLAY</span>';
   again.addEventListener('click', () => {
-    rec.el.src = rec.src; again.remove(); rec.phone.classList.add('live');
+    rec.el.src = rec.src;
+    holdUntilLoaded(rec.el, again);
+    rec.phone.classList.add('live');
   });
   rec.phone.classList.remove('live');
   rec.screen.appendChild(again);
