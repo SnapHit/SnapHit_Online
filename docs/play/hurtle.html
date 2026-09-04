@@ -16,8 +16,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Hurtle">
 <meta name="theme-color" content="#07050f">
-<link rel="icon" type="image/png" sizes="512x512" href="/icon.png">
-<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<!-- CABINET COPY: the two icon links were root relative (/icon.png and
+     /apple-touch-icon.png) and would resolve against snap-hit.online.
+     Dropped rather than copied in: a framed game is never asked for a
+     favicon. They are still on https://hurtle.site/. -->
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Hurtle">
@@ -117,7 +119,7 @@
 </svg></div>
 
 <div id="chrome">
-  <nav id="more"><a href="/slope-2">Slope 2</a><span>&middot;</span><a href="/slope-3">Slope 3</a><span>&middot;</span><a href="/slope-online">Slope online</a></nav>
+  <nav id="more"><a href="https://hurtle.site/slope-2">Slope 2</a><span>&middot;</span><a href="https://hurtle.site/slope-3">Slope 3</a><span>&middot;</span><a href="https://hurtle.site/slope-online">Slope online</a></nav>
   <div id="credit">by <a href="https://snap-hit.online" target="_blank" rel="noopener noreferrer">SnapHit Studios</a></div>
 </div>
 <script>
@@ -3752,7 +3754,26 @@ const MU = {
      routed into the same graph, so gain, muting and the fades all still apply.
      Deliberately NOT decodeAudioData: three minutes of PCM is tens of megabytes
      and the device this is built for is a five year old Chromebook. --- */
-  REC_ON: true,
+  /* CABINET COPY: THE RECORDED MUSIC IS DELIBERATELY OFF.
+
+     This is the snap-hit.online copy of the game that lives at
+     hurtle.site. The five tracks are 14.95 MB and are NOT in this
+     repository. REC_PATH below is root relative, so from here it resolves
+     to snap-hit.online/music/ and 404s, and pointing it at hurtle.site
+     would be an external request, which this site does not make.
+
+     With this false nothing is ever fetched: musPrefetch and musPlay both
+     return before musBuild, so no Audio element is created and no src is
+     set. musProcOn() is `!MU.REC_ON || musProcActive`, so it becomes
+     unconditionally true and the synth plays throughout, which is what a
+     player with no recorded tracks already heard.
+
+     THE REAL SOUNDTRACK IS AT https://hurtle.site/ and this cabinet links
+     there from its marquee, its button and its full screen view.
+
+     TO RESTORE IT when re-copying: set this back to true and put the five
+     files where REC_PATH points. */
+  REC_ON: false,
   REC_N: 5,               // files on disk, track-1 to track-5
   REC_PATH: '/music/track-',
   REC_EXT: '.m4a',
