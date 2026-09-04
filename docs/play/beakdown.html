@@ -7,10 +7,11 @@
 <meta name="theme-color" content="#150e1c">
 <title>BEAKDOWN</title>
 <script>if(window.self!==window.top)document.documentElement.className='framed';</script>
-<!-- Copy of Beakdown served same-origin so it frames cleanly. The canonical
-     below is what stops it competing with beakdown.fun in search. -->
 <link rel="canonical" href="https://beakdown.fun/">
 <meta name="description" content="Fly, flap and land on your enemies. The higher bird always wins.">
+
+<link rel="icon" type="image/png" href="/icon.png">
+<link rel="apple-touch-icon" href="/icon.png">
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="BEAKDOWN">
@@ -26,9 +27,9 @@
 
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
- {"@type":"Organization","@id":"https://beakdown.fun/#org","name":"Beakdown",
-  "url":"https://beakdown.fun/","logo":"https://beakdown.fun/icon.png",
-  "sameAs":["https://nathanhaslewood.com.au"]},
+ {"@type":"Organization","@id":"https://beakdown.fun/#org","name":"SnapHit Studios",
+  "url":"https://snap-hit.online/","logo":"https://beakdown.fun/icon.png",
+  "sameAs":["https://snap-hit.online/"]},
  {"@type":"VideoGame","@id":"https://beakdown.fun/#game","name":"Beakdown",
   "url":"https://beakdown.fun/","image":"https://beakdown.fun/og.png",
   "description":"A free browser arcade game where you fly by flapping and win every collision by being the higher bird.",
@@ -147,17 +148,60 @@ canvas{display:block;position:fixed;inset:0}
   font-size:15px;letter-spacing:.24em;font-weight:600;pointer-events:none;
   opacity:0;transition:opacity .2s;text-shadow:0 2px 10px #000}
 #flash.on{opacity:1}
+/* ----------------------------------------------------------------
+   THE BOOT SPLASH. The SnapHit lockup on the game's own void, over
+   everything, for about a second and a half, on a cold load only.
+
+   THE FIELD IS OPAQUE FROM THE FIRST PAINT and stays that way until the
+   splash leaves. It is in the markup, so the browser paints this before
+   the script has been parsed, which is what covers the load. Only the
+   lockup fades in; the container fades out at the end, taking the field
+   with it. Fading the container in as well would uncover the page while
+   the script was still parsing.
+
+   THE CHROME IS HIDDEN WHILE IT IS UP, and that is not cosmetic. #boot
+   is pointer-events:none so a tap meant to skip falls through to the
+   canvas, and the footer links sit directly in that path. Hiding them is
+   what stops a skip landing on a link. #msg needs no entry: it has no
+   z-index and no pointer events, so the field already covers it. */
+html.booting #chrome, html.booting #atog{display:none!important}
+#boot{position:fixed;top:0;right:0;bottom:0;left:0;z-index:9;pointer-events:none;
+  display:flex;align-items:center;justify-content:center;background:#150e1c;opacity:1}
+#boot[hidden]{display:none}
+/* The lockup ARRIVES, so it starts absent and the frame loop brings it in.
+   Until the first frame runs there is a plain dark field, which is the right
+   thing to be looking at while a page loads.
+   SIZED BY BOTH DIMENSIONS. The lockup is 1780 by 1263, landscape itself, so
+   a width alone gives a mark that runs off the top and bottom of a portrait
+   phone. 1780/1263 is 1.40935, so the height cap is expressed as a width. */
+#boot svg{display:block;opacity:0;width:82vw;height:auto;max-width:calc(62vh * 1.40935)}
 </style>
+<noscript><style>#boot{display:none}</style></noscript>
 </head>
 <body>
+<div id="boot" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1780 1263" aria-hidden="true" focusable="false">
+  <g transform="translate(666.43 90.00) scale(6.98667)"><g fill="none" stroke="#00e5ff" stroke-linecap="round" stroke-linejoin="round"><g opacity=".12" stroke-width="11"><ellipse cx="32" cy="46" rx="21" ry="7.5"/><path d="M32 43.5 V25"/><circle cx="32" cy="17" r="8.5"/></g><g opacity=".30" stroke-width="6"><ellipse cx="32" cy="46" rx="21" ry="7.5"/><path d="M32 43.5 V25"/><circle cx="32" cy="17" r="8.5"/></g><g stroke-width="2.2"><ellipse cx="32" cy="46" rx="21" ry="7.5"/><ellipse cx="32" cy="46" rx="11" ry="3.9" opacity=".55"/><path d="M32 43.5 V25"/><circle cx="32" cy="17" r="8.5"/></g></g></g>
+  <g transform="translate(90.00 608.40) scale(0.33410)">
+  <path d="M182 502H0Q2 571 38.5 620Q75 669 136 694Q197 719 274 719Q353 719 411 690Q469 661 499.5 612Q530 563 530 503Q530 440 499 400Q468 360 425.5 339Q383 318 315 295Q247 273 215 254Q183 235 183 201Q183 170 202 153.5Q221 137 252 137Q288 137 311 156.5Q334 176 336 210H521Q516 111 445 55.5Q374 0 258 0Q144 0 73 55.5Q2 111 2 209Q2 275 33 316Q64 357 107 378Q150 399 218 420Q265 434 290.5 445Q316 456 333.5 473Q351 490 351 516Q351 547 329 564.5Q307 582 269 582Q232 582 209 561.5Q186 541 182 502ZM1177 712H1348V10H1177V445L891 10H720V712H891V279L1177 712ZM1732 588H1994L2036 712H2217L1963 10H1765L1511 712H1690L1732 588ZM1863 199 1950 456H1777L1863 199ZM2550 460H2656Q2742 460 2800 429Q2858 398 2886 347.5Q2914 297 2914 236Q2914 170 2885 119Q2856 68 2798 39Q2740 10 2656 10H2379V712H2550V460ZM2716 171Q2740 194 2740 236Q2740 278 2716 301Q2692 324 2643 324H2550V148H2643Q2692 148 2716 171ZM3696 712V10H3525V285H3259V10H3088V712H3259V423H3525V712H3696ZM3904 10V712H4075V10ZM4789 147V10H4246V147H4432V712H4603V147H4789Z" fill="none" stroke="#ff9424" stroke-width="212" stroke-linejoin="round" stroke-linecap="round" opacity="0.070"/>
+  <path d="M182 502H0Q2 571 38.5 620Q75 669 136 694Q197 719 274 719Q353 719 411 690Q469 661 499.5 612Q530 563 530 503Q530 440 499 400Q468 360 425.5 339Q383 318 315 295Q247 273 215 254Q183 235 183 201Q183 170 202 153.5Q221 137 252 137Q288 137 311 156.5Q334 176 336 210H521Q516 111 445 55.5Q374 0 258 0Q144 0 73 55.5Q2 111 2 209Q2 275 33 316Q64 357 107 378Q150 399 218 420Q265 434 290.5 445Q316 456 333.5 473Q351 490 351 516Q351 547 329 564.5Q307 582 269 582Q232 582 209 561.5Q186 541 182 502ZM1177 712H1348V10H1177V445L891 10H720V712H891V279L1177 712ZM1732 588H1994L2036 712H2217L1963 10H1765L1511 712H1690L1732 588ZM1863 199 1950 456H1777L1863 199ZM2550 460H2656Q2742 460 2800 429Q2858 398 2886 347.5Q2914 297 2914 236Q2914 170 2885 119Q2856 68 2798 39Q2740 10 2656 10H2379V712H2550V460ZM2716 171Q2740 194 2740 236Q2740 278 2716 301Q2692 324 2643 324H2550V148H2643Q2692 148 2716 171ZM3696 712V10H3525V285H3259V10H3088V712H3259V423H3525V712H3696ZM3904 10V712H4075V10ZM4789 147V10H4246V147H4432V712H4603V147H4789Z" fill="none" stroke="#ff9424" stroke-width="148" stroke-linejoin="round" stroke-linecap="round" opacity="0.140"/>
+  <path d="M182 502H0Q2 571 38.5 620Q75 669 136 694Q197 719 274 719Q353 719 411 690Q469 661 499.5 612Q530 563 530 503Q530 440 499 400Q468 360 425.5 339Q383 318 315 295Q247 273 215 254Q183 235 183 201Q183 170 202 153.5Q221 137 252 137Q288 137 311 156.5Q334 176 336 210H521Q516 111 445 55.5Q374 0 258 0Q144 0 73 55.5Q2 111 2 209Q2 275 33 316Q64 357 107 378Q150 399 218 420Q265 434 290.5 445Q316 456 333.5 473Q351 490 351 516Q351 547 329 564.5Q307 582 269 582Q232 582 209 561.5Q186 541 182 502ZM1177 712H1348V10H1177V445L891 10H720V712H891V279L1177 712ZM1732 588H1994L2036 712H2217L1963 10H1765L1511 712H1690L1732 588ZM1863 199 1950 456H1777L1863 199ZM2550 460H2656Q2742 460 2800 429Q2858 398 2886 347.5Q2914 297 2914 236Q2914 170 2885 119Q2856 68 2798 39Q2740 10 2656 10H2379V712H2550V460ZM2716 171Q2740 194 2740 236Q2740 278 2716 301Q2692 324 2643 324H2550V148H2643Q2692 148 2716 171ZM3696 712V10H3525V285H3259V10H3088V712H3259V423H3525V712H3696ZM3904 10V712H4075V10ZM4789 147V10H4246V147H4432V712H4603V147H4789Z" fill="none" stroke="#ff9424" stroke-width="96" stroke-linejoin="round" stroke-linecap="round" opacity="0.300"/>
+  <path d="M182 502H0Q2 571 38.5 620Q75 669 136 694Q197 719 274 719Q353 719 411 690Q469 661 499.5 612Q530 563 530 503Q530 440 499 400Q468 360 425.5 339Q383 318 315 295Q247 273 215 254Q183 235 183 201Q183 170 202 153.5Q221 137 252 137Q288 137 311 156.5Q334 176 336 210H521Q516 111 445 55.5Q374 0 258 0Q144 0 73 55.5Q2 111 2 209Q2 275 33 316Q64 357 107 378Q150 399 218 420Q265 434 290.5 445Q316 456 333.5 473Q351 490 351 516Q351 547 329 564.5Q307 582 269 582Q232 582 209 561.5Q186 541 182 502ZM1177 712H1348V10H1177V445L891 10H720V712H891V279L1177 712ZM1732 588H1994L2036 712H2217L1963 10H1765L1511 712H1690L1732 588ZM1863 199 1950 456H1777L1863 199ZM2550 460H2656Q2742 460 2800 429Q2858 398 2886 347.5Q2914 297 2914 236Q2914 170 2885 119Q2856 68 2798 39Q2740 10 2656 10H2379V712H2550V460ZM2716 171Q2740 194 2740 236Q2740 278 2716 301Q2692 324 2643 324H2550V148H2643Q2692 148 2716 171ZM3696 712V10H3525V285H3259V10H3088V712H3259V423H3525V712H3696ZM3904 10V712H4075V10ZM4789 147V10H4246V147H4432V712H4603V147H4789Z" fill="#ffffff" stroke="#ff9424" stroke-width="62" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(554.00 931.82) scale(0.11871)">
+  <path d="M122 512H0Q0 572 32 617Q64 662 120 686.5Q176 711 246 711Q320 711 374.5 682.5Q429 654 457.5 607Q486 560 486 507Q486 441 455.5 401.5Q425 362 381.5 343Q338 324 269 305Q217 291 187 279Q157 267 137.5 246.5Q118 226 118 194Q118 147 149 122Q180 97 229 97Q283 97 316 124Q349 151 352 189H478Q471 101 406.5 50.5Q342 0 241 0Q170 0 116 24Q62 48 32 93Q2 138 2 198Q2 263 32 302Q62 341 104.5 359.5Q147 378 215 396Q269 410 299.5 422Q330 434 350.5 456Q371 478 371 513Q371 558 338 586.5Q305 615 246 615Q189 615 157.5 586Q126 557 122 512ZM1330 102V9H845V102H1031V704H1145V102H1330ZM1818 452V9H1704V450Q1704 535 1740 594Q1776 653 1837.5 682Q1899 711 1974 711Q2049 711 2111 682Q2173 653 2210 594Q2247 535 2247 450V9H2133V452Q2133 531 2091.5 571Q2050 611 1975 611Q1901 611 1859.5 571Q1818 531 1818 452ZM3205.5 543Q3251 465 3251 359Q3251 253 3205.5 173.5Q3160 94 3076.5 51.5Q2993 9 2882 9H2655V704H2882Q2993 704 3076.5 662.5Q3160 621 3205.5 543ZM3069 170Q3134 238 3134 359Q3134 479 3069 545Q3004 611 2882 611H2769V102H2882Q3004 102 3069 170ZM3624 9V704H3738V9ZM4157.5 172Q4110 253 4110 355Q4110 457 4157.5 538.5Q4205 620 4286.5 665.5Q4368 711 4465 711Q4563 711 4644.5 665.5Q4726 620 4773 538.5Q4820 457 4820 355Q4820 253 4773 172Q4726 91 4644.5 45.5Q4563 0 4465 0Q4368 0 4286.5 45.5Q4205 91 4157.5 172ZM4672.5 220Q4703 278 4703 355Q4703 432 4672.5 490.5Q4642 549 4588 580.5Q4534 612 4465 612Q4396 612 4342 580.5Q4288 549 4257.5 490.5Q4227 432 4227 355Q4227 278 4257.5 220Q4288 162 4342 131Q4396 100 4465 100Q4534 100 4588 131Q4642 162 4672.5 220ZM5297 512H5175Q5175 572 5207 617Q5239 662 5295 686.5Q5351 711 5421 711Q5495 711 5549.5 682.5Q5604 654 5632.5 607Q5661 560 5661 507Q5661 441 5630.5 401.5Q5600 362 5556.5 343Q5513 324 5444 305Q5392 291 5362 279Q5332 267 5312.5 246.5Q5293 226 5293 194Q5293 147 5324 122Q5355 97 5404 97Q5458 97 5491 124Q5524 151 5527 189H5653Q5646 101 5581.5 50.5Q5517 0 5416 0Q5345 0 5291 24Q5237 48 5207 93Q5177 138 5177 198Q5177 263 5207 302Q5237 341 5279.5 359.5Q5322 378 5390 396Q5444 410 5474.5 422Q5505 434 5525.5 456Q5546 478 5546 513Q5546 558 5513 586.5Q5480 615 5421 615Q5364 615 5332.5 586Q5301 557 5297 512Z" fill="#ffd9a2"/>
+  </g>
+  <g transform="translate(362.00 1104.22) scale(0.09604)">
+  <path d="M0 9V704H114V9ZM981 704H1095V8H981V526L638 8H524V704H638V185L981 704ZM1610 512H1488Q1488 572 1520 617Q1552 662 1608 686.5Q1664 711 1734 711Q1808 711 1862.5 682.5Q1917 654 1945.5 607Q1974 560 1974 507Q1974 441 1943.5 401.5Q1913 362 1869.5 343Q1826 324 1757 305Q1705 291 1675 279Q1645 267 1625.5 246.5Q1606 226 1606 194Q1606 147 1637 122Q1668 97 1717 97Q1771 97 1804 124Q1837 151 1840 189H1966Q1959 101 1894.5 50.5Q1830 0 1729 0Q1658 0 1604 24Q1550 48 1520 93Q1490 138 1490 198Q1490 263 1520 302Q1550 341 1592.5 359.5Q1635 378 1703 396Q1757 410 1787.5 422Q1818 434 1838.5 456Q1859 478 1859 513Q1859 558 1826 586.5Q1793 615 1734 615Q1677 615 1645.5 586Q1614 557 1610 512ZM2818 102V9H2333V102H2519V704H2633V102H2818ZM3321 562H3612L3662 704H3782L3533 8H3401L3152 704H3271L3321 562ZM3467 146 3580 469H3353L3467 146ZM4607 704H4721V8H4607V526L4264 8H4150V704H4264V185L4607 704ZM5580 102V9H5095V102H5281V704H5395V102H5580ZM5928 638Q5928 669 5949 690Q5970 711 6001 711Q6031 711 6052 690Q6073 669 6073 638Q6073 607 6052 586Q6031 565 6001 565Q5970 565 5949 586Q5928 607 5928 638ZM7610 422H7736Q7822 422 7877 392.5Q7932 363 7957 316Q7982 269 7982 216Q7982 158 7954.5 111Q7927 64 7871.5 36.5Q7816 9 7736 9H7496V704H7610V422ZM7736 102Q7865 102 7865 216Q7865 270 7833 299.5Q7801 329 7736 329H7610V102H7736ZM8700 612H8465V9H8351V704H8700V612ZM9183 562H9474L9524 704H9644L9395 8H9263L9014 704H9133L9183 562ZM9329 146 9442 469H9215L9329 146ZM10297 452 10527 9H10401L10240 350L10079 9H9952L10183 452V704H10297V452ZM10850 638Q10850 669 10871 690Q10892 711 10923 711Q10953 711 10974 690Q10995 669 10995 638Q10995 607 10974 586Q10953 565 10923 565Q10892 565 10871 586Q10850 607 10850 638Z" fill="#ff9424"/>
+  </g>
+</svg></div>
 <canvas id="cv"></canvas>
 <div id="hud"><span>SCORE <b id="hS">0</b></span><span id="hR"></span></div>
 <div id="flash"></div>
 <div id="atog"><button id="tPau" type="button" aria-label="Pause"><svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg></button><div class="grp"><button id="tSfx" type="button" aria-label="Sound effects"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path class="wv" d="M16.5 8.5a5 5 0 0 1 0 7"/><path class="sl" d="M3 3l18 18"/></svg></button><button id="tMus" type="button" aria-label="Music"><svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/><path class="sl" d="M3 3l18 18"/></svg></button></div></div>
 <div id="pause"><h2>PAUSED</h2><button class="go" id="pGo" type="button"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8V4z"/></svg><span>Resume</span></button><div class="row"><button id="pSfx" type="button"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path class="wv" d="M16.5 8.5a5 5 0 0 1 0 7"/><path class="sl" d="M3 3l18 18"/></svg><span>Sound</span></button><button id="pMus" type="button"><svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/><path class="sl" d="M3 3l18 18"/></svg><span>Music</span></button></div></div>
 <div id="chrome">
-  <nav id="more"><a href="https://beakdown.fun/flappy-bird-online">Flappy Bird unblocked</a><span>&middot;</span><a href="https://beakdown.fun/flappy-bird-2">Flappy Bird 2</a><span>&middot;</span><a href="https://beakdown.fun/what-happened-to-flappy-bird">What happened to Flappy Bird</a><span>&middot;</span><a href="https://beakdown.fun/about-beakdown">About Beakdown</a></nav>
-  <div id="credit">by <a href="https://nathanhaslewood.com.au" target="_blank" rel="noopener noreferrer">Nathan Haslewood</a></div>
+  <nav id="more"><a href="/flappy-bird-online">Flappy Bird unblocked</a><span>&middot;</span><a href="/flappy-bird-2">Flappy Bird 2</a><span>&middot;</span><a href="/what-happened-to-flappy-bird">What happened to Flappy Bird</a><span>&middot;</span><a href="/about-beakdown">About Beakdown</a></nav>
+  <div id="credit">by <a href="https://snap-hit.online/" target="_blank" rel="noopener noreferrer">SnapHit Studios</a></div>
 </div>
 <div id="msg">
   <h1>BEAKDOWN</h1>
@@ -199,7 +243,7 @@ if(!CanvasRenderingContext2D.prototype.roundRect){
 // embedded copies live on pages aimed at school hardware and unexpected noise in a
 // classroom closes the tab. An explicit choice by the player always wins over both.
 const FRAMED = (function(){ try{ return window.self!==window.top; }catch(e){ return true; } })();
-let sfxOn=!FRAMED, musOn=!FRAMED, actx=null, master=null, sfxBus=null, musBus=null,
+let sfxOn=!FRAMED, musOn=!FRAMED, actx=null, master=null, sfxBus=null, musBus=null, arpBus=null,
     revBus=null, noiseBuf=null;
 try{
   const a=localStorage.getItem('beakdown_sfx'); if(a!==null) sfxOn=(a==='1');
@@ -230,7 +274,16 @@ function audioInit(){
     master.connect(shaper); shaper.connect(actx.destination);
 
     sfxBus=actx.createGain(); sfxBus.gain.value=0.75; sfxBus.connect(master);
-    musBus=actx.createGain(); musBus.gain.value=0.0;  musBus.connect(master);
+    /* musBus NOW BELONGS TO THE RECORDED TRACKS. It used to be the
+       procedural arpeggio's own volume control, ramped up and down by
+       MUS.start, MUS.stop and the star, which meant anything else routed
+       through it was multiplied by whatever the arp had last set. The
+       tracks do their own fading in per side gains, so this is a plain
+       open bus and nothing writes to it per frame. */
+    musBus=actx.createGain(); musBus.gain.value=1.0;  musBus.connect(master);
+    /* And the arp got its own, so the star theme still works and no
+       longer fights the crossfade for the same gain node. */
+    arpBus=actx.createGain(); arpBus.gain.value=0.0;  arpBus.connect(master);
 
     // plate reverb from a generated impulse. this is what gives depth.
     const conv=actx.createConvolver();
@@ -253,6 +306,7 @@ function audioInit(){
     noiseBuf=actx.createBuffer(1,nl,actx.sampleRate);
     const nd=noiseBuf.getChannelData(0);
     for(let i=0;i<nl;i++) nd[i]=Math.random()*2-1;
+    tuneWire();
   }catch(e){ actx=null; }
 }
 function audioWake(){ if(actx&&actx.state==='suspended') actx.resume(); }
@@ -412,22 +466,26 @@ const MUS={
   bpm:100, baseBpm:100, starBpm:152, step:0, sstep:0, next:0,
   timer:null, running:false, starMode:false,
 
-  enterStar(){ this.starMode=true; this.bpm=this.starBpm; this.sstep=0;
-    if(actx&&musBus){ musBus.gain.cancelScheduledValues(actx.currentTime);
-      musBus.gain.setValueAtTime(musBus.gain.value||0.0001,actx.currentTime);
-      musBus.gain.exponentialRampToValueAtTime(0.42,actx.currentTime+0.12); } },
-  exitStar(){ this.starMode=false; this.bpm=this.baseBpm;
-    if(actx&&musBus){ musBus.gain.cancelScheduledValues(actx.currentTime);
-      musBus.gain.setValueAtTime(musBus.gain.value||0.0001,actx.currentTime);
-      musBus.gain.exponentialRampToValueAtTime(0.32,actx.currentTime+0.6); } },
+  /* THE ARP IS NOW THE STAR THEME AND NOTHING ELSE. The base loop it used
+     to play under everything has been replaced by the recorded playlist, so
+     the interval only runs while the star is up. Start it here rather than
+     leaving it ticking silently for a whole session. */
+  enterStar(){ this.starMode=true; this.bpm=this.starBpm; this.sstep=0; this.start();
+    if(actx&&arpBus){ arpBus.gain.cancelScheduledValues(actx.currentTime);
+      arpBus.gain.setValueAtTime(arpBus.gain.value||0.0001,actx.currentTime);
+      arpBus.gain.exponentialRampToValueAtTime(0.42,actx.currentTime+0.12); } },
+  exitStar(){ this.starMode=false; this.bpm=this.baseBpm; this.stop();
+    if(actx&&arpBus){ arpBus.gain.cancelScheduledValues(actx.currentTime);
+      arpBus.gain.setValueAtTime(arpBus.gain.value||0.0001,actx.currentTime);
+      arpBus.gain.exponentialRampToValueAtTime(0.32,actx.currentTime+0.6); } },
 
 
   start(){
     if(this.running||!actx||!musOn)return;
     this.running=true; this.step=0; this.next=actx.currentTime+0.08;
-    musBus.gain.cancelScheduledValues(actx.currentTime);
-    musBus.gain.setValueAtTime(0.0001,actx.currentTime);
-    musBus.gain.exponentialRampToValueAtTime(0.32,actx.currentTime+1.6);
+    arpBus.gain.cancelScheduledValues(actx.currentTime);
+    arpBus.gain.setValueAtTime(0.0001,actx.currentTime);
+    arpBus.gain.exponentialRampToValueAtTime(0.32,actx.currentTime+1.6);
     const self=this;
     this.timer=setInterval(function(){ self.tick(); },25);
   },
@@ -435,10 +493,10 @@ const MUS={
     if(!this.running)return;
     this.running=false;
     clearInterval(this.timer); this.timer=null;
-    if(actx&&musBus){
-      musBus.gain.cancelScheduledValues(actx.currentTime);
-      musBus.gain.setValueAtTime(musBus.gain.value||0.0001,actx.currentTime);
-      musBus.gain.exponentialRampToValueAtTime(0.0001,actx.currentTime+0.5);
+    if(actx&&arpBus){
+      arpBus.gain.cancelScheduledValues(actx.currentTime);
+      arpBus.gain.setValueAtTime(arpBus.gain.value||0.0001,actx.currentTime);
+      arpBus.gain.exponentialRampToValueAtTime(0.0001,actx.currentTime+0.5);
     }
   },
   tick(){
@@ -454,7 +512,7 @@ const MUS={
     if(this.starMode){ this.playStar(t); return; }
     const bar=Math.floor(st/16), s=st%16, ch=this.chords[bar%4];
     const cyc=Math.floor(bar/4);        // 0..3, used for gentle variation
-    const B={bus:musBus,t:t};
+    const B={bus:arpBus,t:t};
 
     // pad, once a bar, long and soft
     if(s===0){
@@ -489,7 +547,7 @@ const MUS={
   },
   // two bars at 152, so it cycles roughly every three seconds
   playStar(t){
-    const s=this.sstep%16, B={bus:musBus,t:t};
+    const s=this.sstep%16, B={bus:arpBus,t:t};
     const n=this.starRiff[(this.sstep/1)%8|0];
     // the riff runs on eighths
     if(s%2===0){
@@ -507,6 +565,288 @@ const MUS={
     this.sstep++;
   }
 };
+
+/* ---- THE PLAYLIST -------------------------------------------------
+   Five recorded tracks, played in the order TUNE_ORDER gives, wrapping
+   from the last back to the first and running for as long as the page is
+   open. There is no picker on purpose: the order IS the set.
+
+   STREAMED, NOT DECODED. decodeAudioData on a three minute track is tens
+   of megabytes of PCM held resident, and the target device is a five year
+   old Celeron Chromebook. An HTMLAudioElement streams it instead, and
+   createMediaElementSource puts it back inside the existing graph so the
+   master, the waveshaper and the mute all still apply to it.
+
+   SAME ORIGIN. music/ is relative, so it is the same kind of request that
+   fetched the page, which is why it is not the class of thing the zero
+   off origin rule forbids. */
+/* THE ORDER, AND WHY IT IS A LIST RATHER THAN ARITHMETIC.
+
+   This was tuneWrap(i)+1, so position n always played track-n.m4a and the
+   only way to reorder was to rename files. That is not safe any more:
+   public/_headers serves /music/* as immutable for a year, so a renamed
+   file is a NEW URL while the old name sits in every existing visitor's
+   cache. Reordering by rename would leave anyone who has already visited
+   on the old sequence until that cache expires, which could be months.
+
+   So the mapping from POSITION to FILE lives here instead. Everything else
+   in this file counts in positions; these numbers are the files on disk,
+   and those never move. To reorder, edit this line and nothing else. */
+const TUNE_ORDER=[2,1,3,4,5];
+const TUNE_COUNT=TUNE_ORDER.length;
+const TUNE_GAIN=1.58;            // the masters sit about 4 dB under a streaming level
+const TUNE_FADE_IN=2.00;         // seconds, the first track arriving
+const TUNE_CROSSFADE=2.40;       // seconds the outgoing and incoming overlap
+const TUNE_TAIL=6.00;            // seconds before the end that the next one starts
+const TUNE_RETRY_PLAY=2.5;       // seconds between re asking a refused play()
+const TUNE_RETRY_AFTER=4.0;      // seconds before a failed fetch is tried again
+const TUNE_RETRIES=4;            // and how many times, backing off each time
+const TUNE_NO_SOURCE_HOLD=2.0;   // seconds networkState 3 must PERSIST to be believed
+const NET_NO_SOURCE=3;           // HTMLMediaElement.NETWORK_NO_SOURCE
+
+/* TWO ELEMENTS, NOT ONE, because a crossfade needs both tracks audible at
+   once and an element can only be in one place at a time. A
+   MediaElementAudioSourceNode may be created once per element ever, so the
+   pair is built with the rest of the graph and nothing is ever rebuilt. */
+const tune={
+  el:[null,null], src:[null,null], g:[null,null],
+  held:[-1,-1],              // which track index each side is holding
+  live:0, index:-1,
+  lvl:[0,0], want:[0,0], rate:[1,1],
+  woke:false, wired:false, wanted:false, playing:false, begun:false,
+  failed:false, tries:0, retryIn:0,
+  waited:0, frozen:0, noSrc:0, lastTime:-1
+};
+
+function tuneWrap(i){ return ((i%TUNE_COUNT)+TUNE_COUNT)%TUNE_COUNT; }
+function tuneFile(i){ return 'music/track-'+TUNE_ORDER[tuneWrap(i)]+'.m4a'; }
+
+/* THE ELEMENTS, AND THE PREFETCH. Called from the frame loop once the
+   splash has actually been painted, never before: nothing is fetched until
+   the player is looking at something.
+
+   Setting src here and letting it buffer through the splash and the title
+   screen is the whole reason the first note is not eight seconds late. It
+   does NOT call play() and it does NOT touch the AudioContext, because
+   neither is allowed before a gesture and neither is needed to download. */
+function tuneWake(){
+  if(tune.woke)return;
+  tune.woke=true;
+  try{
+    for(let i=0;i<2;i++){
+      const el=document.createElement('audio');
+      el.preload='auto'; el.crossOrigin=null; el.loop=false;
+      /* An error event is the one unambiguous failure: the browser has
+         looked and there is nothing there. Everything else waits. */
+      el.addEventListener('error',function(){ tuneFailed('error'); });
+      tune.el[i]=el;
+    }
+    tuneLoad(0,0);
+  }catch(e){ tune.el[0]=tune.el[1]=null; }
+}
+
+/* Into the graph, once there is a graph. NOT gated on tune.failed: wiring
+   is plumbing, and refusing to build it because the first fetch failed
+   would mean no later retry could ever make a sound. */
+function tuneWire(){
+  if(tune.wired||!actx||!musBus)return;
+  tuneWake();
+  if(!tune.el[0])return;
+  try{
+    for(let i=0;i<2;i++){
+      const src=actx.createMediaElementSource(tune.el[i]);
+      const g=actx.createGain(); g.gain.value=0;
+      src.connect(g); g.connect(musBus);
+      tune.src[i]=src; tune.g[i]=g;
+    }
+    tune.wired=true;
+  }catch(e){ /* leave it unwired; nothing else depends on it existing */ }
+}
+
+// Give one side a track and let it buffer. Never more than the one playing
+// and the one being crossfaded into, which is what two sides enforces.
+function tuneLoad(side,index){
+  const el=tune.el[side];
+  if(!el)return;
+  index=tuneWrap(index);
+  if(tune.held[side]===index)return;
+  tune.held[side]=index;
+  try{ el.src=tuneFile(index); el.load(); }catch(e){}
+}
+
+/* A FAILURE IS RARE AND RECOVERABLE. A blocked network is a fact about a
+   moment, not about a session, so each attempt backs off and tries again
+   rather than handing the rest of the session to silence. */
+function tuneFailed(reason){
+  if(tune.failed)return;
+  tune.failed=true;
+  tune.playing=false;
+  tune.begun=false;
+  tune.retryIn=TUNE_RETRY_AFTER*Math.pow(2,tune.tries);
+  for(let i=0;i<2;i++){ const el=tune.el[i]; if(el){ try{ el.pause(); }catch(e){} } }
+}
+
+function tuneRevive(){
+  if(!tune.failed||!musOn)return false;
+  if(tune.tries>=TUNE_RETRIES)return false;
+  if(tune.retryIn>0)return false;
+  tune.tries++;
+  tune.failed=false; tune.begun=false;
+  tune.waited=0; tune.frozen=0; tune.noSrc=0; tune.lastTime=-1;
+  /* The held state is thrown away so the reload is a real one: an element
+     that errored keeps its error and will not try the same src again. */
+  tune.held[0]=tune.held[1]=-1;
+  /* THE NEXT TRACK, NOT THE SAME ONE, and this was wrong first time. A file
+     that 404s or arrives truncated will do it again, so retrying it spent
+     the whole budget on the one thing that could not work and the music
+     never came back. There are five tracks: the set survives losing one,
+     and moving on IS the recovery. A real outage still backs off, because
+     every track fails in turn and the counter keeps climbing.
+
+     AND IT RESTARTS PLAYBACK. Reloading alone left tune.playing false,
+     which is what tuneFailed set it to, so tuneUpdate returned early
+     for ever and the revive looked like it worked while staying silent. */
+  tunePlay(tune.index<0?0:tuneWrap(tune.index+1), TUNE_FADE_IN);
+  return true;
+}
+
+function tunePoke(el){
+  if(!el)return;
+  try{ const q=el.play(); if(q&&q.catch) q.catch(function(){}); }catch(e){}
+}
+
+function tunePlay(index,fade){
+  index=tuneWrap(index);
+  // Prefer whichever side already holds it, which is the prefetched one.
+  const side = tune.held[tune.live]===index ? tune.live : 1-tune.live;
+  tuneLoad(side,index);
+  const el=tune.el[side];
+  if(!el)return;
+  /* THE STATE IS COMMITTED BEFORE play() IS ASKED FOR. If it were the other
+     way round an element that threw would leave the player marked not
+     playing with no side selected and nothing would ever ask again. */
+  tune.live=side; tune.index=index;
+  tune.playing=true; tune.begun=false;
+  tune.waited=0; tune.frozen=0; tune.noSrc=0; tune.lastTime=-1;
+  tunePoke(el);
+  const per=1/Math.max(0.05,fade);
+  tune.want[side]=1;     tune.rate[side]=per;
+  tune.want[1-side]=0;   tune.rate[1-side]=per;
+}
+
+/* The run is what starts the music, so the first note lands with the first
+   flap rather than over a title screen somebody is reading. Nothing waits
+   on it: if the track has not buffered the run is already under way and the
+   music joins when it arrives. */
+function tuneStart(){
+  tuneWake();
+  tuneWire();
+  tune.wanted=true;
+  if(tune.failed) tuneRevive();
+  if(!musOn||!tune.wired)return;
+  if(tune.playing){ tunePoke(tune.el[tune.live]); return; }
+  tunePlay(tune.index<0?0:tune.index, TUNE_FADE_IN);
+}
+
+function tuneSuspend(){
+  tune.wanted=false;
+  for(let i=0;i<2;i++){ const el=tune.el[i]; if(el){ try{ el.pause(); }catch(e){} } }
+}
+function tuneResume(){
+  if(!musOn||!tune.playing)return;
+  tune.wanted=true;
+  tunePoke(tune.el[tune.live]);
+}
+function tuneStop(){
+  tuneSuspend();
+  tune.playing=false;
+  tune.want[0]=tune.want[1]=0; tune.rate[0]=tune.rate[1]=1/0.3;
+}
+
+function tuneUpdate(dt){
+  if(tune.retryIn>0) tune.retryIn=Math.max(0,tune.retryIn-dt);
+  /* THE ENVELOPE, ON FRAME TIME. Linear and rate limited rather than a
+     follow, because a fade in is a promise about how long it takes and an
+     exponential tail does not keep it. */
+  for(let i=0;i<2;i++){
+    const d=tune.want[i]-tune.lvl[i], step=tune.rate[i]*dt;
+    tune.lvl[i]=Math.abs(d)<=step?tune.want[i]:tune.lvl[i]+Math.sign(d)*step;
+    if(tune.g[i]) tune.g[i].gain.value=TUNE_GAIN*tune.lvl[i];
+  }
+  if(tune.failed){ tuneRevive(); return; }
+  if(!tune.wired||!tune.playing)return;
+  const el=tune.el[tune.live];
+  if(!el)return;
+
+  /* TRAP 1, SECOND DISGUISE. networkState reads NO_SOURCE for a moment
+     after src is set and before resource selection has run, so believing it
+     immediately kills a healthy track milliseconds in. It has to PERSIST
+     before it counts as the browser saying there is nothing there. */
+  if(el.networkState===NET_NO_SOURCE){
+    tune.noSrc+=dt;
+    if(tune.noSrc>TUNE_NO_SOURCE_HOLD){ tuneFailed('no source'); return; }
+  } else tune.noSrc=0;
+
+  const moved=el.currentTime!==tune.lastTime;
+  if(moved) tune.lastTime=el.currentTime;
+  /* A track that is actually sounding clears the retry budget, so a hiccup
+     costs one attempt rather than permanently spending the allowance. */
+  if(el.currentTime>0){ if(!tune.begun) tune.tries=0; tune.begun=true; }
+
+  /* TRAP 2. A refused play() is not a failure and must not be final.
+     Catching the rejection and doing nothing leaves the element paused for
+     ever with nothing asking again, which is the "music only starts if I
+     toggle mute" bug. One throttled condition covers a slow context resume,
+     a refused first play and a device that wanted a second gesture, without
+     having to tell them apart. */
+  if(tune.wanted&&el.paused&&actx&&actx.state==='running'){
+    tune.waited+=dt;
+    if(tune.waited>TUNE_RETRY_PLAY){ tune.waited=0; tunePoke(el); }
+  } else if(!tune.begun){
+    /* TRAP 1, FIRST DISGUISE. STILL ARRIVING, AND THAT IS ALL IT IS. A
+       track that is downloading also has a currentTime that is not
+       advancing, so no clock runs out here and nothing is given up on. It
+       can take as long as it likes; the run is under way and the music
+       joins when it can. */
+    tune.waited+=dt;
+    if(tune.waited>TUNE_RETRY_PLAY){ tune.waited=0; tunePoke(el); }
+    return;
+  } else tune.waited=0;
+
+  if(!tune.begun)return;
+
+  /* A FREEZE AFTER PLAYBACK BEGAN is a rebuffer, and it waits too. The
+     track is demonstrably real, so going quiet for a moment is never a
+     reason to abandon it. */
+  if(!moved&&!el.paused){
+    tune.frozen+=dt;
+    if(tune.frozen>TUNE_RETRY_PLAY){ tune.frozen=0; tunePoke(el); }
+  } else tune.frozen=0;
+
+  /* THE NEXT ONE BUFFERS ON THE IDLE SIDE, but only once that side has
+     finished fading out, because loading a new src into it would cut off a
+     crossfade still in progress. Two in flight at most, ever. */
+  const idle=1-tune.live;
+  if(tune.lvl[idle]<=0){
+    const nxt=tuneWrap(tune.index+1);
+    if(tune.held[idle]!==nxt){
+      const other=tune.el[idle];
+      if(other){ try{ other.pause(); }catch(e){} }
+      tuneLoad(idle,nxt);
+    }
+  }
+
+  /* THE CROSSFADE, started TUNE_TAIL before the end so the two genuinely
+     overlap. duration minus currentTime is the mechanism; ended is only the
+     fallback for a file whose duration never became known. */
+  const dur=el.duration;
+  if(dur&&isFinite(dur)&&el.currentTime>0&&dur-el.currentTime<=TUNE_TAIL){
+    tunePlay(tune.index+1,TUNE_CROSSFADE);
+  } else if(el.ended){
+    tunePlay(tune.index+1,TUNE_CROSSFADE);
+  }
+}
+
 function spbLen(){ return 60/MUS.bpm*4*0.95; }
 
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
@@ -524,8 +864,8 @@ function setPaused(p){
   paused=p;
   pauseEl.classList.toggle('show',p);
   atog.style.display = p ? 'none' : 'flex';
-  if(p){ MUS.stop(); }
-  else if(musOn&&actx){ audioWake(); MUS.start(); }
+  if(p){ MUS.stop(); tuneSuspend(); }
+  else if(musOn&&actx){ audioWake(); if(MUS.starMode)MUS.start(); tuneResume(); }
 }
 function paintAudioUI(){
   [[bSfx,sfxOn],[tSfx,sfxOn],[pSfx,sfxOn],
@@ -544,13 +884,33 @@ function toggleSfx(e){
 }
 // silence when the tab is hidden, resume when it comes back
 document.addEventListener('visibilitychange',function(){
-  if(document.hidden){ MUS.stop(); if(state==='play') setPaused(true); }
-  else if(musOn&&actx&&!paused){ audioWake(); MUS.start(); }
+  if(document.hidden){ MUS.stop(); tuneSuspend(); if(state==='play') setPaused(true); }
+  else if(musOn&&actx&&!paused){ audioWake(); if(MUS.starMode)MUS.start(); tuneResume(); }
+});
+
+/* THE PARENT MAY PAUSE US, and this is what stops a scroll costing a run. The
+   four content pages frame this game in an arcade cabinet, and when the reader
+   scrolls the cabinet out of view the cabinet asks the game to pause instead of
+   throwing the iframe away. The run, the score and the music all survive.
+
+   SAME ORIGIN ONLY. e.origin is compared against our own, so a page on another
+   host that framed us cannot drive the game. Everything else is ignored in
+   silence: this is a courtesy channel rather than an API, nobody has to speak
+   on it, and setPaused already refuses anything that is not a run in progress. */
+window.addEventListener('message',function(e){
+  if(e.origin!==location.origin)return;
+  const d=e.data;
+  const cmd=(d&&typeof d==='object')?d.beakdown:(typeof d==='string'?d:null);
+  if(cmd==='pause') setPaused(true);
+  else if(cmd==='resume') setPaused(false);
 });
 function toggleMus(e){
   if(e){e.preventDefault();e.stopPropagation();}
   musOn=!musOn; saveAudio(); paintAudioUI();
-  if(musOn){ audioInit(); audioWake(); MUS.start(); } else { MUS.stop(); }
+  /* The toggle is not what should be starting music for the first time,
+     but it must be able to: somebody who muted before their first run and
+     then unmuted mid run expects sound. tuneStart is idempotent. */
+  if(musOn){ audioInit(); audioWake(); tuneStart(); } else { MUS.stop(); tuneStop(); }
 }
 [bSfx,tSfx,pSfx].forEach(function(b){ if(b) b.addEventListener('pointerdown',toggleSfx); });
 [bMus,tMus,pMus].forEach(function(b){ if(b) b.addEventListener('pointerdown',toggleMus); });
@@ -580,6 +940,75 @@ function resize(){
   layout(); makeStars();
 }
 window.addEventListener('resize',resize);
+
+/* ---- THE BOOT SPLASH ---------------------------------------------
+   Three phases: the lockup arrives, holds, then the whole field leaves.
+
+   These are NOT feel constants and are deliberately not in that block.
+   FEEL is the ten numbers that decide how flying feels, it is hashed
+   against .feel-lock, and how long a publisher lockup sits on screen is
+   not one of them. */
+const BOOT_FADE_IN=0.18, BOOT_HOLD=1.00, BOOT_FADE_OUT=0.28;
+
+const bootEl=document.getElementById('boot');
+const bootMark=bootEl?bootEl.querySelector('svg'):null;
+
+/* The three phases added up, in the one place they are ever added up. */
+function bootTotal(){
+  return Math.max(0,BOOT_FADE_IN)+Math.max(0,BOOT_HOLD)+Math.max(0,BOOT_FADE_OUT);
+}
+
+/* THE ONLY ASSIGNMENT THAT STARTS IT, and it happens once, at load.
+   Nothing else in this file sets bootFlash to anything but zero, so no
+   run, restart, unpause or wave can bring the splash back. A splash
+   between attempts is exactly the thing that breaks the one more go
+   loop, and restart here is instant on the same input. */
+let bootFlash=bootTotal();
+let bootShown=true;
+let bootChromeHidden=true;
+let bootPainted=false;
+
+function skipBoot(){ bootFlash=0; endBootChrome(); }
+
+/* The chrome comes back EXACTLY ONCE, whichever way the splash ended,
+   skipped or expired. */
+function endBootChrome(){
+  if(!bootChromeHidden)return;
+  bootChromeHidden=false;
+  try{ document.documentElement.classList.remove('booting'); }catch(e){}
+  if(bootShown&&bootEl){ bootShown=false; bootEl.hidden=true; }
+  /* The chrome was display:none for the whole splash, so this is the
+     first moment it exists to be measured. Beakdown sizes its canvas off
+     the window rather than off the chrome, so this is insurance rather
+     than a correction, but it is cheap and it is the moment to take it. */
+  resize();
+}
+
+/* IN, HOLD, OUT read off the ONE countdown rather than a second clock, so
+   there is still exactly one number that can end the splash. The fade in
+   is measured from the start and the fade out from the end, so the hold
+   is simply whatever is between them. Both guard against a zero length
+   phase, because a fade of nothing should be a hard cut rather than a
+   division by nothing. */
+function bootMarkAlpha(){
+  const gone=bootTotal()-bootFlash;
+  if(!(BOOT_FADE_IN>0))return 1;
+  return Math.max(0,Math.min(1,gone/BOOT_FADE_IN));
+}
+function bootFieldAlpha(){
+  if(!(BOOT_FADE_OUT>0))return 1;
+  return Math.max(0,Math.min(1,bootFlash/BOOT_FADE_OUT));
+}
+function syncBoot(){
+  if(!bootEl)return;
+  if(bootFlash<=0){ if(bootShown){ bootShown=false; bootEl.hidden=true; } return; }
+  if(bootMark) bootMark.style.opacity=bootMarkAlpha();
+  bootEl.style.opacity=bootFieldAlpha();
+  bootPainted=true;
+}
+
+if(bootFlash>0){ try{ document.documentElement.classList.add('booting'); }catch(e){} }
+else bootChromeHidden=false;
 
 /* ---- FEEL. unchanged since the version that played well. tune only here. ---- */
 const G=1150, FLAP=340, MAXUP=430, MAXFALL=820,
@@ -792,8 +1221,12 @@ function drop(x,y,type,vx,vy){
 let hold=0, pressed=false;
 function press(e){
   e.preventDefault();
+  /* A tap during the splash is the skip, and it is SWALLOWED rather than
+     also starting a run, so dismissing the lockup cannot begin a game
+     nobody has looked at yet. */
+  if(bootFlash>0){ skipBoot(); return; }
   if(state==='title'||state==='over'){state='play';msg.classList.add('hide');showCredit(false);
-    if(sfxOn||musOn){audioInit();audioWake(); if(musOn)MUS.start();}
+    if(sfxOn||musOn){audioInit();audioWake(); if(musOn)tuneStart();}
     reset();return;}
   hold=aimFrom(e); pressed=true; flapNow();
 }
@@ -811,8 +1244,10 @@ cv.addEventListener('pointermove',function(e){
 cv.addEventListener('pointerup',release);
 cv.addEventListener('pointercancel',release);
 window.addEventListener('keydown',function(e){
+  // Swallowed for the same reason the tap is.
+  if(bootFlash>0){ skipBoot(); return; }
   if(state!=='play'){state='play';msg.classList.add('hide');showCredit(false);
-    if(sfxOn||musOn){audioInit();audioWake(); if(musOn)MUS.start();}
+    if(sfxOn||musOn){audioInit();audioWake(); if(musOn)tuneStart();}
     reset();return;}
   const kr=e.key||'', k=kr.length===1?kr.toLowerCase():kr;
   if(k==='Escape'||k==='p'){ setPaused(!paused); return; }
@@ -930,6 +1365,31 @@ function killPlayer(){
 let last=performance.now();
 function frame(now){
   const raw=(now-last)/1000; const dt=Math.min(0.033,raw); last=now;
+  /* THE SPLASH COUNTS IN WALL CLOCK, NOT IN CLAMPED FRAME TIME, and it used to
+     do the latter. dt is capped at 0.033 so that a stutter cannot teleport the
+     bird, and that cap has to stay for the physics. But spending it on the
+     splash measured the hold in FRAMES rather than in seconds: below about
+     30fps the countdown ran slow, and at 10fps a 1.46 second splash sat on
+     screen for roughly 4.4 seconds. The target device is a five year old
+     Celeron with integrated graphics, which is exactly where that fires.
+
+     raw is deliberately unclamped here. A backgrounded tab returning after a
+     long pause will find the splash already over, which is correct: the time
+     really did pass, and this is a cold load flourish rather than physics. */
+  if(bootFlash>0){ bootFlash-=raw; if(bootFlash<=0){ bootFlash=0; endBootChrome(); } }
+  syncBoot();
+  /* NOTHING IS FETCHED UNTIL THE SPLASH HAS ACTUALLY BEEN PAINTED, and
+     then the tracks buffer through the rest of it and the title screen,
+     which is the seconds that stop the first note being late.
+
+     AND NOTHING IS FETCHED AT ALL IF MUSIC IS OFF. That is not a detail
+     here: the game is embedded in an iframe on all four content pages,
+     framing defaults music to off, and without this gate every visitor to
+     those pages would pull 2.4MB of track nobody was ever going to hear.
+     Someone who turns music on later gets the fetch then, because
+     tuneStart wakes the elements itself. */
+  if(bootPainted&&musOn&&!tune.woke) tuneWake();
+  tuneUpdate(dt);
   if(fx&&state==='play'){
     frameAcc+=raw; frameN++;
     if(frameN>=30){
@@ -943,7 +1403,11 @@ function frame(now){
     else { clashViz=null; update(dt); }
   }
   shake=Math.max(0,shake-dt*38);
-  draw();
+  /* NOT DRAWN WHILE PAUSED. Nothing moves without update(), so every one of
+     those frames painted an identical image. The canvas keeps its last one, so
+     skipping the call looks the same and stops the game burning a phone behind
+     a pause overlay, or behind a reader who has scrolled it out of sight. */
+  if(!paused) draw();
   requestAnimationFrame(frame);
 }
 
@@ -1232,7 +1696,7 @@ function draw(){
     ctx.font='12px system-ui,-apple-system,sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='alphabetic';
     ctx.fillStyle='rgba(247,230,196,.18)';
-    ctx.fillText('by Nathan Haslewood', W/2, floorY+21);
+    ctx.fillText('by SnapHit Studios', W/2, floorY+21);
     ctx.textAlign='left';
   }
 

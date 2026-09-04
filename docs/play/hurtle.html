@@ -6,9 +6,6 @@
 <meta name="color-scheme" content="dark">
 <title>Hurtle: an endless descent you set the dials on</title>
 <meta name="description" content="An original browser arcade game. Roll down a narrowing track, dodge blocks, clear gaps. Ten sliders set steepness, width, obstacles, jumps, speed and camera. Free, no ads, no sign-in.">
-<!-- Copy of Hurtle served same-origin so the gyroscope works inside the iframe.
-     A cross-origin frame gets no orientation events at all. The canonical below
-     is what stops this copy competing with hurtle.site in search. -->
 <link rel="canonical" href="https://hurtle.site/">
 <meta name="robots" content="index,follow,max-snippet:-1">
 
@@ -19,6 +16,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Hurtle">
 <meta name="theme-color" content="#07050f">
+<link rel="icon" type="image/png" sizes="512x512" href="/icon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Hurtle">
@@ -36,9 +35,9 @@
 
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
- {"@type":"Organization","@id":"https://hurtle.site/#org","name":"Hurtle",
-  "url":"https://hurtle.site/","logo":"https://hurtle.site/icon.png",
-  "sameAs":["https://nathanhaslewood.com.au"]},
+ {"@type":"Organization","@id":"https://hurtle.site/#org","name":"SnapHit Studios",
+  "url":"https://snap-hit.online",
+  "sameAs":["https://snap-hit.online"]},
  {"@type":"VideoGame","@id":"https://hurtle.site/#game","name":"Hurtle",
   "url":"https://hurtle.site/","image":"https://hurtle.site/og.png",
   "description":"An original endless descent arcade game that runs in the browser, with steepness, path width, obstacles, jumps, floor tilt, speed, camera and colour set by the player on ten sliders.",
@@ -64,6 +63,21 @@
     -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
   }
   canvas{display:block;width:100%;height:100%;}
+  /* The publisher lockup over the load. The field is opaque from the first
+     paint and stays that way until the splash leaves, so what covers the script
+     parse and the first road build is markup rather than anything timed. Only
+     the lockup fades in, brought up by the frame loop, so a slow load shows a
+     plain dark field rather than half a logo. */
+  html.booting #chrome{display:none}
+  #boot{position:fixed;top:0;right:0;bottom:0;left:0;z-index:4;pointer-events:none;
+        display:flex;align-items:center;justify-content:center;background:#04070e;opacity:1}
+  #boot[hidden]{display:none}
+  #boot svg{display:block;opacity:0;width:82vw;height:auto;
+            max-width:calc(62vh * 1.40935)}   /* 1780/1263, the height cap as a width */
+  /* the canvas is what goes fullscreen, so it has to fill the fullscreen
+     viewport rather than the layout box it had a moment ago */
+  canvas:fullscreen{width:100%;height:100%;}
+  canvas:-webkit-full-screen{width:100%;height:100%;}
 
   /* Fixed, so it never enters layout flow and the canvas is never resized: the
      game is tuned against its own arena geometry. Hidden during play so it can
@@ -86,10 +100,25 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<div id="boot" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1780 1263" aria-hidden="true" focusable="false">
+  <g transform="translate(666.43 90.00) scale(6.98667)"><g fill="none" stroke="#00e5ff" stroke-linecap="round" stroke-linejoin="round"><g opacity=".12" stroke-width="11"><ellipse cx="32" cy="46" rx="21" ry="7.5"/><path d="M32 43.5 V25"/><circle cx="32" cy="17" r="8.5"/></g><g opacity=".30" stroke-width="6"><ellipse cx="32" cy="46" rx="21" ry="7.5"/><path d="M32 43.5 V25"/><circle cx="32" cy="17" r="8.5"/></g><g stroke-width="2.2"><ellipse cx="32" cy="46" rx="21" ry="7.5"/><ellipse cx="32" cy="46" rx="11" ry="3.9" opacity=".55"/><path d="M32 43.5 V25"/><circle cx="32" cy="17" r="8.5"/></g></g></g>
+  <g transform="translate(90.00 608.40) scale(0.33410)">
+  <path d="M182 502H0Q2 571 38.5 620Q75 669 136 694Q197 719 274 719Q353 719 411 690Q469 661 499.5 612Q530 563 530 503Q530 440 499 400Q468 360 425.5 339Q383 318 315 295Q247 273 215 254Q183 235 183 201Q183 170 202 153.5Q221 137 252 137Q288 137 311 156.5Q334 176 336 210H521Q516 111 445 55.5Q374 0 258 0Q144 0 73 55.5Q2 111 2 209Q2 275 33 316Q64 357 107 378Q150 399 218 420Q265 434 290.5 445Q316 456 333.5 473Q351 490 351 516Q351 547 329 564.5Q307 582 269 582Q232 582 209 561.5Q186 541 182 502ZM1177 712H1348V10H1177V445L891 10H720V712H891V279L1177 712ZM1732 588H1994L2036 712H2217L1963 10H1765L1511 712H1690L1732 588ZM1863 199 1950 456H1777L1863 199ZM2550 460H2656Q2742 460 2800 429Q2858 398 2886 347.5Q2914 297 2914 236Q2914 170 2885 119Q2856 68 2798 39Q2740 10 2656 10H2379V712H2550V460ZM2716 171Q2740 194 2740 236Q2740 278 2716 301Q2692 324 2643 324H2550V148H2643Q2692 148 2716 171ZM3696 712V10H3525V285H3259V10H3088V712H3259V423H3525V712H3696ZM3904 10V712H4075V10ZM4789 147V10H4246V147H4432V712H4603V147H4789Z" fill="none" stroke="#ff9424" stroke-width="212" stroke-linejoin="round" stroke-linecap="round" opacity="0.070"/>
+  <path d="M182 502H0Q2 571 38.5 620Q75 669 136 694Q197 719 274 719Q353 719 411 690Q469 661 499.5 612Q530 563 530 503Q530 440 499 400Q468 360 425.5 339Q383 318 315 295Q247 273 215 254Q183 235 183 201Q183 170 202 153.5Q221 137 252 137Q288 137 311 156.5Q334 176 336 210H521Q516 111 445 55.5Q374 0 258 0Q144 0 73 55.5Q2 111 2 209Q2 275 33 316Q64 357 107 378Q150 399 218 420Q265 434 290.5 445Q316 456 333.5 473Q351 490 351 516Q351 547 329 564.5Q307 582 269 582Q232 582 209 561.5Q186 541 182 502ZM1177 712H1348V10H1177V445L891 10H720V712H891V279L1177 712ZM1732 588H1994L2036 712H2217L1963 10H1765L1511 712H1690L1732 588ZM1863 199 1950 456H1777L1863 199ZM2550 460H2656Q2742 460 2800 429Q2858 398 2886 347.5Q2914 297 2914 236Q2914 170 2885 119Q2856 68 2798 39Q2740 10 2656 10H2379V712H2550V460ZM2716 171Q2740 194 2740 236Q2740 278 2716 301Q2692 324 2643 324H2550V148H2643Q2692 148 2716 171ZM3696 712V10H3525V285H3259V10H3088V712H3259V423H3525V712H3696ZM3904 10V712H4075V10ZM4789 147V10H4246V147H4432V712H4603V147H4789Z" fill="none" stroke="#ff9424" stroke-width="148" stroke-linejoin="round" stroke-linecap="round" opacity="0.140"/>
+  <path d="M182 502H0Q2 571 38.5 620Q75 669 136 694Q197 719 274 719Q353 719 411 690Q469 661 499.5 612Q530 563 530 503Q530 440 499 400Q468 360 425.5 339Q383 318 315 295Q247 273 215 254Q183 235 183 201Q183 170 202 153.5Q221 137 252 137Q288 137 311 156.5Q334 176 336 210H521Q516 111 445 55.5Q374 0 258 0Q144 0 73 55.5Q2 111 2 209Q2 275 33 316Q64 357 107 378Q150 399 218 420Q265 434 290.5 445Q316 456 333.5 473Q351 490 351 516Q351 547 329 564.5Q307 582 269 582Q232 582 209 561.5Q186 541 182 502ZM1177 712H1348V10H1177V445L891 10H720V712H891V279L1177 712ZM1732 588H1994L2036 712H2217L1963 10H1765L1511 712H1690L1732 588ZM1863 199 1950 456H1777L1863 199ZM2550 460H2656Q2742 460 2800 429Q2858 398 2886 347.5Q2914 297 2914 236Q2914 170 2885 119Q2856 68 2798 39Q2740 10 2656 10H2379V712H2550V460ZM2716 171Q2740 194 2740 236Q2740 278 2716 301Q2692 324 2643 324H2550V148H2643Q2692 148 2716 171ZM3696 712V10H3525V285H3259V10H3088V712H3259V423H3525V712H3696ZM3904 10V712H4075V10ZM4789 147V10H4246V147H4432V712H4603V147H4789Z" fill="none" stroke="#ff9424" stroke-width="96" stroke-linejoin="round" stroke-linecap="round" opacity="0.300"/>
+  <path d="M182 502H0Q2 571 38.5 620Q75 669 136 694Q197 719 274 719Q353 719 411 690Q469 661 499.5 612Q530 563 530 503Q530 440 499 400Q468 360 425.5 339Q383 318 315 295Q247 273 215 254Q183 235 183 201Q183 170 202 153.5Q221 137 252 137Q288 137 311 156.5Q334 176 336 210H521Q516 111 445 55.5Q374 0 258 0Q144 0 73 55.5Q2 111 2 209Q2 275 33 316Q64 357 107 378Q150 399 218 420Q265 434 290.5 445Q316 456 333.5 473Q351 490 351 516Q351 547 329 564.5Q307 582 269 582Q232 582 209 561.5Q186 541 182 502ZM1177 712H1348V10H1177V445L891 10H720V712H891V279L1177 712ZM1732 588H1994L2036 712H2217L1963 10H1765L1511 712H1690L1732 588ZM1863 199 1950 456H1777L1863 199ZM2550 460H2656Q2742 460 2800 429Q2858 398 2886 347.5Q2914 297 2914 236Q2914 170 2885 119Q2856 68 2798 39Q2740 10 2656 10H2379V712H2550V460ZM2716 171Q2740 194 2740 236Q2740 278 2716 301Q2692 324 2643 324H2550V148H2643Q2692 148 2716 171ZM3696 712V10H3525V285H3259V10H3088V712H3259V423H3525V712H3696ZM3904 10V712H4075V10ZM4789 147V10H4246V147H4432V712H4603V147H4789Z" fill="#ffffff" stroke="#ff9424" stroke-width="62" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(554.00 931.82) scale(0.11871)">
+  <path d="M122 512H0Q0 572 32 617Q64 662 120 686.5Q176 711 246 711Q320 711 374.5 682.5Q429 654 457.5 607Q486 560 486 507Q486 441 455.5 401.5Q425 362 381.5 343Q338 324 269 305Q217 291 187 279Q157 267 137.5 246.5Q118 226 118 194Q118 147 149 122Q180 97 229 97Q283 97 316 124Q349 151 352 189H478Q471 101 406.5 50.5Q342 0 241 0Q170 0 116 24Q62 48 32 93Q2 138 2 198Q2 263 32 302Q62 341 104.5 359.5Q147 378 215 396Q269 410 299.5 422Q330 434 350.5 456Q371 478 371 513Q371 558 338 586.5Q305 615 246 615Q189 615 157.5 586Q126 557 122 512ZM1330 102V9H845V102H1031V704H1145V102H1330ZM1818 452V9H1704V450Q1704 535 1740 594Q1776 653 1837.5 682Q1899 711 1974 711Q2049 711 2111 682Q2173 653 2210 594Q2247 535 2247 450V9H2133V452Q2133 531 2091.5 571Q2050 611 1975 611Q1901 611 1859.5 571Q1818 531 1818 452ZM3205.5 543Q3251 465 3251 359Q3251 253 3205.5 173.5Q3160 94 3076.5 51.5Q2993 9 2882 9H2655V704H2882Q2993 704 3076.5 662.5Q3160 621 3205.5 543ZM3069 170Q3134 238 3134 359Q3134 479 3069 545Q3004 611 2882 611H2769V102H2882Q3004 102 3069 170ZM3624 9V704H3738V9ZM4157.5 172Q4110 253 4110 355Q4110 457 4157.5 538.5Q4205 620 4286.5 665.5Q4368 711 4465 711Q4563 711 4644.5 665.5Q4726 620 4773 538.5Q4820 457 4820 355Q4820 253 4773 172Q4726 91 4644.5 45.5Q4563 0 4465 0Q4368 0 4286.5 45.5Q4205 91 4157.5 172ZM4672.5 220Q4703 278 4703 355Q4703 432 4672.5 490.5Q4642 549 4588 580.5Q4534 612 4465 612Q4396 612 4342 580.5Q4288 549 4257.5 490.5Q4227 432 4227 355Q4227 278 4257.5 220Q4288 162 4342 131Q4396 100 4465 100Q4534 100 4588 131Q4642 162 4672.5 220ZM5297 512H5175Q5175 572 5207 617Q5239 662 5295 686.5Q5351 711 5421 711Q5495 711 5549.5 682.5Q5604 654 5632.5 607Q5661 560 5661 507Q5661 441 5630.5 401.5Q5600 362 5556.5 343Q5513 324 5444 305Q5392 291 5362 279Q5332 267 5312.5 246.5Q5293 226 5293 194Q5293 147 5324 122Q5355 97 5404 97Q5458 97 5491 124Q5524 151 5527 189H5653Q5646 101 5581.5 50.5Q5517 0 5416 0Q5345 0 5291 24Q5237 48 5207 93Q5177 138 5177 198Q5177 263 5207 302Q5237 341 5279.5 359.5Q5322 378 5390 396Q5444 410 5474.5 422Q5505 434 5525.5 456Q5546 478 5546 513Q5546 558 5513 586.5Q5480 615 5421 615Q5364 615 5332.5 586Q5301 557 5297 512Z" fill="#ffd9a2"/>
+  </g>
+  <g transform="translate(362.00 1104.22) scale(0.09604)">
+  <path d="M0 9V704H114V9ZM981 704H1095V8H981V526L638 8H524V704H638V185L981 704ZM1610 512H1488Q1488 572 1520 617Q1552 662 1608 686.5Q1664 711 1734 711Q1808 711 1862.5 682.5Q1917 654 1945.5 607Q1974 560 1974 507Q1974 441 1943.5 401.5Q1913 362 1869.5 343Q1826 324 1757 305Q1705 291 1675 279Q1645 267 1625.5 246.5Q1606 226 1606 194Q1606 147 1637 122Q1668 97 1717 97Q1771 97 1804 124Q1837 151 1840 189H1966Q1959 101 1894.5 50.5Q1830 0 1729 0Q1658 0 1604 24Q1550 48 1520 93Q1490 138 1490 198Q1490 263 1520 302Q1550 341 1592.5 359.5Q1635 378 1703 396Q1757 410 1787.5 422Q1818 434 1838.5 456Q1859 478 1859 513Q1859 558 1826 586.5Q1793 615 1734 615Q1677 615 1645.5 586Q1614 557 1610 512ZM2818 102V9H2333V102H2519V704H2633V102H2818ZM3321 562H3612L3662 704H3782L3533 8H3401L3152 704H3271L3321 562ZM3467 146 3580 469H3353L3467 146ZM4607 704H4721V8H4607V526L4264 8H4150V704H4264V185L4607 704ZM5580 102V9H5095V102H5281V704H5395V102H5580ZM5928 638Q5928 669 5949 690Q5970 711 6001 711Q6031 711 6052 690Q6073 669 6073 638Q6073 607 6052 586Q6031 565 6001 565Q5970 565 5949 586Q5928 607 5928 638ZM7610 422H7736Q7822 422 7877 392.5Q7932 363 7957 316Q7982 269 7982 216Q7982 158 7954.5 111Q7927 64 7871.5 36.5Q7816 9 7736 9H7496V704H7610V422ZM7736 102Q7865 102 7865 216Q7865 270 7833 299.5Q7801 329 7736 329H7610V102H7736ZM8700 612H8465V9H8351V704H8700V612ZM9183 562H9474L9524 704H9644L9395 8H9263L9014 704H9133L9183 562ZM9329 146 9442 469H9215L9329 146ZM10297 452 10527 9H10401L10240 350L10079 9H9952L10183 452V704H10297V452ZM10850 638Q10850 669 10871 690Q10892 711 10923 711Q10953 711 10974 690Q10995 669 10995 638Q10995 607 10974 586Q10953 565 10923 565Q10892 565 10871 586Q10850 607 10850 638Z" fill="#ff9424"/>
+  </g>
+</svg></div>
 
 <div id="chrome">
-  <nav id="more"><a href="https://hurtle.site/slope-2">Slope 2</a><span>&middot;</span><a href="https://hurtle.site/slope-3">Slope 3</a><span>&middot;</span><a href="https://hurtle.site/slope-online">Slope online</a><span>&middot;</span><a href="https://beakdown.fun" target="_blank" rel="noopener noreferrer">Beakdown</a></nav>
-  <div id="credit">by <a href="https://nathanhaslewood.com.au" target="_blank" rel="noopener noreferrer">Nathan Haslewood</a></div>
+  <nav id="more"><a href="/slope-2">Slope 2</a><span>&middot;</span><a href="/slope-3">Slope 3</a><span>&middot;</span><a href="/slope-online">Slope online</a></nav>
+  <div id="credit">by <a href="https://snap-hit.online" target="_blank" rel="noopener noreferrer">SnapHit Studios</a></div>
 </div>
 <script>
 "use strict";
@@ -100,6 +129,9 @@
 const GAME_NAME = "HURTLE";
 const STORE_KEY = "hurtle_best_v1";
 const DIAG_KEY  = "hurtle_diag_v1";
+/* how many pickups this browser has ever collected. The only thing the
+   explanation needs to know, and the only thing it stores. */
+const TEACH_KEY = "hurtle_teach_v1";
 /* v2. The defaults and the slider ranges have both moved, so a blob written by
    an earlier build loads values that are near the new defaults but not equal to
    them, and any that now fall outside a range get clamped to its edge. That is
@@ -107,6 +139,14 @@ const DIAG_KEY  = "hurtle_diag_v1";
    rather than migrated: they describe dials that no longer mean the same thing. */
 const OPT_KEY   = "hurtle_opts_v2";
 const MUTE_KEY  = "hurtle_mute_v1";
+/* Its own key. Folding the track choice into an existing preference would mean
+   that when the default moves, everyone who had set one is silently inverted.
+
+   Bumped to v2 when tracks 1 and 3 were swapped on disk. The key stores a
+   number, and after a rename that number points at different music: a stored
+   preference that survives a change in what the number means is worse than no
+   preference. Everyone lands on the new default once, which is correct. */
+const TRACK_KEY = "hurtle_track_v2";
 /* keys the game shipped under before it had a name, read once so nobody loses
    a record to a rename */
 const OLD_KEYS  = { best:"descent_best_v2", diag:"descent_diag_v1" };
@@ -138,8 +178,8 @@ const K = {
      minute. This is a second, slower stage that starts once the first has
      settled and keeps climbing along the axes that reward planning rather than
      reflexes: more blocks per row, and rows closer together. */
-  LATE_START: 40,         // s before the second stage begins
-  LATE_TAU: 70,           // s, its time constant
+  LATE_START: 75,         // s before the second stage begins
+  LATE_TAU: 132,           // s, its time constant
   LATE_ROW_ADD: 1.0,      // extra blocks per row at full late stage
   LATE_GAP_MUL: 0.80,     // clear-run multiplier at full late stage
 
@@ -163,7 +203,9 @@ const K = {
      density, precision, and the section mix drifting harder over a run. */
   V_START: 871,
   V_MAX: 2980,
-  V_TAU: 38,
+  V_TAU: 71.7,           // 95% of V_MAX at 190s, one music track. Was 38,
+                          //   which reached 97% at 120s: difficulty was maxed
+                          //   before a new player had learnt the controls.
 
   /* --- threading. ---
      The report's complaint in 4.7 is that Slope scores pure distance, so
@@ -204,7 +246,7 @@ const K = {
                           //   PREPARATION budget: long enough to see a challenge,
                           //   read it, and decide how to take it before arriving.
                           //   This is the thing that makes a hard game feel fair.
-  LOOK_TAU: 34,           // s, how fast the view tightens
+  LOOK_TAU: 64,          // stretched with V_TAU (was 34)           // s, how fast the view tightens
   NEAR_Z: 26,             // world units ahead of the camera where drawing starts
   BAND_Z: 200,            // world units per colour band at V_START. At 108 the
                           //   view held about 30 bands, and since each one now
@@ -304,7 +346,7 @@ const K = {
      sit or ordinary tracking error walks you off the edge. Sized so both hold. */
   HW_START: 288,
   HW_MIN: 215,
-  HW_TAU: 34,
+  HW_TAU: 64,            // stretched with V_TAU (was 34)
   SLICE_DZ: 18,
   VIEW_SLICES: 92,
   LIP_W: 11,
@@ -564,6 +606,11 @@ const K = {
      something the eye keeps going back to. Steering owns the whole screen, so
      pointerdown checks these first and returns before engaging the drag,
      otherwise pressing one would also throw you sideways. */
+  /* --- the publisher lockup over the load. Three phases, about 1.46s. --- */
+  BOOT_FADE_IN: 0.18,     // s, arriving
+  BOOT_HOLD: 1.00,        // s at full opacity
+  BOOT_FADE_OUT: 0.28,    // s, leaving
+
   BTN_R: 25,              // tap radius. 23 gave a 43px target, a hair under the
                           //   44px minimum the sliders are held to.
   BTN_M: 16,              // margin from the screen edge
@@ -591,7 +638,7 @@ const K = {
      escalation that never hits a ceiling: it asks for better planning rather
      than faster hands, so it can keep going long after speed and density have
      settled, and it cannot outrun anyone's reflexes. */
-  SEC_DRIFT_TAU: 55,      // s, how fast the mix hardens
+  SEC_DRIFT_TAU: 104,    // stretched with V_TAU (was 55)      // s, how fast the mix hardens
   SEC_DRIFT_AMT: 1.00,    // how far it goes. 0 disables the drift entirely.
 
   /* --- practice. Straight off the Slope Plus wishlist: pick a point on the
@@ -613,11 +660,11 @@ const K = {
      the track clears so you can see the next one coming and decide. */
   BEAT_ROW_T: 0.30,       // s between rows INSIDE one challenge
   BEAT_ROWS_MAX: 3,       // most rows in one challenge, late in a run
-  BEAT_ROWS_TAU: 55,      // s over which challenges grow
+  BEAT_ROWS_TAU: 104,    // stretched with V_TAU (was 55)      // s over which challenges grow
   BEAT_CLEAR_START: 3.00, // s of clear track after a challenge, at t=0
   BEAT_CLEAR_MIN: 1.50,   // s, asymptote. Never below the lookahead, so the next
                           //   challenge is always visible before this one ends.
-  BEAT_CLEAR_TAU: 34,
+  BEAT_CLEAR_TAU: 64,    // stretched with V_TAU (was 34)
   OBST_FIRST: 900,
   OBST_D: 78,             // depth in z. MUST exceed V_MAX*STEP.
   OBST_H: 42,
@@ -632,7 +679,7 @@ const K = {
                           //   Sized against the wigglier safe line, not guessed:
                           //   at 48 the line-follower lost 4 runs in 90, at 54 it
                           //   loses none.
-  OBST_CLEAR_TAU: 46,     // s
+  OBST_CLEAR_TAU: 87,    // stretched with V_TAU (was 46)     // s
   OBST_CLEAR_GAIN: 0.55,  // widens the corridor where the line is turning hard,
                           //   since a moving line is harder to hold
   OBST_MAX_ROW: 3,
@@ -680,6 +727,73 @@ const K = {
   SAVE_BURST: 0.45,
   SAVE_FREEZE: 0.14,
   SAVE_IFRAMES: 0.9,
+
+  /* --- naming the pickup. The mechanic was fully built and completely
+     unexplained: the word appeared nowhere a player could see it, and the
+     rescue was silent, so nobody learnt why they lived. Three moments, one
+     word, no new mechanics. --- */
+  TEACH_ON: true,
+  TEACH_WORD: 'SHIELD',           // the same word in all three places
+  TEACH_FIRST: 'SHIELD, TAKES ONE CRASH',
+                                  // the first sighting, which lands inside the
+                                  //   unfailable opening where there is time to
+                                  //   read. Naming the object was not enough:
+                                  //   it never said what it was for.
+  SAVE_HUE_OFF: -52,              // degrees from the neon hue, so it follows the
+                                  //   sliders like the rest of the palette. The
+                                  //   pickup belongs on the ball's side of the
+                                  //   wheel: the ball is the neon hue and the
+                                  //   player already reads that as themselves.
+                                  //   -52 lands 52 degrees off the ball, far
+                                  //   enough to be its own thing, and 109 off
+                                  //   the orange that kills.
+  SAVE_LUM: 0.62,                 // was 0.52, which put it within 1.27:1 of the
+                                  //   grid and 1.33:1 of the obstacle edges. At
+                                  //   0.62 that is 1.49:1 and 1.56:1, and it
+                                  //   holds up small, at the distance it is
+                                  //   first seen.
+  TEACH_HIT_MSG: 'SHIELD TOOK THE HIT',
+                                  // spends the causality out loud. "SAVED"
+                                  //   names the thing without saying a crash
+                                  //   was just paid for.
+  TEACH_RING_HOLDS: 2,            // holds for which the word sits by the ring
+  TEACH_LABEL_SIZE: 13,           // px at scale 1, the label by the pickup
+  TEACH_LABEL_RISE: 2.6,          // label height above the pickup, in its radii
+  TEACH_LABEL_FAR: 3000,          // z at which the label starts fading in
+  TEACH_LABEL_NEAR: 900,          // z by which it is fully lit
+  TEACH_LABEL_GONE: 150,          // z by which it has faded out again
+  TEACH_RING_SIZE: 11,            // px at scale 1, the word beside the ring
+  TEACH_HIT_T: 0.55,              // s the impact callout lives. Well under one.
+  TEACH_HIT_SIZE: 15,             // px at scale 1
+  TEACH_HIT_RISE: 300,            // world units above the block it fires on, so
+                                  //   it can never sit over the ball or the
+                                  //   deck the player is about to land on
+  TEACH_HIT_DRIFT: 150,           // further world units it rises as it fades
+
+  /* --- the opening. For GRACE_T seconds a death becomes a recovery: the
+     sparks, the shake and the freeze all happen, only the ending does not.
+     The player has to feel they nearly died, because that is what teaches the
+     mechanic. Nothing here is random, and nothing here draws from run.rnd:
+     the track a player gets must not depend on how they played it. --- */
+  GRACE_T: 20,            // s of run time in which death is converted
+  GRACE_FREEZE: 0.30,     // s. Between SAVE_FREEZE and DEATH_FREEZE: a real
+                          //   pause, shorter than the one that ends a run.
+  GRACE_SHAKE_MUL: 0.75,  // of the shake the same death would have thrown
+  GRACE_IFRAMES: 0.80,    // s of invulnerability, so the block that got you
+                          //   cannot get you again on the very next step
+  GRACE_FLASH: 0.40,      // s the offending block stays lit
+  GRACE_INSET: 0.45,      // on a fall, how far from the centre line the player
+                          //   is put back, as a fraction of corridor half width.
+                          //   Landing them on the edge they just left means
+                          //   leaving it again two frames later.
+  GRACE_GAP_CLEAR: 1.15,  // safety factor on the bounce out of a hole
+  GRACE_HANDOVER_T: 0.15, // s. The window will not close while the player would
+                          //   be off the track this soon afterwards. Closing on
+                          //   a bare clock drops a wall-holder mid-lunge and
+                          //   kills them a few frames later, which is worse
+                          //   than never having had the window.
+  GRACE_TAIL_MAX: 1.5,    // s. Hard bound on that wait, so a player who is
+                          //   never settled cannot hold the window open.
 
   /* --- death legibility. Three kinds, three visuals, no words. --- */
   DEATH_FREEZE: 0.45,
@@ -905,7 +1019,7 @@ function paint(){
   C.player     = tone(n,100, 0.480);
   C.playerLit  = tone(n,100, 0.790);
   C.playerCore = '#ffffff';
-  C.save       = tone(a + 12, 100, 0.520);
+  C.save       = tone(n + K.SAVE_HUE_OFF, 100, K.SAVE_LUM);
   C.die        = '#ff2a2a';          /* danger stays red whatever the theme */
   C.hud        = tone(n, 100, 0.860);
   /* sampled from the share card, and fixed rather than themed, because it is the
@@ -1716,6 +1830,9 @@ function consumeSave(o){
   run.freeze = K.SAVE_FREEZE;
   run.shake  = K.SHAKE_HIT * 0.55;
   run.flashO = o; run.flashT = 0.4;
+  /* the moment the mechanic teaches itself, and it used to be silent */
+  run.teachT = K.TEACH_HIT_T;
+  run.teachX = o.x; run.teachZ = o.z;
   P.rearmZ   = P.z + K.SAVE_T_GAP * speedNow();
   /* surfaceY, not pitch. pitch() is the bump function and PITCH_AMP has been 0
      since the track was flattened, so it returns zero: this spawned the debris at
@@ -1741,7 +1858,89 @@ function consumeSave(o){
    Shake means you hit something. No shake means you fell, and the highlight
    says which way.
    ========================================================================== */
+/* True for the opening of every run, for every player, identically. Deliberately
+   not adaptive: the on-ramp cannot depend on skill or on how many runs this
+   browser has had, or two players' scores stop being comparable. run.t is the
+   simulation clock, so this is the same window at 10fps and at 144fps. */
+function graceActive(){ return !!run && !run.over && !run.graceDone; }
+
+/* Would the player still be on the track a beat from now? Not airborne, not
+   over a hole, and not already committed to an edge at the speed they are
+   travelling sideways. */
+function graceSafe(){
+  if (!P || P.air) return false;
+  if (gapAt(P.z)) return false;
+  const tr = sampleTrack(P.z);
+  const ahead = Math.abs((P.x + P.vx * K.GRACE_HANDOVER_T) - tr.cx);
+  return ahead <= tr.hw - K.P_HW;
+}
+
+/* A death, minus the ending. The hard part is not suppressing the state change,
+   it is the handover: if the window simply expired while the player was mid-fall
+   or off the deck they would die on the first frame after it, which is worse
+   than no window at all. So a recovery has to leave them somewhere they could
+   actually have been. */
+function recover(kind, o, side, g){
+  run.graceN = (run.graceN || 0) + 1;
+  run.freeze = K.GRACE_FREEZE;
+  run.shake  = (kind === 'hit' ? K.SHAKE_HIT : K.SHAKE_FALL) * K.GRACE_SHAKE_MUL;
+  /* the one cost that cannot shift the world: the near miss chain */
+  run.chain = 0; run.chainT = 0;
+  P.iframes = Math.max(P.iframes, K.GRACE_IFRAMES);
+
+  const tr = sampleTrack(P.z);
+
+  /* the same sparks the death would have thrown. spark() runs on Math.random,
+     not run.rnd, so none of this moves the seeded stream. */
+  if (kind === 'hit' && o){
+    o.dead = true;
+    spark(o.x + clamp(P.x - o.x, -o.hw, o.hw), surfaceY(o.z, o.x) + K.OBST_H * 0.5,
+          o.z, K.SPARK_HIT, K.SPARK_GRAZE_SPREAD);
+    run.flashO = o; run.flashT = K.GRACE_FLASH;
+  }
+  if (kind === 'fall'){
+    spark(tr.cx + (side || 1) * tr.hw, tr.y, P.z, K.SPARK_FALL, K.SPARK_RAIL_SPREAD);
+  }
+
+  /* ---- back inside the corridor ---- */
+  const lim = Math.max(tr.hw - K.P_HW, 1);
+  if (kind === 'fall'){
+    /* far enough in to still be there a moment later at full lock */
+    const inset = Math.min(lim, tr.hw * K.GRACE_INSET);
+    P.x  = clamp(P.x, tr.cx - inset, tr.cx + inset);
+    P.vx = 0;
+  } else {
+    P.x = clamp(P.x, tr.cx - lim, tr.cx + lim);
+  }
+
+  /* ---- back on the deck ---- */
+  const hole = (kind === 'gap') ? (g || gapAt(P.z)) : null;
+  if (hole){
+    /* Bounced out on the arc the lip itself would have given, rather than
+       teleported past the hole. Moving z would move where the generator is when
+       it next runs, and the track must not depend on how the run went. */
+    const v = speedNow();
+    const need = Math.max((hole.z1 - P.z) / Math.max(v * (1 - K.GAP_MARGIN), 1),
+                          K.GAP_T_MIN) * K.GRACE_GAP_CLEAR;
+    P.air = true; P.h = 0;
+    P.vy  = K.GRAV * need * 0.5 - tr.grade * v;
+    P.elev = trackY(P.z);
+    P.liftoff = K.LIFTOFF_STEPS;
+    spark(P.x, P.elev, P.z, K.SPARK_LAUNCH, K.SPARK_RAIL_SPREAD);
+  } else {
+    P.air = false; P.vy = 0; P.h = 0; P.liftoff = 0;
+    P.elev = surfaceY(P.z, P.x);
+  }
+  P.fallV = 0; P.fallY = 0;
+  /* render interpolation reads the previous frame's position: without this the
+     recovery draws as a smear from wherever they were */
+  P.px = P.x; P.pz = P.z; P.ph = P.h;
+}
+
 function die(kind, o, side, g){
+  /* every death funnels through here, so intercepting at the top covers all
+     four call sites and all three kinds at once */
+  if (graceActive()){ recover(kind, o, side, g); return; }
   run.overSec = secAt(P.z).type;
   try {
     /* Still counted, though nothing displays it any more: it costs one integer
@@ -1779,7 +1978,9 @@ function newRun(seed){
           chain:0, chainT:0, nearT:0, nearX:0, nearZ:0, best:0,
           daily:false, freeze:0, shake:0,
           over:false, overKind:null, overObst:null, overSide:0, overGap:null,
-          overX:0, overZ:0, flashO:null, flashT:0, inputLock:0 };
+          overX:0, overZ:0, flashO:null, flashT:0, inputLock:0,
+          graceN:0, graceDone:false,
+          teachT:0, teachX:0, teachZ:0 };
   P = { x:0, z:0, vx:0, h:0, vy:0, elev:0, air:false, squash:0,
         pz:0, px:0, ph:0, liftoff:0,
 
@@ -1798,7 +1999,7 @@ function newRun(seed){
 }
 function start(){
   audioStart();
-  audioNewTrack();
+  audioRunMusic();
   const sd = dailyMode ? dailySeed()
            : (urlSeed !== null ? urlSeed : (Math.random()*2147483647)|0);
   newRun(sd);
@@ -1814,6 +2015,14 @@ function start(){
    ========================================================================== */
 function step(dt){
   run.t += dt;
+
+  /* The opening closes at GRACE_T, or at the first moment after it that the
+     player is somewhere they could carry on from, whichever is later, and never
+     later than GRACE_TAIL_MAX past it. Checked here, at the top of the step, so
+     it reads the state the previous step left: right after a recovery that is a
+     restored position, which is exactly the handover we want. */
+  if (!run.graceDone && run.t >= K.GRACE_T &&
+      (graceSafe() || run.t >= K.GRACE_T + K.GRACE_TAIL_MAX)) run.graceDone = true;
 
   const v = speedNow();
   const zPrev = P.z, xPrev = P.x;
@@ -1934,6 +2143,7 @@ function step(dt){
         sweptBox(save.z, K.P_HD + K.SAVE_R, save.x, K.P_HW + K.SAVE_R,
                  zPrev, P.z, xPrev, P.x)){
       save.live = false; P.save = true; P.burst = K.SAVE_FLASH;
+      teachGot();
       gen.saveDueZ = nextSaveZ();
     } else if (P.z - K.P_HD > save.z + K.SAVE_R){
       save.live = false; gen.saveDueZ = nextSaveZ();
@@ -1951,7 +2161,9 @@ function step(dt){
       if (sweptBox(o.z, K.OBST_D*0.5 + K.P_HD, o.x, o.hw + K.P_HW,
                    zPrev, P.z, xPrev, P.x) &&
           obstBlocks(o, P.h)){
-        if (P.save) consumeSave(o); else die('hit', o, 0);
+        /* during the opening the grace recovery takes the hit, so a pickup
+           collected in the first seconds is still there when it ends */
+        if (P.save && !graceActive()) consumeSave(o); else die('hit', o, 0);
         break;
       }
     }
@@ -2081,6 +2293,7 @@ function updateShards(dt){
 
 function tick(dt){
   if (run.flashT > 0) run.flashT -= dt;
+  if (run.teachT > 0) run.teachT -= dt;
   if (P && P.burst > 0) P.burst -= dt;
   if (run.shake > 0.2) run.shake -= run.shake * 10 * dt; else run.shake = 0;
   updateShards(dt);
@@ -2172,6 +2385,44 @@ function setGeom(){
            barX: W*0.40, barW: W*0.46 };
 }
 /* returns a UI control if the tap landed on one, else null */
+/* ==========================================================================
+   FULLSCREEN
+
+   Read from the document, never tracked in a boolean of our own: the player can
+   leave with Escape, with the Android back gesture or with a system control,
+   and a flag would desync and draw the wrong icon.
+   ========================================================================== */
+function fsAvailable(){
+  if (!cv) return false;
+  const can = cv.requestFullscreen || cv.webkitRequestFullscreen;
+  /* fullscreenEnabled is the honest answer to "would this work here": it is
+     false on an iPhone, which has no Fullscreen API, and false in an iframe
+     that was not given allow="fullscreen". A control that does nothing is
+     worse than no control, so in both cases the button is not drawn and its
+     space is not reserved. */
+  const allowed = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+  return !!(can && allowed);
+}
+function fsOn(){
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+function fsToggle(){
+  if (!fsAvailable()) return;
+  try {
+    let p = null;
+    if (fsOn()){
+      p = document.exitFullscreen ? document.exitFullscreen()
+        : document.webkitExitFullscreen ? document.webkitExitFullscreen() : null;
+    } else {
+      p = cv.requestFullscreen ? cv.requestFullscreen()
+        : cv.webkitRequestFullscreen ? cv.webkitRequestFullscreen() : null;
+    }
+    /* rejects when the gesture has expired or permission is refused, and an
+       unhandled rejection is a console error */
+    if (p && p.catch) p.catch(function(){});
+  } catch(e){}
+}
+
 function uiHit(x, y){
   for (const k in UI){
     const r = UI[k];
@@ -2182,6 +2433,9 @@ function uiHit(x, y){
 
 addEventListener('keydown', e => {
   const c = e.code;
+  /* Dismissing the lockup is not a game input: it must not fall through and
+     start a run nobody has looked at yet. */
+  if (bootFlash > 0){ skipBoot(); e.preventDefault(); return; }
   if (c === 'ArrowLeft'  || c === 'KeyA'){ keys.l = true; e.preventDefault(); }
   else if (c === 'ArrowRight' || c === 'KeyD'){ keys.r = true; e.preventDefault(); }
   else if (c === 'KeyF'){ perf.show = !perf.show; return; }
@@ -2769,9 +3023,11 @@ function drawSave(){
   const tx = projX(save.x, base + 320, sc), ty = projY(save.x, base + 320, sc);
   const r  = K.SAVE_R * sc;
 
-  ctx.strokeStyle = 'rgba(255,198,61,0.22)';
+  ctx.globalAlpha = 0.22;
+  ctx.strokeStyle = C.save;
   ctx.lineWidth = Math.max(2.4, 5*sc);
   ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(bx,by); ctx.stroke();
+  ctx.globalAlpha = 1;
 
   const wob = 0.55 + 0.45 * Math.abs(Math.cos(save.spin));
   ctx.fillStyle = C.save;
@@ -2781,6 +3037,40 @@ function drawSave(){
   ctx.closePath(); ctx.fill();
   ctx.beginPath(); ctx.arc(bx, by, r*1.55, 0, Math.PI*2);
   glowStroke(C.save, C.save, Math.max(1.4, 2.2*sc), 0.9);
+
+  /* Moment one: what it is. Only until this browser has collected one, and
+     faded out as it is reached so it never sits on top of the pickup at the
+     moment the player is steering into it. */
+  if (K.TEACH_ON && taught.got === 0){
+    const inA  = clamp((K.TEACH_LABEL_FAR - dz) /
+                       Math.max(K.TEACH_LABEL_FAR - K.TEACH_LABEL_NEAR, 1), 0, 1);
+    const outA = clamp((dz - K.TEACH_LABEL_GONE) /
+                       Math.max(K.TEACH_LABEL_NEAR - K.TEACH_LABEL_GONE, 1), 0, 1);
+    const a = Math.min(inA, outA);
+    if (a > 0.01){
+      ctx.globalAlpha = a;
+      text(K.TEACH_FIRST, bx, by - r * K.TEACH_LABEL_RISE,
+           Math.max(9, K.TEACH_LABEL_SIZE * Math.min(1, W/420)), '700', C.save);
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+/* Moment three: the spend. Drawn in the world so it lands on the block that
+   was just shattered, lifted well clear of the deck so nothing sits over the
+   ball or the ground it is about to cross. */
+function drawSaveCall(){
+  if (!K.TEACH_ON || !run || run.teachT <= 0) return;
+  const dz = run.teachZ - camZ;
+  if (dz < 30) return;
+  const k  = 1 - clamp(run.teachT / K.TEACH_HIT_T, 0, 1);   // 0 fresh, 1 gone
+  const sc = D.FOC / dz;
+  const y  = surfaceY(run.teachZ, run.teachX) + K.TEACH_HIT_RISE + K.TEACH_HIT_DRIFT * k;
+  const px = projX(run.teachX, y, sc), py = projY(run.teachX, y, sc);
+  ctx.globalAlpha = clamp(1 - k*k, 0, 1);
+  text(K.TEACH_HIT_MSG, px, py,
+       Math.max(11, K.TEACH_HIT_SIZE * Math.min(1, W/420)), '800', C.save);
+  ctx.globalAlpha = 1;
 }
 
 function drawShards(){
@@ -2959,6 +3249,10 @@ function drawRunButtons(){
   const r = K.BTN_R*s, m = K.BTN_M*s, gap = K.BTN_GAP*s;
   const y = H - m - r;
   UI.pause = [m, y - r, r*2, r*2];
+  /* Next to pause, so the two audio controls stay together on the right. Null,
+     not disabled, where the API is unavailable. */
+  const fsOk = fsAvailable();
+  UI.full  = fsOk ? [m + r*2 + gap, y - r, r*2, r*2] : null;
   UI.skip  = [W - m - r*2, y - r, r*2, r*2];
   UI.mute  = [W - m - r*4 - gap, y - r, r*2, r*2];
   ctx.globalAlpha = K.BTN_A;
@@ -2982,6 +3276,27 @@ function drawRunButtons(){
      disabled control rather than as the switch that turns the music on again.
      This shows the STATE instead, the way every mute button does, and stays at
      full weight in both. */
+  if (fsOk){
+    const fx = m + r*3 + gap;
+    ctx.beginPath(); ctx.arc(fx, y, r, 0, Math.PI*2); ctx.stroke();
+    /* Four corner brackets. Out at the frame when there is room to open, pulled
+       in and reversed when there is room to close, so the two states are not
+       the same picture. */
+    const inFS = fsOn();
+    const fq = r*0.44, arm = fq*0.62, d = inFS ? -arm : arm;
+    for (let i = 0; i < 4; i++){
+      const ex = (i === 1 || i === 2) ? 1 : -1;
+      const ey = (i < 2) ? -1 : 1;
+      const cx2 = fx + ex * (inFS ? fq*0.40 : fq);
+      const cy2 = y  + ey * (inFS ? fq*0.40 : fq);
+      ctx.beginPath();
+      ctx.moveTo(cx2 - ex*d, cy2);
+      ctx.lineTo(cx2, cy2);
+      ctx.lineTo(cx2, cy2 - ey*d);
+      ctx.stroke();
+    }
+  }
+
   const mx = W - m - r*3 - gap;
   const q  = r*0.32;
   ctx.beginPath(); ctx.arc(mx, y, r, 0, Math.PI*2); ctx.stroke();
@@ -3060,6 +3375,12 @@ function drawHUD(){
     ctx.strokeStyle = P.save ? C.save : 'rgba(239,232,220,0.22)';
     ctx.beginPath(); ctx.arc(cx0, cy0, r, 0, Math.PI*2); ctx.stroke();
     if (P.save){ ctx.fillStyle = C.save; ctx.beginPath(); ctx.arc(cx0,cy0,r*0.46,0,Math.PI*2); ctx.fill(); }
+    /* Moment two: that you have it. The ring alone says nothing about what it
+       means, so the word sits beside it for the first couple of holds and then
+       gets out of the way. The indicator itself does not change. */
+    if (K.TEACH_ON && P.save && taught.got <= K.TEACH_RING_HOLDS){
+      text(K.TEACH_WORD, cx0 + r + 7*s, cy0 + 4*s, K.TEACH_RING_SIZE*s, '700', C.save, 'left');
+    }
   }
 }
 
@@ -3391,6 +3712,7 @@ function draw(){
     drawShards();
     drawSparks();
     drawSpeedLines();
+    drawSaveCall();
     if (state === 'play') drawPlayer(false);
   }
   if (state === 'dying' || state === 'dead') drawDeathFx();
@@ -3424,7 +3746,43 @@ const MU = {
   MASTER: 0.085,          // overall level. Background, not foreground.
   INT_TAU: 0.55,          // s of smoothing on intensity, so the music lifts with
                           //   the run rather than snapping to it
-  INT_IDLE: 0.10          // where it sits on the title and after a death
+  INT_IDLE: 0.10,         // where it sits on the title and after a death
+
+  /* --- the five recorded tracks. Streamed through an HTMLAudioElement and
+     routed into the same graph, so gain, muting and the fades all still apply.
+     Deliberately NOT decodeAudioData: three minutes of PCM is tens of megabytes
+     and the device this is built for is a five year old Chromebook. --- */
+  REC_ON: true,
+  REC_N: 5,               // files on disk, track-1 to track-5
+  REC_PATH: '/music/track-',
+  REC_EXT: '.m4a',
+  REC_GAIN: 3.6,          // relative to MASTER, which is set for the synth's own
+                          //   raw levels rather than for a mastered file
+  REC_FADE_T: 1.0,        // s to bring a track up. Was 2, which left it near
+                          //   silent for two seconds after playback had already
+                          //   started. Long enough not to be a hard cut, short
+                          //   enough to feel immediate.
+  REC_PREFETCH: true,     // buffer the remembered track while the splash is up
+  REC_STALL_T: 6.0,       // s without progress AFTER playback has begun. A track
+                          //   that is still downloading also has a currentTime
+                          //   that is not moving, so this clock only ever runs
+                          //   once something has actually played.
+  REC_STALL_MIN: 0.02,    // s of movement that counts as progress
+  REC_RETRY_T: 25,        // s before a failed track gets another go. A hiccup
+                          //   must not silence real music for the session.
+  REC_DUCK_T: 0.35,       // s to pull a failed track down before the synth takes over
+  REC_POKE_T: 0.5,        // s between asking a paused element to play again.
+                          //   The first play() can be refused, and a refusal is
+                          //   not a failure, so nothing was ever asking twice:
+                          //   the music then waited for the mute button to be
+                          //   toggled, which is exactly what was reported.
+  REC_NOSRC_T: 2.0        // s a "no source" network state has to persist before it
+                          //   is believed. It reads 3 for a moment after src is
+                          //   set, before resource selection has run, and acting
+                          //   on that killed a perfectly healthy track three
+                          //   milliseconds into a run: the same premature
+                          //   give-up as the currentTime trap, wearing a
+                          //   different hat.
 };
 /* ==========================================================================
    MUSIC
@@ -3783,6 +4141,208 @@ function auApply(){
 /* --- the game side: lifecycle, muting, and one track per run --- */
 let muMuted = false, muWant = false, muArm = false;
 
+/* ==========================================================================
+   THE RECORDED TRACKS
+
+   Five files, streamed. Track 1 for everyone the first time, the skip button
+   steps through and wraps, the choice is remembered, and a track loops when it
+   ends because nobody listens to five in order and a player who picked a
+   favourite wants to hear it.
+
+   Nothing here ever blocks the game. A run starts whether or not audio is
+   ready, and the music fades in when it arrives.
+   ========================================================================== */
+let musEl = null, musSrc = null, musGain = null;
+let musTrack = 0;                 // 0 based; the file is musTrack + 1
+let musState = 'idle';            // idle | loading | playing | failed
+let musLastT = 0, musStillT = 0, musRetryT = 0, musLoadT = 0, musPokeT = 0;
+let musWantPlay = false;          // a run has asked for music at least once
+let musProcActive = false;        // is the synth the thing currently sounding?
+
+function musLoadPref(){
+  let v = null;
+  try { v = localStorage.getItem(TRACK_KEY); } catch(e){}
+  const i = (v === null) ? 0 : (parseInt(v, 10) - 1);
+  /* Unreadable storage means track one, every visit, which is the right way
+     round for this to fail. */
+  musTrack = (isFinite(i) && i >= 0 && i < MU.REC_N) ? i : 0;
+}
+function musSavePref(){
+  try { localStorage.setItem(TRACK_KEY, String(musTrack + 1)); } catch(e){}
+}
+
+function musBuild(){
+  if (musEl || !AC || !auMaster) return;
+  try {
+    musEl = new Audio();
+    musEl.preload = 'none';       // until the splash asks for it, below
+    musEl.loop = true;
+    musEl.addEventListener('playing', musOnPlaying);
+    musEl.addEventListener('error', musOnFail);
+    musSrc  = AC.createMediaElementSource(musEl);
+    musGain = AC.createGain();
+    musGain.gain.value = 0;
+    musSrc.connect(musGain);
+    musGain.connect(auMaster);    // so mute and the master fade still own it
+  } catch(e){
+    musEl = null;
+    musOnFail();
+  }
+}
+
+/* Only ever the track being played. Never all five, never a prefetch of the
+   next one, because the player is not going through them in order. */
+function musUrl(){ return MU.REC_PATH + (musTrack + 1) + MU.REC_EXT; }
+
+/* Called when the splash goes up. The player usually sits there for several
+   seconds before pressing play, and every one of them used to be wasted: the
+   src was only set inside musPlay(), so the download began at the worst
+   possible moment. This starts it early and lets the browser buffer.
+
+   It does not call play() and it does not resume the context, so the splash is
+   still silent. Only the remembered track is asked for, never all five, and if
+   the player skips to another one mid-run that becomes the remembered track and
+   the one fetched next time. */
+function musPrefetch(){
+  if (!MU.REC_ON || !MU.REC_PREFETCH || muMuted) return;
+  musBuild();
+  if (!musEl) return;
+  const url = musUrl();
+  try {
+    if (!musEl.src || musEl.src.indexOf(url) === -1){
+      musEl.preload = 'auto';
+      musEl.src = url;
+      musEl.load();
+    }
+  } catch(e){}
+}
+
+function musPlay(){
+  if (!MU.REC_ON || muMuted || !AC) return;
+  musWantPlay = true;
+  musBuild();
+  if (!musEl) return;
+  const url = musUrl();
+  musState  = 'loading';
+  musStillT = 0; musLastT = 0; musRetryT = 0; musLoadT = 0;
+  try {
+    if (musGain){
+      const now = AC.currentTime;
+      musGain.gain.cancelScheduledValues(now);
+      musGain.gain.setValueAtTime(0, now);
+    }
+    /* Comparing the resolved src against the relative one, so re-entering with
+       the same track does not restart a download that is already in flight. */
+    if (!musEl.src || musEl.src.indexOf(url) === -1){ musEl.src = url; musEl.load(); }
+    else if (musEl.readyState > 0){ try { musEl.currentTime = 0; } catch(e){} }
+    const pr = musEl.play();
+    /* An autoplay refusal is not a broken file. The next run asks again. */
+    if (pr && pr.catch) pr.catch(function(){});
+  } catch(e){ musOnFail(); }
+}
+
+function musOnPlaying(){
+  musState = 'playing';
+  musRetryT = 0;
+  /* Real music won, so the synth stands down. This is also the only place it
+     ever does, which is what stops a genre switch a couple of seconds into a
+     first run: the synth is never started while a track is merely arriving. */
+  if (musProcActive){ musProcActive = false; auSilence(); }
+  if (musGain && AC){
+    const now = AC.currentTime;
+    musGain.gain.cancelScheduledValues(now);
+    musGain.gain.setValueAtTime(musGain.gain.value, now);
+    musGain.gain.linearRampToValueAtTime(MU.REC_GAIN, now + MU.REC_FADE_T);
+  }
+}
+
+/* A genuine failure: an error event, a dead network state, or a stall that
+   began after playback had already started. Waiting is not failing. */
+function musOnFail(){
+  if (musState === 'failed') return;
+  musState  = 'failed';
+  musRetryT = MU.REC_RETRY_T;
+  musStillT = 0;
+  if (musGain && AC){
+    const now = AC.currentTime;
+    musGain.gain.cancelScheduledValues(now);
+    musGain.gain.setValueAtTime(musGain.gain.value, now);
+    musGain.gain.linearRampToValueAtTime(0, now + MU.REC_DUCK_T);
+  }
+  /* the synth picks it up from here, re-anchored so it does not try to catch
+     up on a scheduler clock that has run on without it */
+  if (!musProcActive){ musProcActive = true; muArm = true; }
+}
+
+function musTick(dt){
+  if (!MU.REC_ON || muMuted) return;
+
+  /* If a run has asked for music and the element is not running, ask again.
+     Deliberately a condition rather than a diagnosis: it covers a context that
+     was still resuming when play() was called, a play() the browser refused,
+     and a device that wanted a second gesture, without any of them having to be
+     told apart. The same shape as the muWant loop that retries AC.resume().
+     Calling play() on an element that already has its src does not restart a
+     download that is in flight, and once it is playing the condition is false,
+     so this does not keep firing. */
+  musPokeT += dt;
+  if (musPokeT >= MU.REC_POKE_T){
+    musPokeT = 0;
+    if (musWantPlay && musEl && musEl.paused && musState !== 'failed' &&
+        AC && AC.state === 'running'){
+      try {
+        const pr = musEl.play();
+        if (pr && pr.catch) pr.catch(function(){});   // still not a failure
+      } catch(e){}
+    }
+  }
+
+  if (musState === 'failed'){
+    if (musRetryT > 0){
+      musRetryT -= dt;
+      /* the route back: a temporary hiccup does not cost the whole session */
+      if (musRetryT <= 0 && musWantPlay) musPlay();
+    }
+    return;
+  }
+  if (!musEl) return;
+  if (musState !== 'playing'){
+    /* Still arriving. NOT a stall, and the difference matters: a downloading
+       track has a currentTime that is not advancing either, so a detector that
+       watched only that would give up on a healthy file about twelve seconds
+       into a first run and never play real music again.
+
+       A genuine failure arrives as an error event, which is immediate and
+       unambiguous. This is only the backstop for a source the browser quietly
+       gave up on without one, and it has to wait: networkState reads NO_SOURCE
+       for a moment after src is set, before resource selection has run. */
+    musLoadT += dt;
+    if (musEl.networkState === 3 /* NETWORK_NO_SOURCE */ && musLoadT > MU.REC_NOSRC_T) musOnFail();
+    return;
+  }
+  /* Playback has actually begun and then stopped: now a stall clock means
+     something. */
+  if (musEl.paused){ musStillT = 0; musLastT = musEl.currentTime; return; }
+  const now = musEl.currentTime;
+  if (Math.abs(now - musLastT) > MU.REC_STALL_MIN){ musLastT = now; musStillT = 0; return; }
+  musStillT += dt;
+  if (musStillT > MU.REC_STALL_T) musOnFail();
+}
+
+function musPause(){ try { if (musEl && !musEl.paused) musEl.pause(); } catch(e){} }
+function musResume(){
+  if (!MU.REC_ON || muMuted || !musEl || musState === 'failed') return;
+  try { const pr = musEl.play(); if (pr && pr.catch) pr.catch(function(){}); } catch(e){}
+}
+function musStop(){
+  try {
+    if (musEl){ musEl.pause(); musEl.removeAttribute('src'); musEl.load(); }
+  } catch(e){}
+}
+/* true when the synth is the thing that should be sounding */
+function musProcOn(){ return !MU.REC_ON || musProcActive; }
+
+
 function audioOn(){ return !muMuted; }
 
 function audioInit(){
@@ -3802,9 +4362,39 @@ function audioInit(){
 }
 function audioWarm(){ if (!AC && !muMuted) audioInit(); }
 
-/* A different track every run, never the same one twice running. */
-/* A fresh track, and the old one actually stops. */
+/* The skip button and KeyN: one step through the five, wrapping, remembered.
+   When the recorded tracks are the ones sounding this is all it does; the synth
+   only gets a fresh pick when it is the thing being heard. */
 function audioNewTrack(){
+  if (MU.REC_ON){
+    musTrack = (musTrack + 1) % MU.REC_N;
+    musSavePref();
+    musPlay();
+    if (!musProcActive) return;
+  }
+  audioProcTrack();
+}
+
+/* At the top of a run: carry on with the remembered track, or start it. This is
+   not the skip button, so it does not advance. */
+function audioRunMusic(){
+  if (MU.REC_ON){
+    if (musState === 'playing' && musEl && !musEl.paused) return;
+    /* Always another go. Now that the fetch starts while the splash is up, a
+       blip there can mark the track failed before the player has pressed
+       anything, and making them wait out REC_RETRY_T on the synth for that
+       would be a worse trade than the prefetch is worth. The start of a run is
+       the natural second chance. If it fails again the synth is already
+       playing and simply carries on. */
+    musPlay();
+    if (!musProcActive) return;
+  }
+  audioProcTrack();
+}
+
+/* A different synth track every run, never the same one twice running. */
+/* A fresh track, and the old one actually stops. */
+function audioProcTrack(){
   if (!AC) return;
   auSilence();
   const n = AU_TRACKS.length;
@@ -3835,6 +4425,11 @@ function audioStart(){
 function audioToggle(){
   muMuted = !muMuted;
   try { localStorage.setItem(MUTE_KEY, muMuted ? '1' : '0'); } catch(e){}
+  /* stopping the music button stops the download too, rather than paying for
+     bytes nobody is listening to */
+  if (muMuted) musPause();
+  else if (musWantPlay) musResume();
+  else musPrefetch();          // unmuted before playing: start buffering now
   if (!AC){ if (!muMuted) audioInit(); return; }
   auMaster.gain.setTargetAtTime(muMuted ? 0 : MU.MASTER, AC.currentTime, 0.05);
   if (!muMuted && AC.state === 'suspended'){ muWant = true; muArm = true; AC.resume(); }
@@ -3844,7 +4439,7 @@ function audioLoadMute(){
   try { stored = localStorage.getItem(MUTE_KEY); } catch(e){}
   muMuted = stored === null ? FRAMED : (stored === '1');
 }
-function audioSuspend(){ muWant = false; try { if (AC && AC.state === 'running') AC.suspend(); } catch(e){} }
+function audioSuspend(){ muWant = false; musPause(); try { if (AC && AC.state === 'running') AC.suspend(); } catch(e){} }
 /* Pausing the game pauses the music. Suspending freezes the audio clock as well,
    so nothing is scheduled into a gap, and arming on the way back makes the
    scheduler pick up from the moment it actually starts running again rather than
@@ -3854,8 +4449,10 @@ function audioResume(){
   if (muMuted || !AC) return;
   muWant = true; muArm = true;
   try { AC.resume(); } catch(e){}
+  musResume();
 }
 function audioClose(){
+  musStop();
   if (!AC) return;
   try { if (auMaster) auMaster.gain.value = 0; AC.close(); } catch(e){}
   AC = null; auMaster = null;
@@ -3884,10 +4481,14 @@ function audioTick(){
     return;
   }
   if (muArm){ muArm = false; auStep = 0; auNextT = AC.currentTime + 0.02; }
+  musTick(lastFt);
   const want = muTargetIntensity();
   auSpeed += (want - auSpeed) * (1 - Math.exp(-lastFt / MU.INT_TAU));
   if ((muFrame++ & 7) === 0){ auApply(); auPrune(); }
-  auRun();
+  /* The synth only sounds when it is the fallback. While a recorded track is
+     merely on its way, nothing plays: starting the synth there and swapping it
+     out on arrival is an audible genre change two seconds into the run. */
+  if (musProcOn()) auRun();
 }
 let muFrame = 0;
 
@@ -3895,6 +4496,24 @@ let muFrame = 0;
    PERSISTENCE. Best score only, every call wrapped. A blocked or unavailable
    store degrades to a game with no memory rather than throwing.
    ========================================================================== */
+/* Read once at boot. If storage is unavailable this stays at zero, so the
+   explanation shows every time rather than never, which is the right way for
+   this to fail. */
+let taught = { got: 0 };
+function loadTaught(){
+  try {
+    const o = JSON.parse(localStorage.getItem(TEACH_KEY) || 'null');
+    if (o && typeof o.got === 'number' && isFinite(o.got)) taught.got = Math.max(0, o.got | 0);
+  } catch(e){ taught.got = 0; }
+}
+/* Called when a pickup is collected. Storage only, no simulation state: the
+   run must play out identically whether or not this browser has seen the
+   explanation before. */
+function teachGot(){
+  taught.got++;
+  try { localStorage.setItem(TEACH_KEY, JSON.stringify({ got: taught.got })); } catch(e){}
+}
+
 function loadBest(){
   try {
     let v = localStorage.getItem(STORE_KEY);
@@ -3904,6 +4523,7 @@ function loadBest(){
   catch(e){ best = 0; bestOK = false; }
   try { diag = JSON.parse(localStorage.getItem(DIAG_KEY) || localStorage.getItem(OLD_KEYS.diag) || '{}') || {}; }
   catch(e){ diag = {}; }
+  loadTaught();
 }
 function saveBest(){
   if (!bestOK) return;
@@ -3916,6 +4536,54 @@ function saveBest(){
    144Hz desktop and a stuttering Celeron.
    ========================================================================== */
 let acc = 0, last = 0, perfTick = 0;
+
+/* ==========================================================================
+   THE BOOT SPLASH
+   ========================================================================== */
+const bootEl = document.getElementById('boot');
+const bootMark = bootEl ? bootEl.querySelector('svg') : null;
+let bootShown = true;
+/* The three phases added up, in the one place they are ever added up. */
+function bootTotal(){
+  return Math.max(0, K.BOOT_FADE_IN) + Math.max(0, K.BOOT_HOLD) + Math.max(0, K.BOOT_FADE_OUT);
+}
+let bootFlash = bootTotal();
+function skipBoot(){ bootFlash = 0; endBootChrome(); }
+
+/* The chrome comes back once, whichever way the splash ended. */
+let bootChromeHidden = true;
+function endBootChrome(){
+  if (!bootChromeHidden) return;
+  bootChromeHidden = false;
+  try { document.documentElement.classList.remove('booting'); } catch(e){}
+  if (bootShown && bootEl){ bootShown = false; bootEl.hidden = true; }
+  /* The canvas was behind a fixed overlay and the chrome was display:none for
+     the whole splash, so whatever resize measured then is not what is on screen
+     now. This is the moment it exists, so this is the moment to measure it. */
+  resize();
+  showChrome(state !== 'play');
+}
+/* Measured from the start for the arrival and from the end for the departure,
+   so the hold is simply whatever is between them. Both guard a zero length
+   phase: a fade of nothing should be a hard cut, not a division by nothing. */
+function bootMarkAlpha(){
+  const gone = bootTotal() - bootFlash;
+  if (!(K.BOOT_FADE_IN > 0)) return 1;
+  return clamp(gone / K.BOOT_FADE_IN, 0, 1);
+}
+function bootFieldAlpha(){
+  if (!(K.BOOT_FADE_OUT > 0)) return 1;
+  return clamp(bootFlash / K.BOOT_FADE_OUT, 0, 1);
+}
+function syncBoot(){
+  if (!bootEl) return;
+  if (bootFlash <= 0){
+    if (bootShown){ bootShown = false; bootEl.hidden = true; }
+    return;
+  }
+  if (bootMark) bootMark.style.opacity = bootMarkAlpha();
+  bootEl.style.opacity = bootFieldAlpha();
+}
 function pushPerf(ms){
   perf.hist[perf.i] = ms; perf.i = (perf.i+1) % perf.hist.length;
   if (perf.n < perf.hist.length) perf.n++;
@@ -3937,6 +4605,8 @@ function frame(now){
      rotors held one angle and every craft hung motionless in the sky. Nothing
      was ever going to move. */
   animT += lastFt;
+  if (bootFlash > 0){ bootFlash -= lastFt; if (bootFlash <= 0){ bootFlash = 0; endBootChrome(); } }
+  syncBoot();
   pushPerf(ft*1000);
   if (ft > 0.25) ft = 0.25;
 
@@ -3977,10 +4647,17 @@ function boot(){
   ctx = cv.getContext('2d', { alpha:false });
   derive();
   resize();
+  if (bootFlash > 0){ try { document.documentElement.classList.add('booting'); } catch(e){} }
+  else bootChromeHidden = false;
   addEventListener('resize', resize);
+  addEventListener('fullscreenchange', resize);
+  addEventListener('webkitfullscreenchange', resize);
   addEventListener('orientationchange', () => setTimeout(resize, 120));
 
   cv.addEventListener('pointerdown', e => {
+    /* Dismissing the lockup is not a game input either: it skips and stops
+       there, so the tap cannot also press whatever is underneath it. */
+    if (bootFlash > 0){ skipBoot(); e.preventDefault(); return; }
     if (state === 'title' || state === 'dead' || setOpen){
       const hit = uiHit(e.clientX, e.clientY);
       if (setOpen){
@@ -4000,6 +4677,7 @@ function boot(){
       if (hit === 'share' && state === 'dead'){ doShare(); e.preventDefault(); return; }
       if (hit === 'menu' && state === 'dead'){
         state = 'title'; paused = false; showChrome(true);
+        musPrefetch();
         UI.menu = null; UI.settings = null;
         previewRefresh();
         e.preventDefault(); return;
@@ -4020,6 +4698,7 @@ function boot(){
         if (paused) audioPause(); else audioResume();
         e.preventDefault(); return;
       }
+      if (h2 === 'full'){ fsToggle(); e.preventDefault(); return; }
       if (h2 === 'skip'){ audioNewTrack(); e.preventDefault(); return; }
       if (h2 === 'mute'){ audioToggle(); e.preventDefault(); return; }
       if (paused){ paused = false; audioResume(); e.preventDefault(); return; }
@@ -4047,6 +4726,7 @@ function boot(){
 
   loadBest();
   audioLoadMute();
+  musLoadPref();
   audioBindLifecycle();
   audioWarm();
   captureOptBase();
@@ -4055,6 +4735,12 @@ function boot(){
   newRun(dailyMode ? dailySeed() : (urlSeed !== null ? urlSeed : (Math.random()*2147483647)|0));
   state = 'title';
   requestAnimationFrame(frame);
+  /* After the splash has actually been painted, not before it. Called straight
+     from boot the fetch went out about 120ms ahead of the first frame, and the
+     splash should be on screen before anything else starts asking for the
+     network. One frame costs nothing here: the player is about to spend
+     seconds looking at it. */
+  requestAnimationFrame(function(){ requestAnimationFrame(musPrefetch); });
 }
 boot();
 </script>
