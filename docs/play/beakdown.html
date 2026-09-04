@@ -10,8 +10,9 @@
 <link rel="canonical" href="https://beakdown.fun/">
 <meta name="description" content="Fly, flap and land on your enemies. The higher bird always wins.">
 
-<link rel="icon" type="image/png" href="/icon.png">
-<link rel="apple-touch-icon" href="/icon.png">
+<!-- CABINET COPY: both icon links were root relative (/icon.png) and
+     would resolve against snap-hit.online. Dropped rather than copied in:
+     a framed game is never asked for a favicon. Still on beakdown.fun. -->
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="BEAKDOWN">
@@ -200,7 +201,7 @@ html.booting #chrome, html.booting #atog{display:none!important}
 <div id="atog"><button id="tPau" type="button" aria-label="Pause"><svg viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg></button><div class="grp"><button id="tSfx" type="button" aria-label="Sound effects"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path class="wv" d="M16.5 8.5a5 5 0 0 1 0 7"/><path class="sl" d="M3 3l18 18"/></svg></button><button id="tMus" type="button" aria-label="Music"><svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/><path class="sl" d="M3 3l18 18"/></svg></button></div></div>
 <div id="pause"><h2>PAUSED</h2><button class="go" id="pGo" type="button"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8V4z"/></svg><span>Resume</span></button><div class="row"><button id="pSfx" type="button"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path class="wv" d="M16.5 8.5a5 5 0 0 1 0 7"/><path class="sl" d="M3 3l18 18"/></svg><span>Sound</span></button><button id="pMus" type="button"><svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/><path class="sl" d="M3 3l18 18"/></svg><span>Music</span></button></div></div>
 <div id="chrome">
-  <nav id="more"><a href="/flappy-bird-online">Flappy Bird unblocked</a><span>&middot;</span><a href="/flappy-bird-2">Flappy Bird 2</a><span>&middot;</span><a href="/what-happened-to-flappy-bird">What happened to Flappy Bird</a><span>&middot;</span><a href="/about-beakdown">About Beakdown</a></nav>
+  <nav id="more"><a href="https://beakdown.fun/flappy-bird-online">Flappy Bird unblocked</a><span>&middot;</span><a href="https://beakdown.fun/flappy-bird-2">Flappy Bird 2</a><span>&middot;</span><a href="https://beakdown.fun/what-happened-to-flappy-bird">What happened to Flappy Bird</a><span>&middot;</span><a href="https://beakdown.fun/about-beakdown">About Beakdown</a></nav>
   <div id="credit">by <a href="https://snap-hit.online/" target="_blank" rel="noopener noreferrer">SnapHit Studios</a></div>
 </div>
 <div id="msg">
@@ -592,6 +593,36 @@ const MUS={
    So the mapping from POSITION to FILE lives here instead. Everything else
    in this file counts in positions; these numbers are the files on disk,
    and those never move. To reorder, edit this line and nothing else. */
+/* ==================================================================
+   CABINET COPY: THE RECORDED MUSIC IS DELIBERATELY OFF.
+
+   This is the snap-hit.online copy of the game that lives at
+   beakdown.fun. The five tracks are 12.13 MB and are NOT in this
+   repository. tuneFile() builds 'music/track-N.m4a' relative, so from
+   here it resolves against snap-hit.online and 404s, and pointing it at
+   beakdown.fun would be an external request, which the comment above
+   and this site both forbid.
+
+   With this false tuneWake returns before creating the two audio
+   elements, so tuneLoad has nothing to set a src on and nothing is ever
+   requested. tune.failed is marked so the rest of the machinery sees the
+   state a failed fetch already produced, and tuneRevive is stopped from
+   clearing it again.
+
+   WORTH KNOWING: unlike Hurtle and Drift Fever there is NO synthesised
+   fallback to fall back TO. MUS was the base loop under everything and
+   is now the star theme and nothing else, so ordinary play is silent
+   here either way. This change removes the failed requests; it does not
+   remove any music that was playing.
+
+   THE REAL SOUNDTRACK IS AT https://beakdown.fun/ and this cabinet links
+   there from its marquee, its button and its full screen view.
+
+   TO RESTORE IT when re-copying: set this to true and put the five files
+   in a music/ folder beside this file.
+   ================================================================== */
+const RECORDED_MUSIC=false;
+
 const TUNE_ORDER=[2,1,3,4,5];
 const TUNE_COUNT=TUNE_ORDER.length;
 const TUNE_GAIN=1.58;            // the masters sit about 4 dB under a streaming level
@@ -630,6 +661,9 @@ function tuneFile(i){ return 'music/track-'+TUNE_ORDER[tuneWrap(i)]+'.m4a'; }
    does NOT call play() and it does NOT touch the AudioContext, because
    neither is allowed before a gesture and neither is needed to download. */
 function tuneWake(){
+  /* CABINET COPY: see RECORDED_MUSIC above. Returning here is what stops
+     the fetch: tuneLoad only ever sets a src on an element this made. */
+  if(!RECORDED_MUSIC){ tune.failed=true; return; }
   if(tune.woke)return;
   tune.woke=true;
   try{
@@ -687,6 +721,9 @@ function tuneFailed(reason){
 }
 
 function tuneRevive(){
+  /* CABINET COPY: nothing to revive, and no element left that could fail
+     again to restore the flag. See RECORDED_MUSIC above. */
+  if(!RECORDED_MUSIC)return false;
   if(!tune.failed||!musOn)return false;
   if(tune.tries>=TUNE_RETRIES)return false;
   if(tune.retryIn>0)return false;
