@@ -29653,6 +29653,28 @@ const TRACKS = [
    host and from a phone, which is what section 1 asks for. It is the
    same origin as the HTML: the same kind of request that fetched the
    page, which is why it is not the class of thing section 6 forbids. */
+/* ==================================================================
+   CABINET COPY: THE RECORDED MUSIC IS DELIBERATELY OFF.
+
+   This is the snap-hit.online copy of the game that lives at
+   driftfever.com. The four tracks below are 9.68 MB and they are NOT in
+   this repository. The paths are relative, so from here they resolve
+   against snap-hit.online and 404, and pointing them at driftfever.com
+   instead would be an external request, which this site does not make.
+
+   With this false the element pair is never built, so nothing is ever
+   requested, and the game runs on its procedural music. That is exactly
+   the state a failed fetch already reached, so the fallback sounds the
+   same as it did when the files were 404ing. Nothing else is changed.
+
+   THE REAL SOUNDTRACK IS AT https://driftfever.com/ and this cabinet
+   links there from its marquee, its button and its full screen view.
+
+   TO RESTORE IT when re-copying this game: set this to true and put the
+   four files in a music/ folder beside this file.
+   ================================================================== */
+const RECORDED_MUSIC = false;
+
 const TUNES = [
   { file: 'music/track-1.m4a', name: 'TRACK ONE' },
   { file: 'music/track-2.m4a', name: 'TRACK TWO' },
@@ -29702,6 +29724,10 @@ const tune = {
    section 6's exception actually turns on, and it is called from exactly
    one place. */
 function tuneWake() {
+  /* CABINET COPY: see RECORDED_MUSIC above. Marking the pair failed is
+     precisely the state a 404 used to leave behind, and tune.failed is
+     what turns the procedural music on, so the fallback is unchanged. */
+  if (!RECORDED_MUSIC) { tune.failed = true; return; }
   /* AND NOT AT ALL FOR SOMEBODY WHO HAS MUTED. Being remembered has to
      mean the download does not happen either, or a muted player on a
      school connection still pays for music they will never hear. */
@@ -29818,6 +29844,10 @@ function tuneFailed(reason) {
    elements themselves are kept and only their sources are re set, which
    is what load() with a fresh src does. */
 function tuneRevive() {
+  /* CABINET COPY: there is nothing to revive, and clearing tune.failed
+     here would silence the procedural music with nothing to replace it,
+     because no element exists to fail again. See RECORDED_MUSIC above. */
+  if (!RECORDED_MUSIC) return false;
   if (!tune.failed || !musicOn) return false;
   if (tune.tries >= FEEL.TUNE_RETRIES) return false;
   if (tune.retryIn > 0) return false;
