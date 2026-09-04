@@ -2411,7 +2411,61 @@ const FEEL = {
      those are things to look at on a phone rather than argue about. */
   SEG_MERGE_PX:             1.0,     // LIVE
   PATH_CHUNK_SUBPATHS:       64,     // LIVE
-  CHECKPOINT_EVERY:        1500,     // LIVE, segments between gates, about 33 seconds
+  /* ------------------------------------------------------------------
+     1300 FROM 1500, AND THIS IS THE LEVER THAT BROUGHT THE DAY UNDER TEN
+     MINUTES.
+
+     THE TOTAL WAS 11:23 AND THE RULE SAYS SHORTEN IT. Handoff 2.5: a
+     daily is an appointment at three to five minutes and homework at
+     ten. The block above LEVEL_COUNT named the two cheap levers, the
+     training run's length and LEVEL_GATES_FIRST, and PRICED NEITHER.
+     Priced now, and neither reaches it:
+
+       training deleted outright            10:40   still over
+       LEVEL_GATES_FIRST to one             10:16   still over
+       both, training cut to 26.7 seconds   10:00.0 exactly on the line
+       CHECKPOINT_EVERY 1300                 9:57.8 under, on its own
+
+     WHAT THE OTHER TWO COST, MEASURED. Training driven on six days at
+     each length: 43.1 seconds says eleven lines, 31.1 says eight, and
+     26.7 says five. The 26.7 needed to make the pair reach ten minutes
+     loses six lessons of eleven, and one of the six is SPEED IS
+     AUTOMATIC, which exists because the first player of the released
+     game did not know the throttle was. LEVEL_GATES_FIRST to one gives
+     a ladder of 1, 2, 4, 5, 6 gates, so the step stops being one gate,
+     which is the property the fifth level was taken from the bottom to
+     preserve; it makes the first real level 28 seconds, shorter than the
+     training run before it; and because deepProgress normalises against
+     finishClock, it leaves that level ending at a curve scale of 2.09
+     where every other configuration ends at 2.19.
+
+     WHAT THIS ONE COSTS. Every level shortens by the same 13.3 per cent
+     and the ladder keeps its shape: the step is still one gate, the
+     first real level is still 53.2 seconds and still longer than
+     training, and EVERY LEVEL STILL ENDS AT EXACTLY THE DIFFICULTY IT
+     ENDED AT BEFORE, because deepProgress reaches 1 at the line whatever
+     the line is. Measured at seven points through levels two, three and
+     six: the endpoints are identical to six figures and the only
+     deviation is in the first third, where the on ramp is a fixed number
+     of SECONDS and therefore a larger share of a shorter level. Level
+     six at 15 per cent goes from 2.44 to 2.15 and has converged by 30
+     per cent.
+
+     THE CLOCK IS THE ONE THING THAT DOES GET GENTLER, and it is small.
+     A gate is worth CLOCK_CHECKPOINT whatever the spacing, so a shorter
+     cycle hands back time the drain has less room to spend. Measured
+     over 108 gate cycles with a fixed hand: the swing goes from 17.62
+     seconds to 15.53 and the low point from 8.38 to 10.47. It is not the
+     failure the comment beside CLOCK_CHECKPOINT warns about, which is a
+     clock pinned at its ceiling saying nothing: that is 2.2 per cent of
+     frames before and 1.1 after. CLOCK_CHECKPOINT is deliberately NOT
+     touched, because 13 recovers only half a second of that low point
+     and a second constant moved to chase two seconds is tuning by
+     arithmetic rather than by playing. If the clock feels slack on a
+     phone, 13 is the one line.
+
+     THE TOP LEVEL IS 2:49 RATHER THAN 3:15, at the same difficulty. */
+  CHECKPOINT_EVERY:        1300,     // LIVE, segments between gates, about 29 seconds
   /* WHERE THE FIRST GATE SITS, AS A SHARE OF THAT SPACING, and it was an
      inline 0.7 in gateSegment until the training run needed it. CLAUDE.md
      is explicit that nothing tunable may live inline in the game logic
@@ -4735,21 +4789,26 @@ const FEEL = {
 
      THE TOTAL IS THE DESIGN CONSTRAINT, not the level count. Handoff
      2.5: a daily works as an appointment at three to five minutes and
-     becomes homework at ten. THE BUILD IS PAST THAT AND HAS BEEN FOR A
-     WHILE, and it is written down here rather than quietly left in the
-     arithmetic. At 33.3 seconds a gate the ladder below is 1, 2, 3, 4,
-     5 and 6 gates, which is 43.1 + 61.3 + 94.7 + 128.0 + 161.3 + 194.7
-     = 683.1 seconds clean, eleven minutes twenty three. It was 10:22 at
-     four real levels and 5:37 at the three this paragraph was written
-     for.
+     becomes homework at ten. IT WAS PAST THAT AND IS NOT ANY MORE. At
+     33.3 seconds a gate the ladder below was 1, 2, 3, 4, 5 and 6 gates,
+     which is 43.1 + 61.3 + 94.7 + 128.0 + 161.3 + 194.7 = 683.1 seconds
+     clean, eleven minutes twenty three. It was 10:22 at four real levels
+     and 5:37 at the three this paragraph was written for.
 
-     THE RULE STILL SAYS SHORTEN IT RATHER THAN ACCEPT IT, and the
-     cheapest place to do that is the same place the fifth level's
-     length came from: the bottom of the ladder. Dropping the training
-     run's own length, or taking LEVEL_GATES_FIRST to one, are the two
-     levers that do not touch the top of the game. The author has the
-     number and chose it knowingly; this note exists so nobody has to
-     rediscover that the total is the thing being spent.
+     IT IS 597.8 SECONDS NOW, NINE FIFTY EIGHT, and the gate spacing is
+     where it came from rather than the bottom of the ladder. This
+     paragraph used to name the training run's length and
+     LEVEL_GATES_FIRST as the two cheap levers and price neither; both
+     are priced in the block beside CHECKPOINT_EVERY, and neither of them
+     reaches ten minutes even together. The ladder below is unchanged:
+     still 1, 2, 3, 4, 5 and 6 gates, still one gate a rung, and every
+     level still ends at the difficulty it ended at before. What moved is
+     what a gate is worth in road, and it moved for every level at once.
+
+     A RETURNING PLAYER NEVER SEES THE TRAINING RUN, so the recurring day
+     is the five real levels alone: 554.7 seconds, nine fifteen. The
+     683.1 above was always the FIRST day and the number to hold is the
+     larger one, which is why it is the one quoted.
 
      THREE, BECAUSE THREE CONFIGURATIONS ALREADY EXIST. The on ramp
      values, the mid values and the deep values. Level one is the on ramp
@@ -5110,16 +5169,24 @@ const FEEL = {
   /* TWO, NOT THREE, AND THE FIFTH REAL LEVEL IS WHY.
 
      A fifth level has to come from somewhere. Taken at the top, the
-     ladder runs 3 4 5 6 7 gates and the day goes from 10:22 to 14:10,
+     ladder ran 3 4 5 6 7 gates and the day went from 10:22 to 14:10,
      which is 36% longer before anybody dies. Taken at the bottom, it
-     runs 2 3 4 5 6, the step stays exactly one gate, and the day is
-     11:23. Nothing gets longer: every level that exists today slides
-     down a rung and loses a gate, and the new one takes the top slot at
-     the length the hardest level already was.
+     runs 2 3 4 5 6, the step stays exactly one gate, and the day was
+     11:23. Nothing got longer: every level that existed slid down a rung
+     and lost a gate, and the new one took the top slot at the length the
+     hardest level already was.
 
-     THE 33 SECONDS COMES OFF THE CHEAPEST PLACE IN THE DAY. On the
-     first real level all eight driving policies survive today, which is
-     the definition of a level that is not asking anything yet. */
+     THE 33 SECONDS CAME OFF THE CHEAPEST PLACE IN THE DAY. On the first
+     real level all eight driving policies survive, which is the
+     definition of a level that is not asking anything yet.
+
+     AND IT STAYS AT TWO, WHICH WAS RE-DECIDED RATHER THAN LEFT ALONE.
+     Taking it to one was the obvious lever for the day being too long
+     and it is the wrong one: it does not reach ten minutes on its own,
+     it breaks the one gate step this block exists to defend, and it
+     makes the first real level 28 seconds, shorter than the training run
+     in front of it. See CHECKPOINT_EVERY, which is where the length came
+     from instead. */
   LEVEL_GATES_FIRST:          2,     // LIVE, gates on the first REAL level
   LEVEL_GATES_LAST:           6,     // LIVE, gates on the last level
   /* THE SHAPE OF THE RAMP BETWEEN THEM, and it is not linear. See
@@ -8770,6 +8837,21 @@ window.addEventListener('keydown', function (e) {
     firstGesture(); shareRun(); return;
   }
   else if (k === 'Escape' || k === 'p' || k === 'P') { togglePause(); return; }
+  /* Q FOR THE TITLE SCREEN, and it is literally the key the player who
+     found this missing reached for. Escape was not available: it is the
+     key that opened this overlay and pressing it again closes it, which
+     is what pause has meant since it was added. Both cases, so caps lock
+     is not a dead key, and carved out of "any key starts a run" the same
+     way R, T, E, S, K, P and F are.
+
+     PAUSED ONLY, AND THAT IS DELIBERATE. A key that ends a run from
+     inside one is a key that ends a run by accident, and Q sits next to
+     W A S D on a keyboard nobody is looking at while they drive. Pausing
+     first is not a second input on the restart path: section 5 governs
+     getting back IN after a death and nothing on that path changes. */
+  else if ((k === 'q' || k === 'Q') && paused && state === DRIVING) {
+    firstGesture(); leaveRun(); return;
+  }
   /* K SKIPS THE TRAINING RUN, and it is not optional. Section 6 says
      many sessions on a school Chromebook are keyboard only, and a DOM
      button in the corner is a target a keyboard cannot reach at all, so
@@ -8845,7 +8927,8 @@ canvas.addEventListener('pointerdown', function (e) {
      The mode button is tested FIRST, or the resume eats it: it is the
      only thing on that screen that is not "tap to resume". */
   if (paused) {
-    if (hitMode(e)) { firstGesture(); switchMode(); }
+    if (hitHome(e)) { firstGesture(); leaveRun(); }
+    else if (hitMode(e)) { firstGesture(); switchMode(); }
     else setPaused(false);
     return;
   }
@@ -10908,12 +10991,20 @@ function levelBand(lvl) {
    and one gate is 28.0 seconds because the first gate is the finish.
 
    THE DAY TOTAL, WHICH IS THE THING THAT HAD TO HOLD. With a fifth real
-   level the ladder is 1 2 3 4 5 6 gates, so 43.1 61.3 94.7 128.0 161.3
-   194.7, total 683.1 seconds. Taking the extra level off the TOP
-   instead would have been 3 4 5 6 7, which is 849.8 and 36 per cent
-   longer; taking it off the bottom costs 61.3, which is the level that
-   did not exist. The five real levels still step by exactly one gate
-   each, which is the property the straight ramp existed for. */
+   level the ladder is 1 2 3 4 5 6 gates. Taking the extra level off the
+   TOP instead would have been 3 4 5 6 7, which is 36 per cent longer;
+   taking it off the bottom cost the length of one first real level,
+   which is the level that did not exist. The five real levels still step
+   by exactly one gate each, which is the property the straight ramp
+   existed for.
+
+   THE SECONDS ARE NOT WRITTEN HERE ANY MORE, and that is deliberate.
+   They were 43.1 61.3 94.7 128.0 161.3 194.7 for 683.1, and every one of
+   those six numbers is CHECKPOINT_EVERY times a gate count, so moving
+   the spacing to bring the day under ten minutes falsified all of them
+   at once. The gate counts are the thing this function decides and they
+   have not changed; the seconds live beside the constant that sets them.
+   They are 43.1 53.2 82.0 110.9 139.8 168.7 for 597.8 today. */
 function levelGatesFor(lvl) {
   const l = clampLevel(lvl);
   if (isTraining(l)) return Math.max(1, Math.round(FEEL.TRAINING_GATES));
@@ -26046,7 +26137,22 @@ function clearDailyRecords() {
    Training is untouched again, and for the same two reasons: it is flat
    by construction and its difficulty band is zero, so neither the swell
    nor the deep curve reaches it. */
-const ROAD_GEN = 20;
+/* 21 FROM 20, AND THE GATE SPACING IS WHY. CHECKPOINT_EVERY moved from
+   1500 to 1300, so every level's finish line moved with it: a stored
+   time is a time to a line that is no longer there, and a stored ghost
+   is a line recorded over a longer track that would run past the new
+   one. Both are invalid and loadDaily discards the whole day on a gen
+   mismatch, which is exactly the right outcome.
+
+   AND IT SETTLES THE OTHER QUESTION THIS SESSION ASKED. Today's stored
+   level bests were set under the old rule, where a run that died
+   partway could take one. There is no need for a surgical rule to find
+   them: the bump clears every daily record on the first load after
+   deploy, bests, times, done bits, clean bits and ghosts alike, so the
+   first day under the new rule starts from nothing on every device. The
+   all time BEST SCORE and the cumulative counts are not daily records
+   and are not touched by any of this. */
+const ROAD_GEN = 21;
 
 (function loadDaily() {
   const day = parseInt(storeGet('daily.day'), 10);
@@ -26219,20 +26325,39 @@ function levelsDone() {
   return n;
 }
 
-/* Which of two clean runs is the better one.
+/* WHETHER THIS RUN TAKES THE LEVEL'S RECORD, AND THE ANSWER NOW STARTS
+   WITH THE LINE.
 
-   A FINISH BEATS AN UNFINISHED RUN WHATEVER THE SCORES. Score stays
-   primary between two runs of the same kind, and that is the right way
-   round: this game is about drifting, so the higher score wins. But a
-   run that reached the line and one that died at gate four are not
-   comparable at all, and letting a big score on a dead run hold the
-   record would keep a ghost that runs out halfway and a time that does
-   not exist. */
+   IT USED TO BE OPEN TO A RUN THAT DIED. The rule was that a finish
+   beats an unfinished run and that two runs of the same kind are ranked
+   on score, which sounds right and left a hole: with no clean finish
+   recorded yet, two UNFINISHED runs were also "the same kind", so the
+   biggest score anybody had died with held the record. Measured on a
+   real run that never reached the line: L2.best went from 0 to 17130.
+
+   SO A RECORD NEEDS A CLEAN FINISH, the same way a clean day does, and
+   for the reason this project keeps arriving at: a record has to be hard
+   to take or it means nothing. Everything else about the daily was
+   already built on it. The clean day needs every level finished with no
+   continue. The completion time only exists past the line. The share
+   card's day time only accumulates there. The score was the one
+   currency in that box being filled by a different rule, so a player
+   reading TODAY on the completion screen could be looking at a number
+   nobody finished for.
+
+   TWO GUARDS AND NOTHING ELSE, because with the line required there is
+   no second kind of run left to rank against. `finished` and `continues
+   === 0` together mean clean, which is exactly the bit dayClean counts,
+   and past them the comparison is the plain one: a bigger score wins.
+   The old function's first branch had one job, choosing between kinds,
+   and there is only one kind now.
+
+   WHAT THIS IS NOT. BEST SCORE, the all time record, is a different
+   number written by bankScore a few lines further down, past its own
+   `continues > 0` guard and outside this function entirely. It is open
+   to any clean run, finished or not, and nothing here touches it. */
 function dailyBeatsRecord(finished, score) {
-  /* Against the CLEAN record, not against the done bit. done can now be
-     set by a continued run, which takes no record, so comparing against
-     it would let a continued finish lock out every later clean one. */
-  if (finished !== dailyClean) return finished;   // a finish always wins
+  if (!finished) return false;                    // the line, first
   return score > dailyBest;
 }
 
@@ -26329,7 +26454,11 @@ function bankDaily(finished) {
   if (continues > 0) return false;              // not a lap
   if (!dailyBeatsRecord(!!finished, banked)) return false;
   r.best = banked;
-  r.time = finished ? finishTime : 0;
+  /* NOT `finished ? finishTime : 0` ANY MORE. Nothing unfinished reaches
+     this line, so the time is always a real time, and best and time are
+     now written together or not at all. A stored record with a score and
+     no time was the shape of the hole this closed. */
+  r.time = finishTime;
   dailyBest = r.best;
   dailyTime = r.time;
   storeSet('daily.day', String(todayStamp));
@@ -29238,67 +29367,223 @@ function hintArrow(tipX, tipY, reach, dirX, dirY, colour, width) {
 
    PAUSE. It is already a deliberate action, it is already off the
    restart path, and it already obscures the view, so nothing is being
-   given up. Section 12 forbids menus and this is not one: it is a single
-   button on a screen that already exists, and nothing is ever asked of
+   given up. Section 12 forbids menus and this is not one: it is two
+   buttons on a screen that already exists, and nothing is ever asked of
    a player who does not press pause.
+
+   AND THE SECOND ROUTE IS THE WAY BACK TO THE TITLE, WHICH DID NOT
+   EXIST AT ALL. A player on itch: "how do you see your scores again?
+   how do you come back to choose another car? I tried Escape, Q and all
+   other keys." He was right and there was nothing to find. Once a run
+   started the only way back to the title screen was reloading the page,
+   and everything built to bring somebody back tomorrow lives there: the
+   car ladder and what the next one costs, the countdown to tomorrow's
+   tracks, the cumulative tracks finished, the random track, the training
+   run, the share card, and the best score. All of it was behind a door
+   that only opened on page load.
+
+   THE SAME THREE PLACES, AND THE SAME ANSWER. Not the death screen,
+   which is section 5's one action restart. Not the title screen alone,
+   which is the thing being reached. Pause, beside the mode switch that
+   is already there, because a player who wants out of a run has already
+   pressed it.
    ================================================================== */
 const modeRect = { x: 0, y: 0, w: 0, h: 0, live: false };
+/* Its own rect rather than a flag on the mode button: the two do
+   different things and the hit test has to tell them apart. */
+const homeRect = { x: 0, y: 0, w: 0, h: 0, live: false };
 
 function drawPauseCover(w, h) {
   modeRect.live = false;
+  homeRect.live = false;
   if (!paused) return;
   ctx.fillStyle = COLOUR.PAUSE_COVER;
   ctx.fillRect(0, 0, w, h);
   const s = Math.min(w, h);
-  text('PAUSED', w / 2, h * 0.44, Math.round(s * 0.11), '800');
-  text('tap to resume', w / 2, h * 0.53, Math.round(s * 0.045), '600');
 
-  /* Anchored to the bottom edge, exactly where RESTART sits on the death
-     screen and where TODAY'S TRACK sits on the title screen. Three canvas
-     buttons, one place: a player who has met one already knows the next. */
-  const daily = mode === DAILY;
-  const label = daily ? 'SWITCH TO A RANDOM TRACK' : "SWITCH TO TODAY'S TRACK";
+  /* THE BUTTONS ARE LAID FIRST AND THE WORDS FIT ABOVE THEM, which is
+     the other way round from how this screen used to work and is what
+     the second row costs.
+
+     PAUSED at 0.44 of the height and the resume line at 0.53 were fine
+     over one button and are not over two. MEASURED, on a phone held
+     sideways: at 844x390 the old fractions put "tap to resume" across
+     194 to 219 and this row's caption across 192 to 209, so the second
+     button would have been captioned through the sentence above it.
+     Same at 740x360 and at 667x375. Portrait was never at risk and is
+     unchanged, which is why the words keep their old fractions whenever
+     there is room for them.
+
+     A caption drawn through the thing under it has happened three times
+     in this file already and the title screen carries the note about it.
+     This would have been the fourth, so nothing here is a fraction of a
+     row: the stack walks up from the bottom edge asking each row for
+     exactly what it needs, and the words take what is left.
+
+     BOTH BUTTONS GO THROUGH canvasButton. The hand rolled one this
+     replaces was the only button in the game that did not, and it was
+     the only one without the 0.92 width clamp, so its longest label ran
+     off the edge of a narrow screen. */
   const size = Math.round(s * 0.038);
-  ctx.font = '800 ' + size + 'px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-  const bw = ctx.measureText(label).width + size * 2.2;
-  const bh = size * 2.2;
+  const capSize = Math.round(s * 0.030);
+  const gutter = size * 0.75;
   const by0 = h - safeBottom - FEEL.DEATH_BOTTOM;
-  modeRect.x = w / 2 - bw / 2;
-  modeRect.y = by0 - bh / 2;
-  modeRect.w = bw;
-  modeRect.h = bh;
-  modeRect.live = true;
+  const daily = mode === DAILY;
 
+  /* THE MODE SWITCH DOES NOT MOVE. It has been on this line since it was
+     added and it is the same line RESTART sits on on the death screen,
+     so the new row stacks ABOVE it exactly as TODAY'S TRACK stacks above
+     RESTART there. */
+  const bh = canvasButton(modeRect,
+                          daily ? 'SWITCH TO A RANDOM TRACK' : "SWITCH TO TODAY'S TRACK",
+                          w / 2, by0, size, daily ? COLOUR.SCORE : COLOUR.GATE, w);
   // It starts a fresh run, so say so. Switching mid run cannot mean
   // anything else: the road under the car belongs to the mode it is in.
+  let top = modeRect.y - capSize * 0.9;
   ctx.globalAlpha = 0.6;
-  text('starts a new run', w / 2, by0 - bh * 0.95,
-       Math.round(s * 0.030), '700');
+  text('starts a new run', w / 2, top, capSize, '700');
   ctx.globalAlpha = 1;
 
-  ctx.globalAlpha = 0.9;
-  ctx.fillStyle = COLOUR.BAR_TRACK;
-  roundRect(modeRect.x, modeRect.y, bw, bh, bh * 0.3);
-  ctx.fill();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = daily ? COLOUR.SCORE : COLOUR.GATE;
-  ctx.stroke();
+  /* THE WAY BACK, in the game's own white rather than in either mode's
+     colour, because it is not a third mode: it is the door out of both
+     of them. Its caption says what it costs in the same three words the
+     screen already uses for the button under it, and carries the key for
+     the half of this audience that has no touchscreen. */
+  const homeY = top - capSize * 0.9 - gutter - bh / 2;
+  canvasButton(homeRect, 'TITLE SCREEN', w / 2, homeY, size, COLOUR.TEXT, w);
+  const hcap = 'ends this run' + (hasKeyboard ? '     press Q' : '');
+  top = homeRect.y - capSize * 0.9;
+  ctx.globalAlpha = 0.6;
+  text(hcap, w / 2, top, fittedSize(hcap, '700', capSize, w * 0.92), '700');
   ctx.globalAlpha = 1;
-  text(label, w / 2, by0, size, '800', 'center', daily ? COLOUR.SCORE : COLOUR.GATE);
+
+  const resumeSize = Math.round(s * 0.045);
+  const pausedSize = Math.round(s * 0.11);
+  const resumeY = Math.min(h * 0.53, top - capSize * 0.9 - gutter - resumeSize / 2);
+  const pausedY = Math.max(pausedSize * 0.75,
+                           Math.min(h * 0.44, resumeY - resumeSize * 0.6 - pausedSize * 0.7));
+  text('PAUSED', w / 2, pausedY, pausedSize, '800');
+  text('tap to resume', w / 2, resumeY, resumeSize, '600');
 }
 
-function hitMode(e) {
-  if (!modeRect.live || !paused) return false;
-  const r = canvas.getBoundingClientRect();
-  const x = e.clientX - r.left, y = e.clientY - r.top;
-  return x >= modeRect.x && x <= modeRect.x + modeRect.w
-      && y >= modeRect.y && y <= modeRect.y + modeRect.h;
-}
+/* Both through hitRect, which is what every other canvas button in this
+   file is tested with. The hand rolled test that was here recomputed the
+   same arithmetic beside the one that owns it. */
+function hitMode(e) { return modeRect.live && paused && hitRect(modeRect, e); }
+function hitHome(e) { return homeRect.live && paused && hitRect(homeRect, e); }
 
 function switchMode() {
   mode = mode === DAILY ? ENDLESS : DAILY;
   setPaused(false);
   startRun();
+}
+
+/* ------------------------------------------------------------------
+   LEAVING A RUN, AND EXACTLY WHAT IT COSTS.
+
+   IT IS A CRASH THAT SKIPS THE CRASH. The three things crash() does that
+   write anything are called here, in the same order, with the same
+   arguments, so a run left at gate four banks precisely what a run that
+   died at gate four banks and not one thing more:
+
+     bankScore(false)  the score, only if it beat the best AND no
+                       continue was used, and the distance only if it
+                       beat the furthest. Both of those can only ever go
+                       UP, so neither is worth gaming.
+     ghostBank()       the line, as the ghost, exactly as a crash keeps
+                       it. The ghost is the last run and that is the
+                       whole rule; making this an exception would make it
+                       the last run except when it is not.
+     onRunEnded()      the share card, built off the result exactly as
+                       a crash builds it. The tilt hint survives too,
+                       for the same reason it survives a crash: nothing
+                       here calls stopTiltHint, and the only two
+                       things that do are reaching the line and
+                       actually using tilt.
+
+   AND NOTHING ELSE IS REACHABLE FROM HERE. done, clean, finishedEver and
+   the clean day are all written by bankDaily and all of them are behind
+   `if (finished)`. false is passed explicitly, which is the same false
+   crash passes by leaving the argument out. So a run cannot be laundered
+   into a completion by walking out of it, and a day cannot be made clean
+   by a level nobody drove to the end.
+
+   THE CHECKPOINT GOES WITH THE RUN. canContinue is `cpValid && state ===
+   DEAD`, and this route never enters DEAD, so a checkpoint kept here
+   would be one nothing could ever spend. It is dropped, and the next run
+   on this level starts from the top, which is what RESTART does after a
+   death for exactly the same reason. What leaving costs over dying is
+   therefore one thing and it is worth saying out loud: the continue.
+
+   THE COUNTDOWN IS NOT A SECOND COUNTDOWN. It belongs to a run and not
+   to a level, which is why restarting after a death has always re-armed
+   it. Coming back to a level from the title goes through startRun, so
+   what it gets is the first countdown of the next run rather than a
+   second one of the last. Nothing here touches it.
+   ------------------------------------------------------------------ */
+function leaveRun() {
+  if (state !== DRIVING) return;
+  runDistance = Math.round(position / 100);   // world units are centimetres
+  bankScore(false);
+  ghostBank();
+  onRunEnded();
+  setPaused(false);
+  cpValid = false;
+  continues = 0;
+  settleForTitle();
+  state = TITLE;
+}
+
+/* The picture the title screen is drawn over. The ROAD is left exactly
+   where it was: it is a real road the player has just driven, and
+   rebuilding one here would be a second answer to a question the boot
+   already answers at the bottom of this file. What is put back is the
+   CAR, upright and still on the centre line, with the smoke, the debris,
+   the shake, the racers and the callouts cleared, because a car frozen
+   sideways in mid air behind the wordmark reads as a game that has
+   fallen over rather than as a title screen.
+
+   The score, the clock and the bar are not touched, because nothing on
+   the title screen draws them. */
+function settleForTitle() {
+  carX = 0;
+  carFrac = 0;
+  carY = 0;
+  carVY = 0;
+  carPitch = 0;
+  carFallV = 0;
+  carCurveX = 0;
+  airborne = false;
+  airTime = 0;
+  landSlow = 0;
+  landSlowTo = 1;
+  airHeadingV = 0;
+  airLateralV = 0;
+  camLift = 0;
+  coastSpeed = 0;
+  drift.headingV = 0;
+  drift.lateralV = 0;
+  drift.headingAngle = 0;
+  drift.travelAngle = 0;
+  drift.slip = 0;
+  drift.slipDeg = 0;
+  drift.slipNorm = 0;
+  drift.lateralAccel = 0;
+  steering.value = 0;
+  scraping = false;
+  onRough = false;
+  scrapeSide = 0;
+  scrapeMeter = 0;
+  scrapeRisk = 0;
+  shake = 0;
+  calloutLife = 0;
+  driftLife = 0;
+  resetSpectacle();
+  clearDebris();
+  racersReset(0);
+  for (let i = 0; i < smoke.length; i++) smoke[i].life = 0;
+  smokeCount = 0;
+  smokeAcc = 0;
 }
 
 
@@ -29368,29 +29653,6 @@ const TRACKS = [
    host and from a phone, which is what section 1 asks for. It is the
    same origin as the HTML: the same kind of request that fetched the
    page, which is why it is not the class of thing section 6 forbids. */
-/* ==================================================================
-   CABINET COPY: THE RECORDED MUSIC IS DELIBERATELY OFF.
-
-   This file is the snap-hit.online copy of the game that lives at
-   driftfever.com. The four tracks listed below are 9.68 MB and they are
-   NOT in this repository. The paths are relative, so from here they
-   resolve against snap-hit.online and 404, and pointing them at
-   driftfever.com instead would be an external request, which this site
-   does not make.
-
-   With this false the element pair is never built, so nothing is ever
-   requested, and the game runs on its procedural music. That is exactly
-   the state a failed fetch already reached, so the fallback sounds the
-   same as it did when the files were 404ing. Nothing else is changed.
-
-   THE REAL SOUNDTRACK IS AT https://driftfever.com/ and this cabinet
-   links there from its marquee, its button and its full screen view.
-
-   TO RESTORE IT when re-copying this game: set this to true and put the
-   four files in a music/ folder beside this file.
-   ================================================================== */
-const RECORDED_MUSIC = false;
-
 const TUNES = [
   { file: 'music/track-1.m4a', name: 'TRACK ONE' },
   { file: 'music/track-2.m4a', name: 'TRACK TWO' },
@@ -29440,10 +29702,6 @@ const tune = {
    section 6's exception actually turns on, and it is called from exactly
    one place. */
 function tuneWake() {
-  /* CABINET COPY: see RECORDED_MUSIC above. Marking the pair failed is
-     precisely the state a 404 used to leave behind, and tune.failed is
-     what turns the procedural music on, so the fallback is unchanged. */
-  if (!RECORDED_MUSIC) { tune.failed = true; return; }
   /* AND NOT AT ALL FOR SOMEBODY WHO HAS MUTED. Being remembered has to
      mean the download does not happen either, or a muted player on a
      school connection still pays for music they will never hear. */
@@ -29560,10 +29818,6 @@ function tuneFailed(reason) {
    elements themselves are kept and only their sources are re set, which
    is what load() with a fresh src does. */
 function tuneRevive() {
-  /* CABINET COPY: there is nothing to revive, and clearing tune.failed
-     here would silence the procedural music with nothing to replace it,
-     because no element exists to fail again. See RECORDED_MUSIC above. */
-  if (!RECORDED_MUSIC) return false;
   if (!tune.failed || !musicOn) return false;
   if (tune.tries >= FEEL.TUNE_RETRIES) return false;
   if (tune.retryIn > 0) return false;
