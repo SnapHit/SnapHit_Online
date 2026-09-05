@@ -23126,6 +23126,24 @@ let framed = false;
 try { framed = window.self !== window.top; } catch (e) { framed = true; }
 if (framed && moreEl && moreEl.parentNode) moreEl.parentNode.removeChild(moreEl);
 
+/* AND THE MUSIC BUTTON GOES WITH IT, for the same reason and only when
+   framed. The cabinet copy plays no music at all: the recorded tracks are
+   off (see RECORDED_MUSIC) and the procedural music is off too (see the
+   musicOn line further down). A switch that cannot turn any music on is a
+   control over nothing, and a control that lies is worse than no control.
+
+   HIDDEN RATHER THAN REMOVED, which is the opposite of what was done to
+   the footer above, and deliberately: padSwitch and paintSound both reach
+   for this element without a null check, so taking it out of the document
+   would throw on the next repaint. Display is set inline because nothing
+   in the sheet sets display on these buttons and nothing uses !important.
+
+   The sound button beside it is untouched. It switches sfxOn, which gates
+   the skid, the scrape and the crash and never touches the music, so it
+   still does exactly what it says. */
+const musicBtnEl = document.getElementById('musicBtn');
+if (framed && musicBtnEl) musicBtnEl.style.display = 'none';
+
 /* The markup ships visible and the script only ever takes it away, so
    this starts true to agree with it, exactly as creditShown starts false
    to agree with its own hidden attribute. Get that wrong and the first
@@ -30137,7 +30155,21 @@ let track = 0;            // only one for now, and the list is here so that
    remember a person across loads on a device that refuses to remember
    anything. */
 let sfxOn = storeGet('sfx') !== '0';
-let musicOn = storeGet('music') !== '0';
+/* CABINET COPY: SILENT INSIDE THE CABINET, EFFECTS ONLY.
+
+   Forcing this false when framed reuses updateMusic's own "music is off"
+   branch, which ramps musicGain to zero and stops the recorded side. That
+   branch touches nothing else, and the skid, the scrape and the crash are
+   separate nodes on the same bus, so the driving still sounds like
+   driving. Nothing new had to be written to separate them.
+
+   Only when framed. Opened directly, this file behaves exactly as it does
+   on driftfever.com, so a copy compared against the original differs only
+   where the cabinet needs it to.
+
+   THE REAL SOUNDTRACK IS AT https://driftfever.com/, and this cabinet
+   links there from its marquee, its button and its full screen view. */
+let musicOn = framed ? false : (storeGet('music') !== '0');
 function anySound() { return sfxOn || musicOn; }
 
 let audio = null;         // the graph, once there is one, and never before one
