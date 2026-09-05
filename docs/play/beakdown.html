@@ -244,7 +244,34 @@ if(!CanvasRenderingContext2D.prototype.roundRect){
 // embedded copies live on pages aimed at school hardware and unexpected noise in a
 // classroom closes the tab. An explicit choice by the player always wins over both.
 const FRAMED = (function(){ try{ return window.self!==window.top; }catch(e){ return true; } })();
-let sfxOn=!FRAMED, musOn=!FRAMED, actx=null, master=null, sfxBus=null, musBus=null, arpBus=null,
+/* ==================================================================
+   CABINET COPY: EFFECTS ON EVEN WHEN FRAMED. MUSIC LEFT AS UPSTREAM.
+
+   The note above is about embeds on pages aimed at school hardware, where
+   a surprise noise closes the tab. This copy is framed in an arcade
+   cabinet on snap-hit.online, behind a card the visitor has just tapped
+   that says TAP TO PLAY. There the effects ARE the game: they are
+   synthesised, they need no files, and a tap that makes no sound feels
+   broken. So sfxOn starts true here instead of !FRAMED.
+
+   musOn is deliberately NOT changed and still starts !FRAMED, so nothing
+   musical plays on arrival. The recorded tracks are off in this copy
+   already (see RECORDED_MUSIC below) and the only music left is the star
+   theme, which is an event cue rather than a soundtrack and which the
+   music button still governs honestly.
+
+   NOTHING SOUNDS BEFORE A GESTURE. audioInit is reached from exactly four
+   places, all of them handlers: the two audio buttons, the canvas
+   pointerdown and the keydown. Starting sfxOn true cannot build a context
+   on boot, only arm the first tap to be heard.
+
+   UNFRAMED BEHAVIOUR IS UNCHANGED: !FRAMED was already true there. And the
+   stored preference read just below still wins over this, so a visitor who
+   turned effects off stays off.
+
+   THE REAL SOUNDTRACK IS AT https://beakdown.fun/
+   ================================================================== */
+let sfxOn=true, musOn=!FRAMED, actx=null, master=null, sfxBus=null, musBus=null, arpBus=null,
     revBus=null, noiseBuf=null;
 try{
   const a=localStorage.getItem('beakdown_sfx'); if(a!==null) sfxOn=(a==='1');
