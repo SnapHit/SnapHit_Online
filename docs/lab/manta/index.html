@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Manta lab</title>
+<!-- An empty data URL, so the browser never asks for /favicon.ico. A data:
+     URL is not a request; a missing favicon is a 404 in the log. -->
+<link rel="icon" href="data:,">
+
+<!--
+  Manta trains: the diagnostics page. Not part of the site.
+
+  Nothing links here. No entry in the GAMES array, no line in sitemap.xml, no
+  change to robots.txt, and noindex/nofollow above. It exists to answer four
+  questions from a real phone, which a headless browser on a server cannot:
+
+    which backend does this device actually get,
+    does the WebGL2 fallback hold,
+    what does the library cost to load,
+    and what frame rate comes out the other side.
+
+  Everything it needs is same-origin. The import map below is the only way
+  Three.js gets loaded: no CDN, no bundler, no build step. Zero external
+  requests, same as every other page here.
+-->
+
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #04060d; }
+  body {
+    /* System stack only. A web font would be an external request. */
+    font: 400 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+    color: #e8eef5;
+    overflow: hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+  #gl { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+
+  /* The panel sits over the scene, top aligned, and scrolls on its own so a
+     long user agent string can never push the buttons off a small screen. */
+  #panel {
+    position: fixed;
+    top: env(safe-area-inset-top, 0px);
+    left: env(safe-area-inset-left, 0px);
+    right: env(safe-area-inset-right, 0px);
+    max-height: calc(100% - 96px - env(safe-area-inset-top, 0px));
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 10px;
+    padding: 12px 14px 14px;
+    border: 1px solid rgba(120,190,210,.28);
+    border-radius: 12px;
+    background: rgba(4,9,18,.82);
+    backdrop-filter: none;             /* deliberately not blurred: see NOTES.md */
+  }
+  #backend {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: .01em;
+    line-height: 1.1;
+    margin: 0 0 2px;
+    color: #7fe3d0;
+  }
+  #backend.webgl2 { color: #ffc46b; }
+  #backend.failed { color: #ff8a80; }
+  #sub { margin: 0 0 10px; font-size: 14px; color: #9fb4c7; }
+
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; }
+  dt { color: #8fa6bb; white-space: nowrap; }
+  dd { margin: 0; word-break: break-word; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  #err {
+    display: none;
+    margin: 0 0 12px;
+    padding: 9px 10px;
+    border-radius: 8px;
+    background: rgba(120,20,20,.55);
+    border: 1px solid #ff8a80;
+    color: #ffd9d4;
+    font-size: 14px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #err.on { display: block; }
+
+  #bar {
+    position: fixed;
+    left: env(safe-area-inset-left, 0px);
+    right: env(safe-area-inset-right, 0px);
+    bottom: env(safe-area-inset-bottom, 0px);
+    display: flex;
+    gap: 10px;
+    margin: 10px;
+  }
+  #bar button {
+    flex: 1 1 0;
+    min-height: 48px;                 /* thumb sized */
+    font: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    color: #04060d;
+    background: #7fe3d0;
+    border: 0;
+    border-radius: 10px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #bar button:active { transform: translateY(1px); }
+  #bar button.ghost { background: rgba(127,227,208,.14); color: #bfeee3; box-shadow: inset 0 0 0 1px rgba(127,227,208,.45); }
+
+  /* Landscape: the panel takes a column rather than the whole width, so the
+     scene is still visible next to it. */
+  @media (orientation: landscape) and (max-height: 520px) {
+    #panel { max-width: 56%; max-height: calc(100% - 20px - env(safe-area-inset-top, 0px)); }
+    #bar { left: auto; width: 40%; }
+    #backend { font-size: 24px; }
+  }
+
+  /* A plain textarea is the fallback when the clipboard API is unavailable or
+     refused: it is put on screen, focused and selected so a long press offers
+     Copy. Off screen it cannot be selected on iOS, so it is on screen. */
+  #plain {
+    position: fixed; left: 10px; right: 10px; top: 10px;
+    height: 60%; display: none; z-index: 5;
+    font: 400 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #e8eef5; background: #060c17;
+    border: 1px solid #7fe3d0; border-radius: 10px; padding: 10px;
+  }
+  #plain.on { display: block; }
+</style>
+</head>
+<body>
+
+<canvas id="gl"></canvas>
+
+<div id="panel">
+  <!-- Headline first, then the one line that says what to do about it, then
+       the detail. A stack trace is long, and burying "which backend" under it
+       loses the answer the page exists to give. -->
+  <p id="backend">starting…</p>
+  <p id="sub">loading Three.js from /vendor/three/r186/</p>
+  <div id="err"></div>
+  <dl id="rows"></dl>
+</div>
+
+<div id="bar">
+  <button id="swap" type="button">Switch backend</button>
+  <button id="copy" type="button" class="ghost">Copy report</button>
+</div>
+
+<textarea id="plain" readonly></textarea>
+
+<script>
+/* Classic script, on purpose, and first. It runs before the module below and
+   before Three.js is fetched, so a module that fails to parse, fails to
+   resolve through the import map or throws on init still lands in the panel
+   instead of leaving a black screen with nothing on it. */
+(function () {
+  var box = document.getElementById('err');
+  var seen = {}, shown = 0;
+  window.__labError = function (what, e) {
+    var msg = (e && (e.stack || e.message)) ? (e.stack || e.message) : String(e);
+    var line = what + ': ' + msg;
+    /* A renderer that throws throws every frame. Reporting each one would bury
+       the first, which is the only one that says anything. */
+    if (seen[line]) return;
+    seen[line] = true;
+    if (shown < 4) {
+      box.textContent = (box.textContent ? box.textContent + '\n\n' : '') + line;
+      shown++;
+    }
+    box.className = 'on';
+    var b = document.getElementById('backend');
+    /* Keep the backend name if it is already known: "which backend" and "did
+       it work" are two different answers and both are wanted. */
+    b.textContent = b.dataset.name ? (b.dataset.name + ' · FAILED') : 'FAILED';
+    b.className = 'failed';
+  };
+  window.addEventListener('error', function (e) {
+    window.__labError('uncaught error', e.error || e.message);
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    window.__labError('unhandled rejection', e.reason);
+  });
+})();
+</script>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "/vendor/three/r186/three.webgpu.js",
+    "three/webgpu": "/vendor/three/r186/three.webgpu.js",
+    "three/tsl": "/vendor/three/r186/three.tsl.js",
+    "three/addons/": "/vendor/three/r186/addons/"
+  }
+}
+</script>
+
+<script type="module">
+/* Every name below was checked against docs/vendor/three/r186/, not against
+   memory or an online example. r186 renamed PostProcessing to RenderPipeline,
+   which is the kind of drift that makes a remembered API a liability. */
+import {
+  WebGPURenderer, Scene, OrthographicCamera, InstancedMesh, BufferGeometry,
+  Float32BufferAttribute, MeshBasicNodeMaterial, Matrix4, Quaternion, Vector3,
+  DoubleSide, REVISION
+} from 'three';
+import {
+  Fn, vec3, float, mix, sin, fract, smoothstep, screenUV, time,
+  instanceIndex, positionLocal, hash, varying
+} from 'three/tsl';
+
+/* Bumped by hand every time this page is edited, so a stale deploy is obvious
+   from the phone rather than something you have to take on trust. */
+const BUILD = '2026-09-20 17:38 UTC';
+
+const COUNT   = 300;   // arrowheads
+const WORLD_H = 22;    // world units from the top of the screen to the bottom
+const SPAN    = WORLD_H + 6;   // travel distance before wrapping, off screen at both ends
+
+const params     = new URLSearchParams(location.search);
+const FORCE_WEBGL = params.get('backend') === 'webgl2';
+
+const elBackend = document.getElementById('backend');
+const elSub     = document.getElementById('sub');
+const elRows    = document.getElementById('rows');
+const elPlain   = document.getElementById('plain');
+
+/* The panel is a fixed set of rows, created once and then only ever written
+   to, so a per-frame update never touches layout. */
+const ROWS = [
+  ['fallback',   'forced'],
+  ['navigator.gpu', 'gpu'],
+  ['adapter',    'adapter'],
+  ['gpu',        'gpuinfo'],
+  ['three',      'three'],
+  ['viewport',   'viewport'],
+  ['first frame','ttff'],
+  ['vendor bytes','bytes'],
+  ['fps (5s)',   'fps'],
+  ['worst frame','worst'],
+  ['build',      'build'],
+  ['agent',      'ua'],
+];
+const cell = {};
+for (const [label, key] of ROWS) {
+  const dt = document.createElement('dt'); dt.textContent = label;
+  const dd = document.createElement('dd'); dd.className = 'num'; dd.textContent = '—';
+  elRows.append(dt, dd);
+  cell[key] = dd;
+}
+const set = (k, v) => { cell[k].textContent = v; };
+
+set('build', BUILD);
+set('ua', navigator.userAgent);
+set('three', 'r' + REVISION);
+set('forced', FORCE_WEBGL ? 'yes — ?backend=webgl2' : 'no');
+
+/* Orientation is taken from the viewport, not from screen.orientation.type.
+   The API answers for the device and can disagree with the window: in a
+   headless 412x915 it reported landscape-primary. The API value is still
+   shown, labelled, because on a phone it says which way up as well. */
+function describeViewport () {
+  const shape = innerWidth > innerHeight ? 'landscape' : 'portrait';
+  const api = (screen.orientation && screen.orientation.type) || null;
+  return innerWidth + '×' + innerHeight + ' css  ·  dpr ' +
+         (Math.round(devicePixelRatio * 100) / 100) + '  ·  ' + shape +
+         (api && api !== shape ? '  (screen.orientation: ' + api + ')' : '');
+}
+set('viewport', describeViewport());
+
+/* Asked directly rather than read off the renderer: r186's WebGPUBackend does
+   not keep the adapter, and this also answers the question on a device where
+   the renderer fell back and never held one. */
+(async () => {
+  if (!navigator.gpu) { set('gpu', 'absent'); set('adapter', 'n/a — no navigator.gpu'); return; }
+  set('gpu', 'present');
+  try {
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) { set('adapter', 'requestAdapter() returned null'); return; }
+    set('adapter', 'obtained');
+    const i = adapter.info || {};
+    const bits = [i.vendor, i.architecture, i.device, i.description].filter(Boolean);
+    if (bits.length) set('gpuinfo', bits.join(' · '));
+  } catch (e) {
+    set('adapter', 'requestAdapter() threw: ' + (e && e.message ? e.message : e));
+  }
+})();
+
+/* ---------------------------------------------------------------- scene */
+
+/* A unit arrowhead lying flat in the XZ plane, nose toward -Z, which is up the
+   screen under the top-down camera below. Four points and two triangles: the
+   notch at the back is what makes it read as an arrowhead rather than a
+   triangle at a glance. DoubleSide, so winding cannot make it invisible. */
+function arrowhead () {
+  const g = new BufferGeometry();
+  g.setAttribute('position', new Float32BufferAttribute([
+     0.00, 0, -0.50,   // 0 nose
+    -0.34, 0,  0.42,   // 1 left barb
+     0.34, 0,  0.42,   // 2 right barb
+     0.00, 0,  0.10,   // 3 notch
+  ], 3));
+  g.setIndex([0, 1, 3, 0, 3, 2]);
+  return g;
+}
+
+const scene = new Scene();
+
+/* Top-down orthographic: the camera is above the plane looking straight down,
+   and up is -Z so the arrowheads' noses point up the screen. The frustum is
+   set in fit() below, because it depends on the viewport. */
+const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+camera.position.set(0, 10, 0);
+camera.up.set(0, 0, -1);
+camera.lookAt(0, 0, 0);
+
+/* The background: one full-screen TSL gradient, deep navy to near black, with
+   the band shifting slowly under time. Both backends compile this. */
+scene.backgroundNode = Fn(() => {
+  const t = time.mul(0.05);
+  const navy  = vec3(0.039, 0.075, 0.153);
+  const black = vec3(0.004, 0.009, 0.020);
+  const band = screenUV.y
+    .add(sin(screenUV.x.mul(2.4).add(t)).mul(0.10))
+    .add(sin(t.mul(0.61)).mul(0.13));
+  return mix(navy, black, smoothstep(float(-0.1), float(1.0), band));
+})();
+
+/* Per-instance values, all from one TSL hash of the instance index. hash()
+   returns [0,1) and is seeded with the index plus a distinct offset per
+   property, so the four streams are independent. */
+const idx    = instanceIndex.toFloat();
+const rSpeed = hash(idx.add(17.0));
+const rPhase = hash(idx.add(911.0));
+const rSway  = hash(idx.add(4241.0));
+const rTint  = hash(idx.add(7907.0));
+
+const material = new MeshBasicNodeMaterial({ side: DoubleSide });
+
+/* The instance's drift, in TSL, driving position per instance.
+
+   positionLocal here is already the instanced position: NodeMaterial applies
+   the instance matrix first and only then assigns positionNode, so reading
+   positionLocal inside it gives the vertex with its instance placement,
+   heading and scale already baked in. The offset added on top is therefore in
+   world units and the wrap is exact, which is the point: travel runs from
+   +SPAN/2 to -SPAN/2 and both ends are off screen. */
+const progress = fract(rPhase.add(time.mul(rSpeed.mul(0.030).add(0.010))));
+const travel   = float(0.5).sub(progress).mul(SPAN);
+const sway     = sin(time.mul(rSway.mul(0.7).add(0.2)).add(rPhase.mul(6.2832)))
+                   .mul(rSway.mul(0.45).add(0.12));
+material.positionNode = positionLocal.add(vec3(sway, 0.0, travel));
+
+/* Blue-greens. Computed from the instance index, so it has to be resolved in
+   the vertex stage: the instance index is a vertex builtin and is not
+   available to a fragment shader on either backend. varying() carries it. */
+const TEAL = vec3(0.10, 0.72, 0.64);
+const BLUE = vec3(0.20, 0.42, 0.88);
+material.colorNode = varying(
+  mix(TEAL, BLUE, rTint).mul(rSpeed.mul(0.55).add(0.42))
+);
+
+const mesh = new InstancedMesh(arrowhead(), material, COUNT);
+mesh.frustumCulled = false;   // every instance is moved by the shader
+scene.add(mesh);
+
+/* The instance matrix carries what does not change per frame: where across the
+   width, which way the nose points, and how big. It is rebuilt on resize so a
+   rotation into landscape spreads them over the new width rather than leaving
+   two thirds of them off the sides. */
+const seeds = Array.from({ length: COUNT }, (_, i) => ({
+  u:    ((i * 0.6180339887) % 1),                 // even spread across the width
+  yaw:  (Math.sin(i * 12.9898) * 0.5) * 0.55,     // +/- ~16 degrees
+  size: 0.34 + ((Math.sin(i * 78.233) * 0.5 + 0.5) * 0.42),
+}));
+
+const _m = new Matrix4(), _q = new Quaternion(), _p = new Vector3(), _s = new Vector3();
+function layout (worldW) {
+  for (let i = 0; i < COUNT; i++) {
+    const s = seeds[i];
+    _p.set((s.u - 0.5) * (worldW + 2), 0, 0);
+    _q.setFromAxisAngle(new Vector3(0, 1, 0), s.yaw);
+    _s.setScalar(s.size);
+    mesh.setMatrixAt(i, _m.compose(_p, _q, _s));
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+}
+
+/* -------------------------------------------------------------- renderer */
+
+const canvas = document.getElementById('gl');
+let renderer;
+
+function fit () {
+  const w = innerWidth, h = innerHeight;
+  const worldW = WORLD_H * (w / h);
+  camera.left = -worldW / 2; camera.right = worldW / 2;
+  camera.top = WORLD_H / 2;  camera.bottom = -WORLD_H / 2;
+  camera.updateProjectionMatrix();
+  layout(worldW);
+  if (renderer) renderer.setSize(w, h, false);
+  set('viewport', describeViewport());
+}
+
+/* ------------------------------------------------------ frame accounting */
+
+let firstFrameAt = null;
+let frames = [];          // { t, dt } for the last 5 seconds
+let lastAt = null;
+
+function accountFrame (now) {
+  if (lastAt !== null) frames.push({ t: now, dt: now - lastAt });
+  lastAt = now;
+  const cut = now - 5000;
+  while (frames.length && frames[0].t < cut) frames.shift();
+  if (frames.length > 1) {
+    const span = frames[frames.length - 1].t - frames[0].t;
+    const fps = span > 0 ? ((frames.length - 1) * 1000 / span) : 0;
+    let worst = 0;
+    for (const f of frames) if (f.dt > worst) worst = f.dt;
+    set('fps', fps.toFixed(1) + ' avg over ' + (span / 1000).toFixed(1) + 's');
+    set('worst', worst.toFixed(1) + ' ms');
+  }
+}
+
+/* Resource Timing, filtered to the vendored library. transferSize is what came
+   down the wire including headers and is 0 on a memory or disk cache hit;
+   decodedBodySize is the uncompressed size, which is what the parser paid for.
+   Both are reported because the difference is the whole question about r186
+   shipping unminified. */
+function accountBytes () {
+  let transferred = 0, decoded = 0, n = 0, cached = 0;
+  for (const e of performance.getEntriesByType('resource')) {
+    if (e.name.indexOf('/vendor/three/') === -1) continue;
+    n++;
+    transferred += e.transferSize || 0;
+    decoded += e.decodedBodySize || 0;
+    if ((e.transferSize || 0) === 0 && (e.decodedBodySize || 0) > 0) cached++;
+  }
+  const kb = v => (v / 1024).toFixed(0) + ' KB';
+  set('bytes', n === 0 ? 'not reported'
+    : kb(transferred) + ' over the wire, ' + kb(decoded) + ' decoded, ' +
+      n + ' file' + (n === 1 ? '' : 's') + (cached ? ' (' + cached + ' from cache)' : ''));
+}
+
+/* ------------------------------------------------------------------ boot */
+
+(async () => {
+  try {
+    renderer = new WebGPURenderer({ canvas, antialias: true, forceWebGL: FORCE_WEBGL });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    fit();
+    renderer.setSize(innerWidth, innerHeight, false);
+
+    await renderer.init();
+
+    /* Which backend actually came up. Asked of the backend after init, not of
+       the request: WebGPURenderer swaps in a WebGL2 backend by itself when
+       WebGPU is unavailable, and the request would still say WebGPU. */
+    const isGPU = renderer.backend.isWebGPUBackend === true;
+    elBackend.dataset.name = isGPU ? 'WebGPU' : 'WebGL2';
+    elBackend.textContent = elBackend.dataset.name;
+    elBackend.className = isGPU ? '' : 'webgl2';
+    elSub.textContent = FORCE_WEBGL
+      ? 'fallback forced with ?backend=webgl2'
+      : (isGPU ? 'WebGPU was available and is in use'
+               : 'WebGPU was asked for and was not available — fell back');
+
+    if (!isGPU && cell.gpuinfo.textContent === '—') {
+      /* The WebGL2 renderer string, where the browser exposes it. Many hide it
+         behind the debug extension and some hide it outright, so a plain
+         RENDERER read is the floor. */
+      try {
+        const gl = renderer.backend.gl;
+        const ext = gl.getExtension('WEBGL_debug_renderer_info');
+        const s = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+        if (s) set('gpuinfo', String(s));
+      } catch (e) { /* not exposed on this device, which is an answer too */ }
+    }
+
+    renderer.setAnimationLoop(() => {
+      /* A backend can init cleanly and still fail on the first draw, which is
+         what an older browser does with r186's texture views. Stop rather than
+         throw sixty times a second, and point at the button that gets round
+         it. Nothing here falls back on its own: which backend is running is
+         the thing this page exists to report, so it never changes it quietly. */
+      try {
+        renderer.render(scene, camera);
+      } catch (e) {
+        renderer.setAnimationLoop(null);
+        window.__labError('render', e);
+        elSub.textContent = FORCE_WEBGL
+          ? 'the WebGL2 fallback itself failed to draw — the message above is why'
+          : 'this backend came up but cannot draw. Tap Switch backend for WebGL2.';
+        return;
+      }
+      const now = performance.now();
+      if (firstFrameAt === null) {
+        /* Timed on the animation frame after the first render is submitted, so
+           it is closer to when the pixels were presented than to when the work
+           was queued. performance.now() is measured from navigation start. */
+        requestAnimationFrame(() => {
+          firstFrameAt = performance.now();
+          set('ttff', firstFrameAt.toFixed(0) + ' ms from navigation start');
+          accountBytes();
+        });
+        firstFrameAt = -1;   // claimed, so the branch runs once
+      }
+      accountFrame(now);
+    });
+
+    window.__labReady = true;
+  } catch (e) {
+    window.__labError('renderer init', e);
+    elSub.textContent = 'nothing is being drawn — the message above is why';
+  }
+})();
+
+addEventListener('resize', fit);
+addEventListener('orientationchange', () => setTimeout(fit, 120));
+
+/* --------------------------------------------------------------- buttons */
+
+document.getElementById('swap').addEventListener('click', () => {
+  const u = new URL(location.href);
+  if (FORCE_WEBGL) u.searchParams.delete('backend');
+  else u.searchParams.set('backend', 'webgl2');
+  location.replace(u.toString());
+});
+
+function report () {
+  const lines = ['Manta lab — ' + elBackend.textContent, elSub.textContent, ''];
+  for (const [label, key] of ROWS) lines.push(label + ': ' + cell[key].textContent);
+  const err = document.getElementById('err');
+  if (err.className === 'on') lines.push('', 'errors:', err.textContent);
+  lines.push('', 'url: ' + location.href);
+  return lines.join('\n');
+}
+
+document.getElementById('copy').addEventListener('click', async () => {
+  const btn = document.getElementById('copy');
+  const text = report();
+  try {
+    if (!navigator.clipboard) throw new Error('no clipboard API');
+    await navigator.clipboard.writeText(text);
+    btn.textContent = 'Copied';
+    setTimeout(() => { btn.textContent = 'Copy report'; }, 1600);
+  } catch (e) {
+    /* Put it on screen and select it instead, so a long press offers Copy. */
+    elPlain.value = text;
+    elPlain.className = 'on';
+    elPlain.focus();
+    elPlain.select();
+    elPlain.setSelectionRange(0, text.length);
+    btn.textContent = 'Select and copy';
+    setTimeout(() => { btn.textContent = 'Copy report'; }, 2600);
+  }
+});
+elPlain.addEventListener('blur', () => { elPlain.className = ''; });
+</script>
+</body>
+</html>
