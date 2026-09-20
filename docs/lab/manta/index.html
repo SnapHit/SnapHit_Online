@@ -10,30 +10,33 @@
 <link rel="icon" href="data:,">
 
 <!--
-  Manta trains: the diagnostics page. Not part of the site.
+  Manta trains: the look spike. Not part of the site.
 
   Nothing links here. No entry in the GAMES array, no line in sitemap.xml, no
-  change to robots.txt, and noindex/nofollow above. It exists to answer four
-  questions from a real phone, which a headless browser on a server cannot:
+  change to robots.txt, and noindex/nofollow above.
 
-    which backend does this device actually get,
-    does the WebGL2 fallback hold,
-    what does the library cost to load,
-    and what frame rate comes out the other side.
+  It began as the diagnostics page from Brief 0 and still is one: which backend
+  is live, what the library costs to load, what the refresh rate really is. The
+  panel is collapsed to a chip now, because the spike is judged by eye and the
+  default view has to be almost all ocean.
 
-  Everything it needs is same-origin. The import map is the only way Three.js
-  gets loaded: no CDN, no bundler, no build step. Zero external requests, same
-  as every other page here. It is built by a script rather than written out,
-  because the Cold load button appends a cache-busting stamp to the three
-  build file URLs and only one import map is allowed per document.
+  Everything is same-origin. The import map is the only way Three.js gets
+  loaded, and the page's own modules are plain relative imports beside this
+  file: no CDN, no bundler, no build step. Zero external requests.
 -->
 
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: #04060d; }
+  html, body { margin: 0; height: 100%; }
+
+  /* The ocean, painted in CSS before a single byte of JavaScript runs, in the
+     same colours the shader starts from. Three hundred to four hundred
+     milliseconds pass before the first frame, and a black rectangle for a
+     third of a second is the difference between "it is loading" and "it is
+     broken". When the canvas does come up it replaces like with like. */
   body {
-    /* System stack only. A web font would be an external request. */
+    background: linear-gradient(180deg, #060b14 0%, #040711 55%, #02040a 100%);
     font: 400 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
           "Helvetica Neue", Arial, sans-serif;
     color: #e8eef5;
@@ -42,31 +45,46 @@
   }
   #gl { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
 
-  /* The panel sits over the scene, top aligned, and scrolls on its own so a
-     long user agent string can never push the buttons off a small screen. */
+  /* ---- the chip: what you see by default ---- */
+  #chip {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    left: calc(env(safe-area-inset-left, 0px) + 10px);
+    z-index: 3;
+    display: flex; align-items: center; gap: 8px;
+    min-height: 34px; padding: 0 12px;
+    font: inherit; font-size: 13px; font-weight: 600;
+    color: #bfeee3;
+    background: rgba(4,9,18,.55);
+    border: 1px solid rgba(120,190,210,.30);
+    border-radius: 999px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #chip .dot { width: 7px; height: 7px; border-radius: 50%; background: #7fe3d0; }
+  #chip.webgl2 { color: #ffd9a8; } #chip.webgl2 .dot { background: #ffc46b; }
+  #chip.failed { color: #ffb3ab; } #chip.failed .dot { background: #ff8a80; }
+  #chip .fps { color: #8fa6bb; font-weight: 400; font-variant-numeric: tabular-nums; }
+
+  /* ---- the panel: everything, once you ask for it ---- */
   #panel {
     position: fixed;
-    top: env(safe-area-inset-top, 0px);
+    top: calc(env(safe-area-inset-top, 0px) + 54px);
     left: env(safe-area-inset-left, 0px);
     right: env(safe-area-inset-right, 0px);
-    max-height: calc(100% - 150px - env(safe-area-inset-top, 0px));
+    z-index: 2;
+    max-height: calc(100% - 200px - env(safe-area-inset-top, 0px));
     overflow: auto;
     -webkit-overflow-scrolling: touch;
-    margin: 10px;
+    margin: 0 10px;
     padding: 12px 14px 14px;
     border: 1px solid rgba(120,190,210,.28);
     border-radius: 12px;
-    background: rgba(4,9,18,.82);
-    backdrop-filter: none;             /* deliberately not blurred: see NOTES.md */
+    background: rgba(4,9,18,.86);
   }
-  #backend {
-    font-size: 30px;
-    font-weight: 700;
-    letter-spacing: .01em;
-    line-height: 1.1;
-    margin: 0 0 2px;
-    color: #7fe3d0;
-  }
+  #panel[hidden], #bar[hidden] { display: none; }
+
+  #backend { font-size: 26px; font-weight: 700; line-height: 1.1; margin: 0 0 2px; color: #7fe3d0; }
   #backend.webgl2 { color: #ffc46b; }
   #backend.failed { color: #ff8a80; }
   #sub { margin: 0 0 10px; font-size: 14px; color: #9fb4c7; }
@@ -75,79 +93,55 @@
   dt { color: #8fa6bb; white-space: nowrap; }
   dd { margin: 0; word-break: break-word; }
   .num { font-variant-numeric: tabular-nums; }
+  #rows dd.block {
+    white-space: pre; overflow-x: auto;
+    font: 400 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
 
   #err {
-    display: none;
-    margin: 0 0 12px;
-    padding: 9px 10px;
-    border-radius: 8px;
-    background: rgba(120,20,20,.55);
-    border: 1px solid #ff8a80;
-    color: #ffd9d4;
-    font-size: 14px;
-    white-space: pre-wrap;
-    word-break: break-word;
+    display: none; margin: 0 0 12px; padding: 9px 10px;
+    border-radius: 8px; background: rgba(120,20,20,.55);
+    border: 1px solid #ff8a80; color: #ffd9d4; font-size: 14px;
+    white-space: pre-wrap; word-break: break-word;
   }
   #err.on { display: block; }
-  /* A fallback that worked is not a failure. Amber, and the headline stays
-     the name of the backend that is actually drawing.
-
-     Capped and scrollable, because a stack trace is ten lines and the rows
-     below it are why the page was opened: unbounded, it pushed every one of
-     them off a phone screen. Copy report reads the text, not the visible
-     part, so nothing is lost by hiding it. A red #err is not capped — when
-     nothing is drawing there is nothing else to look at. */
+  /* A fallback that worked is not a failure. Amber, and the headline stays the
+     name of the backend that is actually drawing. Capped and scrollable: a
+     stack trace is ten lines, and unbounded it pushed every diagnostic row off
+     a phone screen. Copy report reads the text, not the visible part. A red
+     #err is not capped, because when nothing draws there is nothing else. */
   #err.note {
     background: rgba(90,62,10,.5); border-color: #ffc46b; color: #ffe6bd;
     max-height: 7.5em; overflow-y: auto;
   }
 
-  /* The timing breakdown. Monospace so the columns line up, and its own
-     scroller so a long line can never widen the grid column. */
-  #rows dd.block {
-    white-space: pre;
-    overflow-x: auto;
-    font: 400 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  }
-
   #bar {
-    position: fixed;
+    position: fixed; z-index: 3;
     left: env(safe-area-inset-left, 0px);
     right: env(safe-area-inset-right, 0px);
     bottom: env(safe-area-inset-bottom, 0px);
-    display: flex;
-    flex-wrap: wrap;            /* four buttons, two rows, still thumb sized */
-    gap: 10px;
-    margin: 10px;
+    display: flex; flex-wrap: wrap; gap: 10px; margin: 10px;
   }
   #bar button {
-    flex: 1 1 calc(50% - 5px);
-    min-height: 48px;                 /* thumb sized */
-    font: inherit;
-    font-size: 16px;
-    font-weight: 600;
-    color: #04060d;
-    background: #7fe3d0;
-    border: 0;
-    border-radius: 10px;
-    cursor: pointer;
+    flex: 1 1 calc(50% - 5px); min-height: 48px;
+    font: inherit; font-size: 16px; font-weight: 600;
+    color: #04060d; background: #7fe3d0;
+    border: 0; border-radius: 10px; cursor: pointer;
     -webkit-tap-highlight-color: transparent;
   }
   #bar button:active { transform: translateY(1px); }
-  #bar button.ghost { background: rgba(127,227,208,.14); color: #bfeee3; box-shadow: inset 0 0 0 1px rgba(127,227,208,.45); }
-
-  /* Landscape: the panel takes a column rather than the whole width, so the
-     scene is still visible next to it. */
-  @media (orientation: landscape) and (max-height: 520px) {
-    #panel { max-width: 56%; max-height: calc(100% - 20px - env(safe-area-inset-top, 0px)); }
-    #bar { left: auto; width: 40%; }
-    #bar button { min-height: 40px; font-size: 14px; }
-    #backend { font-size: 24px; }
+  #bar button.ghost {
+    background: rgba(127,227,208,.14); color: #bfeee3;
+    box-shadow: inset 0 0 0 1px rgba(127,227,208,.45);
   }
 
-  /* A plain textarea is the fallback when the clipboard API is unavailable or
-     refused: it is put on screen, focused and selected so a long press offers
-     Copy. Off screen it cannot be selected on iOS, so it is on screen. */
+  @media (orientation: landscape) and (max-height: 520px) {
+    #panel { max-width: 56%; max-height: calc(100% - 74px - env(safe-area-inset-top, 0px)); }
+    #bar { left: auto; width: 40%; }
+    #bar button { min-height: 40px; font-size: 14px; }
+    #backend { font-size: 22px; }
+  }
+
   #plain {
     position: fixed; left: 10px; right: 10px; top: 10px;
     height: 60%; display: none; z-index: 5;
@@ -162,7 +156,13 @@
 
 <canvas id="gl"></canvas>
 
-<div id="panel">
+<button id="chip" type="button" aria-expanded="false" aria-controls="panel">
+  <span class="dot" aria-hidden="true"></span>
+  <span id="chipBackend">starting…</span>
+  <span class="fps" id="chipFps">—</span>
+</button>
+
+<div id="panel" hidden>
   <!-- Headline first, then the one line that says what to do about it, then
        the detail. A stack trace is long, and burying "which backend" under it
        loses the answer the page exists to give. -->
@@ -172,7 +172,7 @@
   <dl id="rows"></dl>
 </div>
 
-<div id="bar">
+<div id="bar" hidden>
   <button id="swap" type="button">Switch backend</button>
   <button id="copy" type="button" class="ghost">Copy report</button>
   <button id="cold" type="button" class="ghost">Cold load</button>
@@ -182,13 +182,20 @@
 <textarea id="plain" readonly></textarea>
 
 <script>
-/* Classic script, on purpose, and first. It runs before the module below and
-   before Three.js is fetched, so a module that fails to parse, fails to
-   resolve through the import map or throws on init still lands in the panel
-   instead of leaving a black screen with nothing on it. */
+/* Classic script, on purpose, and first. It runs before any module is fetched,
+   so a module that fails to parse, fails to resolve through the import map or
+   throws on init still lands in the panel instead of leaving a black screen
+   with nothing on it. */
 (function () {
   var box = document.getElementById('err');
   var seen = {}, shown = 0;
+  function open() {
+    /* A failure has to be visible even when the panel is collapsed, because
+       the chip alone cannot carry a stack trace. */
+    document.getElementById('panel').hidden = false;
+    document.getElementById('bar').hidden = false;
+    document.getElementById('chip').setAttribute('aria-expanded', 'true');
+  }
   window.__labError = function (what, e) {
     var msg = (e && (e.stack || e.message)) ? (e.stack || e.message) : String(e);
     var line = what + ': ' + msg;
@@ -196,20 +203,18 @@
        the first, which is the only one that says anything. */
     if (seen[line]) return;
     seen[line] = true;
-    if (shown < 4) {
-      box.textContent = (box.textContent ? box.textContent + '\n\n' : '') + line;
-      shown++;
-    }
+    if (shown < 4) { box.textContent = (box.textContent ? box.textContent + '\n\n' : '') + line; shown++; }
     box.className = 'on';
     var b = document.getElementById('backend');
-    /* Keep the backend name if it is already known: "which backend" and "did
-       it work" are two different answers and both are wanted. */
     b.textContent = b.dataset.name ? (b.dataset.name + ' · FAILED') : 'FAILED';
     b.className = 'failed';
+    document.getElementById('chip').className = 'failed';
+    document.getElementById('chipBackend').textContent = 'FAILED';
+    open();
   };
-  /* A handled failure that the page recovered from. Same box, amber, and it
-     leaves the headline alone: after an automatic fallback the headline has
-     to name the backend that is drawing, not the one that died. */
+  /* A handled failure the page recovered from. Same box, amber, headline left
+     alone: after an automatic fallback the headline names the backend that is
+     drawing, not the one that died. */
   window.__labNote = function (what, e) {
     var msg = (e && (e.stack || e.message)) ? (e.stack || e.message) : String(e);
     var line = what + ': ' + msg;
@@ -218,12 +223,8 @@
     box.textContent = (box.textContent ? box.textContent + '\n\n' : '') + line;
     if (box.className !== 'on') box.className = 'on note';
   };
-  window.addEventListener('error', function (e) {
-    window.__labError('uncaught error', e.error || e.message);
-  });
-  window.addEventListener('unhandledrejection', function (e) {
-    window.__labError('unhandled rejection', e.reason);
-  });
+  window.addEventListener('error', function (e) { window.__labError('uncaught error', e.error || e.message); });
+  window.addEventListener('unhandledrejection', function (e) { window.__labError('unhandled rejection', e.reason); });
 })();
 </script>
 
@@ -245,8 +246,9 @@
    a key and sent to the stamped copy. Without this line a "cold" load would
    quietly serve 1.4 MB of the 3.7 MB out of cache and under-report itself.
 
-   addons/ is untouched: this page imports nothing from it, so it needs no
-   stamp and gets none. */
+   This page's own modules sit beside this file and are imported by relative
+   path, so they need no entry here and get none. addons/ is untouched for the
+   same reason: nothing imports from it. */
 (function () {
   var BASE = '/vendor/three/r186/';
   var stamp = new URLSearchParams(location.search).get('cold');
@@ -265,585 +267,6 @@
 })();
 </script>
 
-<script type="module">
-/* Every name below was checked against docs/vendor/three/r186/, not against
-   memory or an online example. r186 renamed PostProcessing to RenderPipeline,
-   which is the kind of drift that makes a remembered API a liability. */
-import {
-  WebGPURenderer, Scene, OrthographicCamera, InstancedMesh, BufferGeometry,
-  Float32BufferAttribute, MeshBasicNodeMaterial, Matrix4, Quaternion, Vector3,
-  DoubleSide, REVISION
-} from 'three';
-import {
-  Fn, vec3, float, mix, sin, fract, smoothstep, screenUV, time,
-  instanceIndex, positionLocal, hash, varying
-} from 'three/tsl';
-
-/* Bumped by hand every time this page is edited, so a stale deploy is obvious
-   from the phone rather than something you have to take on trust. */
-const BUILD = '2026-09-20 18:32 UTC';
-
-const COUNT   = 300;   // arrowheads
-const WORLD_H = 22;    // world units from the top of the screen to the bottom
-const SPAN    = WORLD_H + 6;   // travel distance before wrapping, off screen at both ends
-
-const params     = new URLSearchParams(location.search);
-const FORCE_WEBGL = params.get('backend') === 'webgl2';
-
-const elBackend = document.getElementById('backend');
-const elSub     = document.getElementById('sub');
-const elRows    = document.getElementById('rows');
-const elPlain   = document.getElementById('plain');
-
-/* The panel is a fixed set of rows, created once and then only ever written
-   to, so a per-frame update never touches layout. */
-const ROWS = [
-  ['load',           'load'],
-  ['fallback',       'forced'],
-  ['navigator.gpu',  'gpu'],
-  ['adapter',        'adapter'],
-  ['gpu',            'gpuinfo'],
-  ['three',          'three'],
-  ['viewport',       'viewport'],
-  ['first frame',    'ttff'],
-  ['timing (ms)',    'timing'],
-  ['vendor bytes',   'bytes'],
-  ['three.webgpu.js','fwebgpu'],
-  ['three.core.js',  'fcore'],
-  ['three.tsl.js',   'ftsl'],
-  ['refresh',        'refresh'],
-  ['fps (5s)',       'fps'],
-  ['worst 1%',       'worst'],
-  ['build',          'build'],
-  ['agent',          'ua'],
-];
-const BLOCK = { timing: true };     // multi-line, monospace, own scroller
-const cell = {};
-for (const [label, key] of ROWS) {
-  const dt = document.createElement('dt'); dt.textContent = label;
-  const dd = document.createElement('dd');
-  dd.className = BLOCK[key] ? 'block' : 'num';
-  dd.textContent = '—';
-  elRows.append(dt, dd);
-  cell[key] = dd;
-}
-const set = (k, v) => { cell[k].textContent = v; };
-
-set('build', BUILD);
-set('ua', navigator.userAgent);
-set('three', 'r' + REVISION);
-set('forced', FORCE_WEBGL ? 'forced — ?backend=webgl2' : 'automatic if WebGPU fails');
-set('refresh', 'sampling…');
-
-/* Orientation is taken from the viewport, not from screen.orientation.type.
-   The API answers for the device and can disagree with the window: in a
-   headless 412x915 it reported landscape-primary. The API value is still
-   shown, labelled, because on a phone it says which way up as well. */
-function describeViewport () {
-  const shape = innerWidth > innerHeight ? 'landscape' : 'portrait';
-  const api = (screen.orientation && screen.orientation.type) || null;
-  return innerWidth + '×' + innerHeight + ' css  ·  dpr ' +
-         (Math.round(devicePixelRatio * 100) / 100) + '  ·  ' + shape +
-         (api && api !== shape ? '  (screen.orientation: ' + api + ')' : '');
-}
-set('viewport', describeViewport());
-
-/* Asked directly rather than read off the renderer: r186's WebGPUBackend does
-   not keep the adapter, and this also answers the question on a device where
-   the renderer fell back and never held one. */
-(async () => {
-  if (!navigator.gpu) { set('gpu', 'absent'); set('adapter', 'n/a — no navigator.gpu'); return; }
-  set('gpu', 'present');
-  try {
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) { set('adapter', 'requestAdapter() returned null'); return; }
-    set('adapter', 'obtained');
-    const i = adapter.info || {};
-    const bits = [i.vendor, i.architecture, i.device, i.description].filter(Boolean);
-    if (bits.length) set('gpuinfo', bits.join(' · '));
-  } catch (e) {
-    set('adapter', 'requestAdapter() threw: ' + (e && e.message ? e.message : e));
-  }
-})();
-
-/* ---------------------------------------------------------------- scene */
-
-/* A unit arrowhead lying flat in the XZ plane, nose toward -Z, which is up the
-   screen under the top-down camera below. Four points and two triangles: the
-   notch at the back is what makes it read as an arrowhead rather than a
-   triangle at a glance. DoubleSide, so winding cannot make it invisible. */
-function arrowhead () {
-  const g = new BufferGeometry();
-  g.setAttribute('position', new Float32BufferAttribute([
-     0.00, 0, -0.50,   // 0 nose
-    -0.34, 0,  0.42,   // 1 left barb
-     0.34, 0,  0.42,   // 2 right barb
-     0.00, 0,  0.10,   // 3 notch
-  ], 3));
-  g.setIndex([0, 1, 3, 0, 3, 2]);
-  return g;
-}
-
-const scene = new Scene();
-
-/* Top-down orthographic: the camera is above the plane looking straight down,
-   and up is -Z so the arrowheads' noses point up the screen. The frustum is
-   set in fit() below, because it depends on the viewport. */
-const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
-camera.position.set(0, 10, 0);
-camera.up.set(0, 0, -1);
-camera.lookAt(0, 0, 0);
-
-/* The background: one full-screen TSL gradient, deep navy to near black, with
-   the band shifting slowly under time. Both backends compile this. */
-scene.backgroundNode = Fn(() => {
-  const t = time.mul(0.05);
-  const navy  = vec3(0.039, 0.075, 0.153);
-  const black = vec3(0.004, 0.009, 0.020);
-  const band = screenUV.y
-    .add(sin(screenUV.x.mul(2.4).add(t)).mul(0.10))
-    .add(sin(t.mul(0.61)).mul(0.13));
-  return mix(navy, black, smoothstep(float(-0.1), float(1.0), band));
-})();
-
-/* Per-instance values, all from one TSL hash of the instance index. hash()
-   returns [0,1) and is seeded with the index plus a distinct offset per
-   property, so the four streams are independent. */
-const idx    = instanceIndex.toFloat();
-const rSpeed = hash(idx.add(17.0));
-const rPhase = hash(idx.add(911.0));
-const rSway  = hash(idx.add(4241.0));
-const rTint  = hash(idx.add(7907.0));
-
-const material = new MeshBasicNodeMaterial({ side: DoubleSide });
-
-/* The instance's drift, in TSL, driving position per instance.
-
-   positionLocal here is already the instanced position: NodeMaterial applies
-   the instance matrix first and only then assigns positionNode, so reading
-   positionLocal inside it gives the vertex with its instance placement,
-   heading and scale already baked in. The offset added on top is therefore in
-   world units and the wrap is exact, which is the point: travel runs from
-   +SPAN/2 to -SPAN/2 and both ends are off screen. */
-const progress = fract(rPhase.add(time.mul(rSpeed.mul(0.030).add(0.010))));
-const travel   = float(0.5).sub(progress).mul(SPAN);
-const sway     = sin(time.mul(rSway.mul(0.7).add(0.2)).add(rPhase.mul(6.2832)))
-                   .mul(rSway.mul(0.45).add(0.12));
-material.positionNode = positionLocal.add(vec3(sway, 0.0, travel));
-
-/* Blue-greens. Computed from the instance index, so it has to be resolved in
-   the vertex stage: the instance index is a vertex builtin and is not
-   available to a fragment shader on either backend. varying() carries it. */
-const TEAL = vec3(0.10, 0.72, 0.64);
-const BLUE = vec3(0.20, 0.42, 0.88);
-material.colorNode = varying(
-  mix(TEAL, BLUE, rTint).mul(rSpeed.mul(0.55).add(0.42))
-);
-
-const mesh = new InstancedMesh(arrowhead(), material, COUNT);
-mesh.frustumCulled = false;   // every instance is moved by the shader
-scene.add(mesh);
-
-/* The instance matrix carries what does not change per frame: where across the
-   width, which way the nose points, and how big. It is rebuilt on resize so a
-   rotation into landscape spreads them over the new width rather than leaving
-   two thirds of them off the sides. */
-const seeds = Array.from({ length: COUNT }, (_, i) => ({
-  u:    ((i * 0.6180339887) % 1),                 // even spread across the width
-  yaw:  (Math.sin(i * 12.9898) * 0.5) * 0.55,     // +/- ~16 degrees
-  size: 0.34 + ((Math.sin(i * 78.233) * 0.5 + 0.5) * 0.42),
-}));
-
-const _m = new Matrix4(), _q = new Quaternion(), _p = new Vector3(), _s = new Vector3();
-function layout (worldW) {
-  for (let i = 0; i < COUNT; i++) {
-    const s = seeds[i];
-    _p.set((s.u - 0.5) * (worldW + 2), 0, 0);
-    _q.setFromAxisAngle(new Vector3(0, 1, 0), s.yaw);
-    _s.setScalar(s.size);
-    mesh.setMatrixAt(i, _m.compose(_p, _q, _s));
-  }
-  mesh.instanceMatrix.needsUpdate = true;
-}
-
-/* -------------------------------------------------------------- renderer */
-
-/* Not const: an automatic fallback has to swap this element, see below. */
-let canvas = document.getElementById('gl');
-let renderer = null;
-
-function fit () {
-  const w = innerWidth, h = innerHeight;
-  const worldW = WORLD_H * (w / h);
-  camera.left = -worldW / 2; camera.right = worldW / 2;
-  camera.top = WORLD_H / 2;  camera.bottom = -WORLD_H / 2;
-  camera.updateProjectionMatrix();
-  layout(worldW);
-  if (renderer) renderer.setSize(w, h, false);
-  set('viewport', describeViewport());
-}
-
-/* ------------------------------------------------------ frame accounting */
-
-let firstFrameAt = null;
-let frames = [];          // { t, dt } over the last 5 seconds
-let lastAt = null;
-
-/* Refresh sampling. The question it answers is whether 60.0 fps is the panel's
-   ceiling or an adaptive display idling at 60: a Pixel 9 can run at 120, and
-   if it does the frame budget is 8.3 ms rather than 16.7 ms and we have been
-   measuring against the wrong number. Sampling starts a couple of seconds
-   after the first frame so start-up hitches are outside the window, runs for
-   two seconds, and takes the median rather than the mean so one dropped frame
-   cannot move it.
-
-   What it measures is the requestAnimationFrame cadence while this scene is
-   drawing, which equals the display rate only while there is headroom. The row
-   says so, because a number that needs a caveat has to carry it. */
-const SAMPLE_WARMUP = 2000, SAMPLE_FOR = 2000;
-let sampleStart = null, sampleDts = [], sampleDone = false;
-
-function finishSample () {
-  sampleDone = true;
-  if (sampleDts.length < 8) { set('refresh', 'too few frames to measure'); return; }
-  const sorted = sampleDts.slice().sort((a, b) => a - b);
-  const median = sorted[Math.floor(sorted.length / 2)];
-  set('refresh', median.toFixed(2) + ' ms median  ·  ' +
-      (median > 0 ? (1000 / median).toFixed(0) : '?') + ' Hz' +
-      '  (rAF while drawing, ' + sampleDts.length + ' frames)');
-}
-
-function accountFrame (now) {
-  if (lastAt !== null) {
-    const dt = now - lastAt;
-    frames.push({ t: now, dt });
-    if (!sampleDone && firstFrameAt > 0) {
-      if (sampleStart === null) { if (now - firstFrameAt >= SAMPLE_WARMUP) sampleStart = now; }
-      else {
-        sampleDts.push(dt);
-        /* Both conditions, not either: a slow device keeps sampling until it has
-           enough intervals for a median rather than reporting nothing. */
-        if (now - sampleStart >= SAMPLE_FOR && sampleDts.length >= 8) finishSample();
-      }
-    }
-  }
-  lastAt = now;
-  const cut = now - 5000;
-  while (frames.length && frames[0].t < cut) frames.shift();
-  if (frames.length > 1) {
-    const span = frames[frames.length - 1].t - frames[0].t;
-    const fps = span > 0 ? ((frames.length - 1) * 1000 / span) : 0;
-    /* The 99th percentile, not the single worst frame. One 500 ms hitch while
-       a shader compiles says nothing about how it runs; the worst 1% is what
-       you actually feel. */
-    const sorted = frames.map(f => f.dt).sort((a, b) => a - b);
-    const p99 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.99))];
-    set('fps', fps.toFixed(1) + ' avg over ' + (span / 1000).toFixed(1) + 's');
-    set('worst', p99.toFixed(1) + ' ms  (99th pct of ' + sorted.length + ' frames)');
-  }
-}
-
-/* --------------------------------------------------------- what it cost */
-
-/* Resource Timing, filtered to the vendored library. transferSize is what came
-   down the wire including headers; decodedBodySize is what the parser paid
-   for. The gap between them is the whole question about r186 shipping
-   unminified, so both are reported, per file and in total.
-
-   A cache hit is NOT transferSize === 0. On the Pixel 9 warm load Chrome
-   reported a few hundred bytes a file, the old test read that as a network
-   fetch, and the panel said "1 KB over the wire" as though the library were
-   free. deliveryType settles it outright where the browser has it; otherwise a
-   transfer that is a rounding error beside the decoded size is a cache hit. */
-const VENDOR_FILES = [
-  ['three.webgpu.js', 'fwebgpu'],
-  ['three.core.js',   'fcore'],
-  ['three.tsl.js',    'ftsl'],
-];
-
-function cameFromCache (e) {
-  if (e.deliveryType === 'cache') return true;
-  const t = e.transferSize || 0, d = e.decodedBodySize || 0;
-  if (d === 0) return false;
-  return t === 0 || t < Math.min(2048, d * 0.02);
-}
-
-const kb = v => (v / 1024).toFixed(0) + ' KB';
-
-function accountBytes () {
-  const found = {};
-  for (const e of performance.getEntriesByType('resource')) {
-    if (e.name.indexOf('/vendor/three/') === -1) continue;
-    for (const [name, key] of VENDOR_FILES) if (e.name.indexOf('/' + name) !== -1) found[key] = e;
-  }
-  let wire = 0, decoded = 0, n = 0, cached = 0;
-  for (const [name, key] of VENDOR_FILES) {
-    const e = found[key];
-    if (!e) { set(key, 'not reported'); continue; }
-    n++;
-    const t = e.transferSize || 0, d = e.decodedBodySize || 0, c = cameFromCache(e);
-    wire += t; decoded += d; if (c) cached++;
-    set(key, kb(t) + ' wire  ·  ' + kb(d) + ' decoded  ·  ' + (c ? 'from cache' : 'network'));
-  }
-  set('bytes', n === 0 ? 'not reported'
-    : kb(wire) + ' over the wire, ' + kb(decoded) + ' decoded, ' + n +
-      ' file' + (n === 1 ? '' : 's') +
-      (cached === 0 ? '  —  cold' : '  —  from cache, ' + cached + ' of ' + n));
-  const stamp = params.get('cold');
-  set('load', (n === 0 ? 'unknown' : cached === 0 ? 'cold' : cached === n ? 'warm' : 'mixed') +
-      (stamp ? '  —  cache-busting stamp ?cold=' + stamp : '  —  plain URL, no stamp'));
-}
-
-/* -------------------------------------------------------------- timing */
-
-/* Four moments from navigation start, so network and backend stop being one
-   figure. Brief 0 measured 2,464 ms cold and 832 ms warm on the phone, but the
-   cold run was WebGPU and the warm run was WebGL2, so the gap could have been
-   the download or the backend starting up and there was no way to tell them
-   apart. These split it: the bytes land at "modules", the backend costs "init
-   start" to "init end", and what is left is the first draw. */
-function accountTiming () {
-  const rows = [];
-  const paint = performance.getEntriesByType('paint');
-  if (paint.length) rows.push(['first paint', Math.min.apply(null, paint.map(e => e.startTime))]);
-
-  let modulesEnd = 0;
-  for (const e of performance.getEntriesByType('resource'))
-    if (e.name.indexOf('/vendor/three/') !== -1 && e.responseEnd > modulesEnd) modulesEnd = e.responseEnd;
-  if (modulesEnd > 0) {
-    try { performance.measure('manta:modules', { start: 0, end: modulesEnd }); } catch (e) {}
-    rows.push(['modules', modulesEnd]);
-  }
-
-  for (const [mark, label] of [
-    ['manta:init-start',  'init start'],   ['manta:init-end',  'init end'],
-    ['manta:init2-start', 'rebuild start'], ['manta:init2-end', 'rebuild end'],
-  ]) {
-    const m = performance.getEntriesByName(mark, 'mark');
-    if (m.length) rows.push([label, m[m.length - 1].startTime]);
-  }
-  try { performance.measure('manta:init', 'manta:init-start', 'manta:init-end'); } catch (e) {}
-  try { performance.measure('manta:rebuild', 'manta:init2-start', 'manta:init2-end'); } catch (e) {}
-
-  if (firstFrameAt > 0) {
-    try { performance.measure('manta:to-first-frame', { start: 0, end: firstFrameAt }); } catch (e) {}
-    rows.push(['first frame', firstFrameAt]);
-  }
-
-  rows.sort((a, b) => a[1] - b[1]);
-  let prev = null;
-  const lines = rows.map(([label, t]) => {
-    const d = prev === null ? '' : '+' + Math.round(t - prev);
-    prev = t;
-    return (label + '              ').slice(0, 14) +
-           String(Math.round(t)).padStart(6) + d.padStart(8);
-  });
-  set('timing', lines.length ? lines.join('\n') : 'not reported');
-}
-
-/* ------------------------------------------------------------------ boot */
-
-/* The automatic fallback, which is a game rule and not a lab nicety. Chromium
-   141 reproduces the case exactly: WebGPU initialises cleanly and then the
-   first draw throws, because r186 sends swizzle as a string on every texture
-   view and that build wants a dictionary. Somebody on an older Chrome has to
-   get a game, not an apology, so the page rebuilds itself on WebGL2 and
-   carries on. The headline then names the backend that is drawing, and the
-   amber note says WebGPU failed and what it said.
-
-   Two things make this harder than it looks.
-
-   A canvas keeps the first context type it is ever given. Once
-   getContext('webgpu') has been called on it, getContext('webgl2') returns
-   null for the rest of its life, so the fallback has to swap in a new canvas
-   element. Reusing the old one draws nothing, and draws nothing silently.
-
-   And a backend that dies on frame 400 is not the same event as one that never
-   drew at all. Only the opening frames are on probation; after that a throw
-   stops the loop and is reported, which is what it did before. */
-const PROBATION = 10;
-let fellBack = false, goodFrames = 0;
-
-function announce () {
-  const isGPU = renderer.backend.isWebGPUBackend === true;
-  elBackend.dataset.name = isGPU ? 'WebGPU' : 'WebGL2';
-  elBackend.textContent = elBackend.dataset.name;
-  elBackend.className = isGPU ? '' : 'webgl2';
-  elSub.textContent =
-      FORCE_WEBGL ? 'fallback forced with ?backend=webgl2'
-    : isGPU       ? 'WebGPU was available and is in use'
-    : fellBack    ? 'WebGPU started and then could not draw, so this rebuilt itself on WebGL2 — the error is below'
-    :               'WebGPU was not available, so Three.js fell back to WebGL2 during init';
-
-  if (!isGPU && cell.gpuinfo.textContent === '—') {
-    /* The WebGL2 renderer string, where the browser exposes it. Many hide it
-       behind the debug extension and some hide it outright, so a plain
-       RENDERER read is the floor. */
-    try {
-      const gl = renderer.backend.gl;
-      const ext = gl.getExtension('WEBGL_debug_renderer_info');
-      const v = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
-      if (v) set('gpuinfo', String(v));
-    } catch (e) { /* not exposed on this device, which is an answer too */ }
-  }
-}
-
-async function build (force, tag) {
-  const r = new WebGPURenderer({ canvas, antialias: true, forceWebGL: force });
-  r.setPixelRatio(Math.min(devicePixelRatio, 2));
-  r.setSize(innerWidth, innerHeight, false);
-  performance.mark('manta:' + tag + '-start');
-  await r.init();
-  performance.mark('manta:' + tag + '-end');
-  return r;
-}
-
-function freshCanvas () {
-  const old = canvas;
-  canvas = document.createElement('canvas');
-  canvas.id = 'gl';
-  old.replaceWith(canvas);
-}
-
-async function fallBack (what, err) {
-  if (fellBack || FORCE_WEBGL) return false;
-  fellBack = true;
-  if (renderer) {
-    try { renderer.setAnimationLoop(null); } catch (e) {}
-    try { await renderer.dispose(); } catch (e) {}
-    renderer = null;
-  }
-  freshCanvas();
-  try {
-    renderer = await build(true, 'init2');
-  } catch (e) {
-    window.__labError('WebGPU failed, and so did the WebGL2 rebuild', e);
-    elSub.textContent = 'nothing is being drawn — the messages above are why';
-    return false;
-  }
-  window.__labNote('WebGPU failed here, so this is drawing on WebGL2 instead. ' + what, err);
-  /* Measure the backend that is actually running, not the one that died. */
-  firstFrameAt = null; frames = []; lastAt = null;
-  sampleStart = null; sampleDts = []; sampleDone = false;
-  goodFrames = 0;
-  set('refresh', 'sampling…');
-  fit();
-  announce();
-  loop();
-  return true;
-}
-
-function loop () {
-  renderer.setAnimationLoop(() => {
-    try {
-      renderer.render(scene, camera);
-    } catch (e) {
-      renderer.setAnimationLoop(null);
-      if (!FORCE_WEBGL && !fellBack && goodFrames < PROBATION) { fallBack('First draw threw.', e); return; }
-      window.__labError('render', e);
-      elSub.textContent = FORCE_WEBGL
-        ? 'the WebGL2 fallback itself failed to draw — the message above is why'
-        : 'this backend stopped drawing after ' + goodFrames + ' frames — the message above is why';
-      return;
-    }
-    goodFrames++;
-    const now = performance.now();
-    if (firstFrameAt === null) {
-      firstFrameAt = -1;   // claimed, so the branch runs once
-      /* Timed on the animation frame after the first render is submitted, so
-         it is closer to when the pixels were presented than to when the work
-         was queued. performance.now() is measured from navigation start. */
-      requestAnimationFrame(() => {
-        firstFrameAt = performance.now();
-        performance.mark('manta:first-frame');
-        set('ttff', firstFrameAt.toFixed(0) + ' ms from navigation start');
-        accountBytes();
-        accountTiming();
-      });
-    }
-    accountFrame(now);
-  });
-}
-
-(async () => {
-  fit();
-  try {
-    renderer = await build(FORCE_WEBGL, 'init');
-  } catch (e) {
-    /* Three.js has its own fallback inside init(), so reaching here means both
-       backends refused. Try the rebuild anyway: it is one more attempt on a
-       fresh canvas and it costs nothing when it fails. */
-    if (!FORCE_WEBGL && await fallBack('renderer.init() rejected.', e)) { window.__labReady = true; return; }
-    window.__labError('renderer init', e);
-    elSub.textContent = 'nothing is being drawn — the message above is why';
-    return;
-  }
-  announce();
-  loop();
-  window.__labReady = true;
-})();
-
-
-addEventListener('resize', fit);
-addEventListener('orientationchange', () => setTimeout(fit, 120));
-
-/* --------------------------------------------------------------- buttons */
-
-document.getElementById('swap').addEventListener('click', () => {
-  const u = new URL(location.href);
-  if (FORCE_WEBGL) u.searchParams.delete('backend');
-  else u.searchParams.set('backend', 'webgl2');
-  location.replace(u.toString());
-});
-
-/* Cold puts a fresh stamp on the three library URLs, so the browser has to go
-   to the network for them and the timing includes the download. Warm is a
-   plain reload of whatever is in the address bar, which is a true warm
-   measurement precisely because those exact URLs were just fetched. Between
-   them they replace opening an incognito window to get one number. */
-document.getElementById('cold').addEventListener('click', () => {
-  const u = new URL(location.href);
-  u.searchParams.set('cold', Date.now().toString(36));
-  location.replace(u.toString());
-});
-document.getElementById('warm').addEventListener('click', () => { location.reload(); });
-
-function report () {
-  const lines = ['Manta lab — ' + elBackend.textContent, elSub.textContent, ''];
-  for (const [label, key] of ROWS) {
-    const v = cell[key].textContent;
-    /* The timing block is several lines. Indent them rather than flattening
-       them, so the pasted report still lines up. */
-    if (v.indexOf('\n') === -1) { lines.push(label + ': ' + v); continue; }
-    lines.push(label + ':');
-    for (const l of v.split('\n')) lines.push('  ' + l);
-  }
-  const err = document.getElementById('err');
-  if (err.className.indexOf('on') === 0) lines.push('', 'notes:', err.textContent);
-  lines.push('', 'url: ' + location.href);
-  return lines.join('\n');
-}
-
-document.getElementById('copy').addEventListener('click', async () => {
-  const btn = document.getElementById('copy');
-  const text = report();
-  try {
-    if (!navigator.clipboard) throw new Error('no clipboard API');
-    await navigator.clipboard.writeText(text);
-    btn.textContent = 'Copied';
-    setTimeout(() => { btn.textContent = 'Copy report'; }, 1600);
-  } catch (e) {
-    /* Put it on screen and select it instead, so a long press offers Copy. */
-    elPlain.value = text;
-    elPlain.className = 'on';
-    elPlain.focus();
-    elPlain.select();
-    elPlain.setSelectionRange(0, text.length);
-    btn.textContent = 'Select and copy';
-    setTimeout(() => { btn.textContent = 'Copy report'; }, 2600);
-  }
-});
-elPlain.addEventListener('blur', () => { elPlain.className = ''; });
-</script>
+<script type="module" src="./main.js"></script>
 </body>
 </html>
