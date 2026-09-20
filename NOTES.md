@@ -732,3 +732,43 @@ THE MARK above. Until they
   wrangler.jsonc html_handling of auto-trailing-slash serves play/hurtle/
   correctly. Deleting the old public folder rather than extracting over it
   still applies.
+
+
+## Manta Trains Lab, Measured On The Phone, 21 September 2026
+
+
+  The lab page at /lab/manta/ on a Pixel 9, Chrome 153, Arm Valhall. Four
+  loads, cold and warm on each backend, from the page's own timing block.
+  Times are milliseconds from navigation start, deltas between marks.
+
+                  paint  bytes  exec  init  draw = first frame
+    WebGPU cold     128   +193   +77   +22   +61    480
+    WebGPU warm     168   +101   +45   +32   +63    409
+    WebGL2 cold     156   +200   +49   +27   +56    488
+    WebGL2 warm     108   +104   +43   +19   +63    336
+
+  Cloudflare compresses the library about five to one: 3,691 KB decoded
+  arrives as 732 KB. Downloading it costs about 94 ms, measured twice as cold
+  minus warm and agreeing to 4 ms. Reading it back out of cache still costs
+  about 100 ms, so caching saves less than it looks.
+
+  MINIFYING WAS MEASURED AND REJECTED. Executing all 3.7 MB costs 43 to 77 ms,
+  because V8 parses lazily and almost none of Three.js runs at import time.
+  The whole library is 140 to 170 ms of a 480 ms cold first frame. Both ways
+  of winning that back are shut anyway: minifying needs a build step and
+  trimming means editing a vendored library.
+
+  THE FRAME BUDGET IS 16.7 ms. The refresh measured 16.5 to 16.7 ms median
+  across all four loads and both backends, so the display is at 60 Hz for this
+  content. Whether 120 is reachable is a separate question and not assumed.
+
+  Worst 1% sat at 17.6 to 21.2 ms on an almost empty scene, which is ambient
+  jitter and not our cost. A p99 above 17 ms is not by itself a regression.
+
+  Neither backend is faster to a first frame; every per-stage difference is
+  smaller than the run-to-run variation.
+
+  A CANVAS KEEPS THE FIRST CONTEXT TYPE IT IS GIVEN. Once getContext('webgpu')
+  has been called on it, getContext('webgl2') returns null for the rest of its
+  life, so rebuilding on WebGL2 after WebGPU fails needs a fresh canvas
+  element. Reusing the old one draws nothing, and draws nothing silently.
