@@ -4,6 +4,7 @@
  *   panel.js     every number on screen, and the chip it collapses to
  *   scene.js     the scene, and the camera's fixed view area
  *   ocean.js     the three ocean layers, one shader, no geometry
+ *   mantas.js    one instanced mesh, ten mantas, wings flexed in TSL
  *   renderer.js  the backend, the automatic WebGL2 fallback and the loop
  *
  * Imported by relative path from the same folder. No build step, no bundler,
@@ -13,6 +14,7 @@ import { REVISION } from 'three';
 import * as panel from './panel.js';
 import { createScene, describeView } from './scene.js';
 import { createLab } from './renderer.js';
+import { createMantas } from './mantas.js';
 
 panel.initRows(REVISION);
 panel.probeAdapter();
@@ -21,7 +23,10 @@ const { scene, camera, fit, view } = createScene();
 
 /* A debug handle. This is a lab page, and a browser test has to be able to
    assert the camera's real frustum rather than the row that describes it. */
-window.__lab = { scene, camera, view };
+const mantas = createMantas(scene);
+panel.set('mantas', String(mantas.count) + ' in 1 instanced mesh');
+
+window.__lab = { scene, camera, view, mantas };
 
 const lab = createLab({
   scene,
@@ -29,7 +34,9 @@ const lab = createLab({
   forceWebGL: panel.FORCE_WEBGL,
   hooks: {
     onFit (w, h) {
-      panel.set('view', describeView(fit(w, h)));
+      const v = fit(w, h);
+      mantas.setBounds(v);
+      panel.set('view', describeView(v));
       panel.set('viewport', panel.describeViewport());
     },
     onBackend ({ webgpu, forced, fellBack, glString }) {
@@ -43,7 +50,9 @@ const lab = createLab({
       );
       if (glString && !panel.gpuInfoKnown()) panel.set('gpuinfo', glString);
     },
-    onUpdate (now) { /* Brief 1A stage 2 drives the mantas from here. */ },
+    /* The mantas are driven from the CPU: scripted paths in, instanced
+       attributes out, once a frame before the draw. */
+    onUpdate (now) { mantas.update(now / 1000); },
     onFrame (now, renderer) {
       panel.accountFrame(now);
       panel.set('draws', String(renderer.info.render.drawCalls));
