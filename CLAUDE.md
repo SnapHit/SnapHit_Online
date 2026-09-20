@@ -25,6 +25,13 @@ or bundler also breaks the "one self-contained file per game" rule.
 **One self-contained file per game.** Each file in `docs/play/` carries its own
 markup, styles, script and assets. No shared runtime, no imports, no build.
 
+**One written exception to that rule.** Manta trains lives in
+`docs/lab/manta/` and is built on Three.js, because a WebGPU game cannot be one
+hand-written file. The exception is bounded: that folder, plus the library
+vendored at `docs/vendor/three/r186/`. Still no build step, still no Worker
+script, still zero external requests. Every other game stays one file. See
+"Manta trains and the lab" below.
+
 **The two cabinet games are copies.** `hurtle.html` and `beakdown.html` mirror
 games that live at hurtle.site and beakdown.fun. Each carries a canonical tag
 pointing home so the copy does not compete in search. **Never remove those
@@ -35,6 +42,46 @@ upstream, so prefer fixing the container over fixing the game.
 **Nothing loads until asked.** Each cabinet shows a card until tapped, and a
 shared IntersectionObserver unloads any game scrolled out of view. The hero
 game parks itself when it leaves the screen.
+
+**On-device storage is allowed, namespaced and versioned.** `localStorage` and
+IndexedDB make no network request, so they do not touch the zero-requests rule.
+Prefix every key with its game (`manta:`), change the key name when the meaning
+of the value changes so a stale preference cannot stick, wrap reads and writes
+in try/catch, and let the game run normally when storage is blocked or full.
+
+---
+
+## Manta trains and the lab
+
+Manta trains is the game in development: a top-down WebGPU game on Three.js.
+Its design doc is `manta-trains-design.md` in the repo root, which is never
+served. That doc is the source of truth for the rules, the look and the build
+plan, and the same version sits in the Claude project the briefs come from.
+Read the sections a brief names before touching anything under `docs/lab/`.
+When a brief changes that doc, apply its edits exactly as written and check the
+hash the brief gives you, so the two copies cannot drift.
+
+**The lab page is not part of the site.** `docs/lab/manta/` is a standalone
+prototype: no link from the shelf, no entry in the `GAMES` array, nothing in
+`docs/sitemap.xml`, and `<meta name="robots" content="noindex, nofollow">` in
+the head. It is not embedded in a cabinet until launch, and nothing else on the
+site may depend on it.
+
+**Three.js is vendored, pinned and never edited.** `docs/vendor/three/r186/`
+holds an unmodified copy of npm `three` 0.186.0 with its `LICENSE`, loaded
+same-origin through an import map. Never a CDN, never a bundler, never an edit
+in place. To upgrade, add a new versioned folder beside it and switch the
+import map, so a rollback is one line.
+
+**Check Three.js and TSL names against the vendored files, not memory.** The
+API moves between releases and online examples are usually written against a
+different one: in r186, `PostProcessing` is now `RenderPipeline`. The build
+ships unminified with its own JSDoc, so the answer is already in the repo.
+
+**Both backends, every time.** WebGPURenderer uses WebGPU where it exists and
+falls back to WebGL2. Every lab page shows which backend is running and accepts
+`?backend=webgl2` to force the fallback. A change verified on one backend is
+not verified.
 
 ---
 
@@ -51,6 +98,14 @@ docs/index.html           58 KB   ~14k tokens
 is in `docs/index.html`. Adding a game to the shelf is one entry in the `GAMES`
 array near the bottom of `index.html` plus one new file in `docs/play/`.
 
+**Never read a vendored library end to end.** It would fill a session several
+times over. Grep it, or read the JSDoc above the symbol you need.
+
+```
+docs/vendor/three/r186/three.webgpu.js   2.2 MB   ~560k tokens
+docs/vendor/three/r186/three.core.js     1.4 MB   ~360k tokens
+```
+
 ---
 
 ## Where things are
@@ -62,8 +117,11 @@ docs/play/hurtle.html    Hurtle, framed in a cabinet
 docs/play/beakdown.html  Beakdown, framed in a cabinet
 docs/404.html            same materials as the site
 docs/og.jpg              share card, referenced absolutely
+docs/lab/manta/          Manta trains prototype. Unlinked, noindex.
+docs/vendor/three/r186/  Three.js, vendored unmodified. Do not edit.
 wrangler.jsonc           deploy config. Do not add "main".
 NOTES.md                 the build record
+manta-trains-design.md   Manta trains: rules, look, build plan. Not served.
 ```
 
 ---
@@ -136,6 +194,12 @@ vertical projection.
 
 **`html { scroll-behavior: smooth }` will break a browser test** that scrolls
 and measures immediately. Scroll with `behavior: 'instant'` in tests.
+
+**A headless browser cannot tell you what a phone does.** It runs the code, not
+this phone's GPU. Which backend is live, whether the WebGL2 fallback holds,
+frame rate and anything about how it looks have to be checked on Nathan's
+Pixel 9 in Chrome and reported back by him. End a session by saying exactly
+what he should open and what he should see.
 
 **Say what you measured, not that you changed it.** If something could not be
 verified without a real device, say so plainly rather than presenting a guess
