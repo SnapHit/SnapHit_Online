@@ -1,0 +1,23 @@
+Three.js, vendored unmodified.
+
+package   npm "three"
+version   0.186.0  (Three.js r186)
+tarball   https://registry.npmjs.org/three/-/three-0.186.0.tgz
+integrity sha512-cr/fIM2ddMSVbYVgkfD4jLJv7Fh/8ZTjvo+7gQeSVGUZHxpx9FDwoL5iC7hUz/LiRA8wMbqfnb90xKfm1/HHkQ==
+          (matches the registry's dist.integrity for 0.186.0)
+vendored  2026-09-20
+
+Files, copied byte for byte out of that tarball:
+
+  package/build/three.webgpu.js  ->  three.webgpu.js   2,284,823 bytes
+  package/build/three.core.js    ->  three.core.js     1,458,113 bytes
+  package/build/three.tsl.js     ->  three.tsl.js         36,854 bytes
+  package/LICENSE                ->  LICENSE               1,081 bytes
+  package/examples/jsm/tsl/      ->  addons/tsl/       68 files, 670,147 bytes
+
+r186 ships no minified builds, so these are the shipped unminified builds.
+Nothing here is minified, bundled, renamed or edited.
+
+MIT licence, see LICENSE.
+
+Do not edit. Upgrade by adding a new versioned folder.
