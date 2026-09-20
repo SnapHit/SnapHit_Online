@@ -30,7 +30,11 @@ import {
 export const COUNT = 10;
 
 const TAU = Math.PI * 2;
-const BEATS_PER_SECOND = 1.4;
+/* 0.65, not 1.4. Looked at on the phone at 1.4 and it read as fluttering
+   rather than swimming; a real manta beats somewhere near half a hertz. The
+   half-radian phase offset between followers is unchanged, because the
+   ripple down the train was the one part that already worked. */
+const BEATS_PER_SECOND = 0.65;
 const FLAP_AMPLITUDE = 0.75;      // radians at the wingtip
 const SPAN_LAG = 1.1;             // travelling wave: the tip trails the root
 
@@ -41,17 +45,41 @@ const YOURS  = 0xa8fff2;
 const RIVALS = [0x58d8c0, 0x64b4ff, 0x9a9bff, 0x58d8c0];
 const WILD   = 0x2b4a52;
 const RIVAL_LEVEL = 0.45;
-const WILD_LEVEL  = 0.15;
+/* 0.75, not 0.15. The percentages in the brief describe where each tier sits,
+   but #2b4a52 is ALREADY a dark colour: cutting it to 15% of its linear value
+   put an unattached manta at rgb(18,29,33) against an ocean that reaches
+   rgb(8,16,26), so it was invisible on the phone rather than dim. At 0.75 it
+   lands near rgb(38,64,71) — about seven times the brightest water and still
+   a quarter of a rival, so the hierarchy is intact and the tier can be found.
+   Yours and the rivals are untouched: those read correctly. */
+const WILD_LEVEL  = 0.75;
 
-const LEADER_SIZE   = 28;   // world units across the wings
-const FOLLOWER_SIZE = 20;
+/* The design doc's table gives leader radius 14 and follower radius 10, which
+   is where 28 and 20 came from. Those are greybox gameplay sizes, set against
+   a camera that follows and zooms out. This spike has a still camera and is
+   judged by eye, and at 28 units — 30 CSS pixels on the test phone — a manta
+   was too small to read. Up about 40%. Follower spacing goes up with them, so
+   the gap you see between them is unchanged. */
+const LEADER_SIZE   = 40;   // world units across the wings
+const FOLLOWER_SIZE = 28;
 
-/* A slow figure eight, sized to sit inside the view at either shape: the
-   short side of the view is 385 units in portrait and 385 in landscape,
-   because the area is fixed. */
-const FIG8_A = 140, FIG8_B = 300;
-const TRAIN_SPEED = 0.55;     // radians of path parameter a second
-const SPACING = 22;           // design doc: follower spacing along the path
+/* A slow figure eight, sized to sit inside the view at either shape: the short
+   side of the view is 385 units whichever way the phone is held, because the
+   area is fixed, so nothing may exceed about 190 units from the centre.
+
+   The SHAPE is chosen for its tightest turn, not just to fit. For this curve
+   the apex radius works out at A*A/(4*B), and the first version — 140 by 300 —
+   turned inside 15.7 units while a manta is 40 units across: a hairpin
+   tighter than the animal, which the train visibly piles up in. Scanned the
+   family against the view limit; 175 by 145 turns inside 40.7 units, just
+   over one wingspan, which is the best available without flattening the eight
+   into a bar. A gentler path is not reachable at this view size, so the
+   remaining bunching on a bend is geometry and not a bug. */
+const FIG8_A = 175, FIG8_B = 145;
+/* World units a second, set rather than derived: shortening the path must not
+   quietly change how fast the train swims. This is the speed the phone saw. */
+const TRAIN_SPEED = 120;
+const SPACING = 31;           // design doc's 22, scaled with the sizes above
 
 const srgbToLinear = c => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
 function tint (hex, level) {
@@ -190,10 +218,45 @@ export function createMantas (scene) {
   }
   aSize.needsUpdate = aTint.needsUpdate = aPhase.needsUpdate = true;
 
-  /* The figure eight, and its tangent, so followers can be placed a fixed
-     distance back along the path rather than a fixed parameter. */
+  /* The figure eight, and an arc-length table over it.
+  
+     THE TABLE IS THE POINT. Placing a follower at a fixed offset in the path
+     PARAMETER is not the same as placing it a fixed distance back, because a
+     lemniscate is traversed much faster through its middle than round its
+     ends. Converting distance to parameter with the leader's instantaneous
+     speed — which is what this did first — is only right where the whole
+     train sits in one stretch of even speed. Everywhere else the error grows
+     with each follower, so the tail of the train stretches and snaps back
+     through every turn. That is exactly what it looked like on the phone.
+  
+     So: sample the curve once, accumulate chord lengths, and invert that to
+     get the parameter at any arc length. Each follower then sits exactly
+     SPACING units of path behind the one ahead, at every point of the cycle.
+     2048 samples over a path of about 1,200 units is well under a unit of
+     quantisation, and the whole table is built once at startup. */
   const fig8 = t => [FIG8_A * Math.cos(t), FIG8_B * Math.sin(2 * t) / 2];
-  const fig8Speed = t => Math.hypot(-FIG8_A * Math.sin(t), FIG8_B * Math.cos(2 * t));
+
+  const ARC_N = 2048;
+  const arcT = new Float64Array(ARC_N + 1);
+  const arcS = new Float64Array(ARC_N + 1);
+  {
+    let acc = 0, prev = fig8(0);
+    for (let i = 1; i <= ARC_N; i++) {
+      const t = TAU * i / ARC_N, p = fig8(t);
+      acc += Math.hypot(p[0] - prev[0], p[1] - prev[1]);
+      arcT[i] = t; arcS[i] = acc; prev = p;
+    }
+  }
+  const PATH_LENGTH = arcS[ARC_N];
+
+  function tAtArc (s) {
+    s = ((s % PATH_LENGTH) + PATH_LENGTH) % PATH_LENGTH;
+    let lo = 0, hi = ARC_N;
+    while (lo + 1 < hi) { const mid = (lo + hi) >> 1; if (arcS[mid] <= s) lo = mid; else hi = mid; }
+    const span = arcS[hi] - arcS[lo];
+    const f = span > 1e-9 ? (s - arcS[lo]) / span : 0;
+    return arcT[lo] + (arcT[hi] - arcT[lo]) * f;
+  }
 
   let half = { w: 200, h: 420 };
   function setBounds (view) { half = { w: view.w / 2, h: view.h / 2 }; }
@@ -206,30 +269,33 @@ export function createMantas (scene) {
   }
 
   function update (secs) {
-    const tt = secs * TRAIN_SPEED;
-
-    /* Your train. The leader runs the figure eight; each follower sits
-       SPACING further back along the same curve, converted from distance to
-       parameter through the local speed so the gap stays even where the
-       curve is tight. */
-    const speed = Math.max(fig8Speed(tt), 1e-3);
+    /* Your train. The leader's position along the path is a distance, not a
+       parameter, and each follower is exactly SPACING units of path behind
+       the one ahead. Heading comes from half a unit further along the same
+       curve, so it is right even where the parameter is moving fastest. */
+    const sLead = secs * TRAIN_SPEED;
     for (let i = 0; i < 5; i++) {
-      const p = tt - (i * SPACING) / speed;
-      const [x, z] = fig8(p);
-      const [x2, z2] = fig8(p + 0.01);
+      const s = sLead - i * SPACING;
+      const [x, z] = fig8(tAtArc(s));
+      const [x2, z2] = fig8(tAtArc(s + 0.5));
       place(i, x, z, 0, Math.atan2(-(x2 - x), -(z2 - z)));
     }
 
     /* Three singles, cruising with a slight drift so they are never quite
-       straight lines. */
+       straight lines. They wrap just far enough outside the view to hide the
+       pop — a manta is 40 units across, so 34 clears it — and no further.
+       At the old margin of 70 they spent nearly a third of their time in
+       dead space off screen, which made the unattached one hard to find
+       simply because it was often not there. */
+    const MARGIN = 34;
     for (let i = 0; i < 3; i++) {
       const j = 5 + i;
       const base = 0.9 + i * 2.1;
       const head = base + Math.sin(secs * 0.17 + i * 2.0) * 0.28;
       const sp = 62 + i * 11;
       const dist = secs * sp + i * 240;
-      const x = wrap(Math.sin(head) * -dist + (i - 1) * 90, half.w + 70);
-      const z = wrap(Math.cos(head) * -dist + (i - 1) * 150, half.h + 70);
+      const x = wrap(Math.sin(head) * -dist + (i - 1) * 60, half.w + MARGIN);
+      const z = wrap(Math.cos(head) * -dist + (i - 1) * 150, half.h + MARGIN);
       place(j, x, z, 0, head);
     }
 
@@ -238,12 +304,15 @@ export function createMantas (scene) {
        which passes over which, which is what gives the ocean volume. */
     for (let i = 0; i < 2; i++) {
       const j = 8 + i;
-      const radius = 96 + i * 54;
+      /* Radius and centre both scaled off the half-view, so each circle stays
+         inside the frame at either orientation instead of swinging out of it
+         on the short axis. */
+      const radius = Math.min(96 + i * 40, half.w * 0.42);
       const dir = i === 0 ? 1 : -1;
       const w = dir * (0.30 - i * 0.09);
       const a = secs * w + i * 2.4;
-      const cx = (i === 0 ? -1 : 1) * (half.w * 0.42);
-      const cz = (i === 0 ? 1 : -1) * (half.h * 0.34);
+      const cx = (i === 0 ? -1 : 1) * (half.w * 0.40);
+      const cz = (i === 0 ? 1 : -1) * (half.h * 0.30);
       place(j, cx + Math.cos(a) * radius, cz + Math.sin(a) * radius, i === 0 ? -18 : 18,
             Math.atan2(-(-Math.sin(a) * dir), -(Math.cos(a) * dir)));
     }
@@ -252,5 +321,7 @@ export function createMantas (scene) {
     aHead.needsUpdate = true;
   }
 
-  return { mesh, update, setBounds, count: COUNT };
+  /* aPos is exposed so a test can drive update() across a whole cycle and
+     measure the gaps, which is the only honest way to check the spacing. */
+  return { mesh, update, setBounds, count: COUNT, aPos, pathLength: PATH_LENGTH, spacing: SPACING };
 }
