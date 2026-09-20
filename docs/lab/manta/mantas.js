@@ -30,13 +30,17 @@ import {
 export const COUNT = 10;
 
 const TAU = Math.PI * 2;
-/* 0.65, not 1.4. Looked at on the phone at 1.4 and it read as fluttering
-   rather than swimming; a real manta beats somewhere near half a hertz. The
-   half-radian phase offset between followers is unchanged, because the
+/* 0.35: one full beat every 2.9 seconds. 1.4 read as fluttering, 0.65 was
+   still too quick on the phone. A cruising manta beats about this often.
+   The half-radian phase offset between followers is unchanged, because the
    ripple down the train was the one part that already worked. */
-const BEATS_PER_SECOND = 0.65;
+const BEATS_PER_SECOND = 0.35;
 const FLAP_AMPLITUDE = 0.75;      // radians at the wingtip
-const SPAN_LAG = 1.1;             // travelling wave: the tip trails the root
+/* 1.4, up from 1.1. Grace is not only rate: the further the tip trails the
+   root, the more a wing behaves like something flexible being swept through
+   water and the less like a hinged plank. At a slower beat there is room for
+   more of this before it reads as a wobble. */
+const SPAN_LAG = 1.4;             // travelling wave: the tip trails the root
 
 /* The brightness hierarchy from section 7.2, and it is not negotiable: your
    train brightest, rivals bright, anything unattached dim, background darkest.

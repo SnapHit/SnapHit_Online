@@ -33,18 +33,31 @@ export const uAspect = uniform(1.0);
    value and comes out about four times too bright. Sampled in headless
    Chromium, #060b14 as a raw vec3 rendered as rgb(37,57,78). color() runs the
    sRGB to linear conversion, so the hex on screen is the hex written here. */
-const WATER_TOP  = color(0x060b14);
-const WATER_DEEP = color(0x02040a);
-const SEABED     = color(0x0a1a24);
-const RIPPLE     = color(0x0d2430);
+/* Blue, and blue by HUE rather than by brightness. The first palette was
+   dark enough to read as black rather than as water, but simply lifting it
+   is not available: the dim tier of mantas sits at about rgb(38,64,71), and
+   water brightened to meet it stops being a background. So red and green come
+   down and blue goes up at roughly the same luminance — #060b14 had its blue
+   1.6 times its green, this has it 2.2 times — and the seabed stays teal so
+   the world still reads blue-GREEN, which is what section 7.2 asks for. */
+const WATER_TOP  = color(0x061228);
+const WATER_DEEP = color(0x01040c);
+const SEABED     = color(0x0b2430);
+const RIPPLE     = color(0x0f3352);
 
-const SEABED_LEVEL = 0.25;   // the design doc's "about 25% brightness"
-/* "Low opacity", but measured rather than guessed. At 0.16 the ripple was a
-   sub-one-in-255 modulation and the render carried 0.07 of high-frequency
-   energy against the seabed's 0.83 of low-frequency: a layer you cannot see
-   is not a subtle layer, it is an absent one. sRGB encoding is very steep
-   down here, so this is still only about eight levels of blue at a crest. */
-const RIPPLE_LEVEL = 0.30;
+/* 0.16, down from 0.25, and the ripple with it. Pushing the water blue lifted
+   its bright crests to a luminance of 34 while the dim tier of mantas sits at
+   59: a separation of 1.7, where the first palette had 3.4. The hierarchy is
+   the one thing section 7.2 calls non-negotiable, and an unattached manta that
+   only just beats a seabed crest is not dim, it is lost. The blue stays in the
+   base water, which is what was asked for; the additive layers give up the
+   headroom instead. */
+const SEABED_LEVEL = 0.16;
+/* "Low opacity", but measured rather than guessed. At 0.16 of the original
+   dim colour the ripple was a sub-one-in-255 modulation and invisible. It is
+   0.18 of a brighter blue now, which is about the same on screen as the 0.30
+   it was, but costs less headroom. */
+const RIPPLE_LEVEL = 0.18;
 
 export function oceanNode () {
   return Fn(() => {
