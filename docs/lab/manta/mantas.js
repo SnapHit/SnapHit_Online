@@ -265,6 +265,29 @@ export function createMantas (scene) {
   let half = { w: 200, h: 420 };
   function setBounds (view) { half = { w: view.w / 2, h: view.h / 2 }; }
 
+  /* The three singles carry their own position and heading and are advanced a
+     step at a time, rather than having a position written as a function of
+     the clock.
+  
+     THIS IS WHY. The first version set x = -sin(head)*dist and
+     z = -cos(head)*dist, with head itself drifting. Differentiate that and a
+     second term falls out, head' * dist, at right angles to the nose. dist
+     grows without bound, so after a minute the sideways component was about
+     177 units a second against a forward speed of 62: the manta was very
+     nearly crabbing. It also got worse the longer the page stayed open, which
+     is why only some of them ever looked wrong.
+  
+     Steering the heading and then moving ALONG it cannot produce that, and it
+     is what the greybox will have to do anyway. */
+  const singles = [0, 1, 2].map(i => ({
+    head:  0.9 + i * 2.1,
+    speed: 62 + i * 11,
+    phase: i * 2.0,
+    x: (i - 1) * 60,
+    z: (i - 1) * 150,
+  }));
+  let lastSecs = null;
+
   const wrap = (v, lim) => { const s = lim * 2; return ((v + lim) % s + s) % s - lim; };
 
   function place (i, x, z, y, heading) {
@@ -292,15 +315,19 @@ export function createMantas (scene) {
        dead space off screen, which made the unattached one hard to find
        simply because it was often not there. */
     const MARGIN = 34;
+    /* Clamped, so a hidden tab or a test driving update() out of order cannot
+       teleport anyone. */
+    const dt = lastSecs === null ? 0 : Math.min(Math.max(secs - lastSecs, 0), 0.1);
+    lastSecs = secs;
     for (let i = 0; i < 3; i++) {
-      const j = 5 + i;
-      const base = 0.9 + i * 2.1;
-      const head = base + Math.sin(secs * 0.17 + i * 2.0) * 0.28;
-      const sp = 62 + i * 11;
-      const dist = secs * sp + i * 240;
-      const x = wrap(Math.sin(head) * -dist + (i - 1) * 60, half.w + MARGIN);
-      const z = wrap(Math.cos(head) * -dist + (i - 1) * 150, half.h + MARGIN);
-      place(j, x, z, 0, head);
+      const m = singles[i];
+      /* A slow weave: the turn rate is what oscillates, so the heading rolls
+         gently either side of where it started and the manta always swims
+         along its own nose. */
+      m.head += Math.sin(secs * 0.17 + m.phase) * 0.10 * dt;
+      m.x = wrap(m.x - Math.sin(m.head) * m.speed * dt, half.w + MARGIN);
+      m.z = wrap(m.z - Math.cos(m.head) * m.speed * dt, half.h + MARGIN);
+      place(5 + i, m.x, m.z, 0, m.head);
     }
 
     /* Two circling, at different depths. Under an orthographic top-down
@@ -327,5 +354,5 @@ export function createMantas (scene) {
 
   /* aPos is exposed so a test can drive update() across a whole cycle and
      measure the gaps, which is the only honest way to check the spacing. */
-  return { mesh, update, setBounds, count: COUNT, aPos, pathLength: PATH_LENGTH, spacing: SPACING };
+  return { mesh, update, setBounds, count: COUNT, aPos, aHead, pathLength: PATH_LENGTH, spacing: SPACING };
 }
