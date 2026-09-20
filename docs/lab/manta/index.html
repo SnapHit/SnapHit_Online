@@ -21,9 +21,11 @@
     what does the library cost to load,
     and what frame rate comes out the other side.
 
-  Everything it needs is same-origin. The import map below is the only way
-  Three.js gets loaded: no CDN, no bundler, no build step. Zero external
-  requests, same as every other page here.
+  Everything it needs is same-origin. The import map is the only way Three.js
+  gets loaded: no CDN, no bundler, no build step. Zero external requests, same
+  as every other page here. It is built by a script rather than written out,
+  because the Cold load button appends a cache-busting stamp to the three
+  build file URLs and only one import map is allowed per document.
 -->
 
 <style>
@@ -47,7 +49,7 @@
     top: env(safe-area-inset-top, 0px);
     left: env(safe-area-inset-left, 0px);
     right: env(safe-area-inset-right, 0px);
-    max-height: calc(100% - 96px - env(safe-area-inset-top, 0px));
+    max-height: calc(100% - 150px - env(safe-area-inset-top, 0px));
     overflow: auto;
     -webkit-overflow-scrolling: touch;
     margin: 10px;
@@ -87,6 +89,26 @@
     word-break: break-word;
   }
   #err.on { display: block; }
+  /* A fallback that worked is not a failure. Amber, and the headline stays
+     the name of the backend that is actually drawing.
+
+     Capped and scrollable, because a stack trace is ten lines and the rows
+     below it are why the page was opened: unbounded, it pushed every one of
+     them off a phone screen. Copy report reads the text, not the visible
+     part, so nothing is lost by hiding it. A red #err is not capped — when
+     nothing is drawing there is nothing else to look at. */
+  #err.note {
+    background: rgba(90,62,10,.5); border-color: #ffc46b; color: #ffe6bd;
+    max-height: 7.5em; overflow-y: auto;
+  }
+
+  /* The timing breakdown. Monospace so the columns line up, and its own
+     scroller so a long line can never widen the grid column. */
+  #rows dd.block {
+    white-space: pre;
+    overflow-x: auto;
+    font: 400 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
 
   #bar {
     position: fixed;
@@ -94,11 +116,12 @@
     right: env(safe-area-inset-right, 0px);
     bottom: env(safe-area-inset-bottom, 0px);
     display: flex;
+    flex-wrap: wrap;            /* four buttons, two rows, still thumb sized */
     gap: 10px;
     margin: 10px;
   }
   #bar button {
-    flex: 1 1 0;
+    flex: 1 1 calc(50% - 5px);
     min-height: 48px;                 /* thumb sized */
     font: inherit;
     font-size: 16px;
@@ -118,6 +141,7 @@
   @media (orientation: landscape) and (max-height: 520px) {
     #panel { max-width: 56%; max-height: calc(100% - 20px - env(safe-area-inset-top, 0px)); }
     #bar { left: auto; width: 40%; }
+    #bar button { min-height: 40px; font-size: 14px; }
     #backend { font-size: 24px; }
   }
 
@@ -151,6 +175,8 @@
 <div id="bar">
   <button id="swap" type="button">Switch backend</button>
   <button id="copy" type="button" class="ghost">Copy report</button>
+  <button id="cold" type="button" class="ghost">Cold load</button>
+  <button id="warm" type="button" class="ghost">Warm load</button>
 </div>
 
 <textarea id="plain" readonly></textarea>
@@ -181,6 +207,17 @@
     b.textContent = b.dataset.name ? (b.dataset.name + ' · FAILED') : 'FAILED';
     b.className = 'failed';
   };
+  /* A handled failure that the page recovered from. Same box, amber, and it
+     leaves the headline alone: after an automatic fallback the headline has
+     to name the backend that is drawing, not the one that died. */
+  window.__labNote = function (what, e) {
+    var msg = (e && (e.stack || e.message)) ? (e.stack || e.message) : String(e);
+    var line = what + ': ' + msg;
+    if (seen[line]) return;
+    seen[line] = true;
+    box.textContent = (box.textContent ? box.textContent + '\n\n' : '') + line;
+    if (box.className !== 'on') box.className = 'on note';
+  };
   window.addEventListener('error', function (e) {
     window.__labError('uncaught error', e.error || e.message);
   });
@@ -190,15 +227,42 @@
 })();
 </script>
 
-<script type="importmap">
-{
-  "imports": {
-    "three": "/vendor/three/r186/three.webgpu.js",
-    "three/webgpu": "/vendor/three/r186/three.webgpu.js",
-    "three/tsl": "/vendor/three/r186/three.tsl.js",
-    "three/addons/": "/vendor/three/r186/addons/"
-  }
-}
+<script>
+/* The import map, built here rather than written out, and still the only way
+   Three.js is loaded. A document may have one import map and it has to exist
+   before the first module is fetched, so this is a classic inline script: it
+   blocks the parser, and the module tag below is not reached until the map is
+   in the document.
+
+   ?cold=<stamp> puts a fresh query on the three build files so the browser has
+   to go to the network for them. That turns a cold measurement into one tap
+   instead of an incognito window.
+
+   three.core.js needs a key of its own. three.webgpu.js reaches it by the
+   relative specifier './three.core.js', which never sees a bare-specifier
+   mapping, and a query string is not inherited across relative resolution.
+   Import maps do remap URL-like specifiers, so the resolved path is listed as
+   a key and sent to the stamped copy. Without this line a "cold" load would
+   quietly serve 1.4 MB of the 3.7 MB out of cache and under-report itself.
+
+   addons/ is untouched: this page imports nothing from it, so it needs no
+   stamp and gets none. */
+(function () {
+  var BASE = '/vendor/three/r186/';
+  var stamp = new URLSearchParams(location.search).get('cold');
+  var q = stamp ? '?cold=' + encodeURIComponent(stamp) : '';
+  var imports = {
+    'three':         BASE + 'three.webgpu.js' + q,
+    'three/webgpu':  BASE + 'three.webgpu.js' + q,
+    'three/tsl':     BASE + 'three.tsl.js' + q,
+    'three/addons/': BASE + 'addons/'
+  };
+  if (q) imports[BASE + 'three.core.js'] = BASE + 'three.core.js' + q;
+  var el = document.createElement('script');
+  el.type = 'importmap';
+  el.textContent = JSON.stringify({ imports: imports });
+  document.head.appendChild(el);
+})();
 </script>
 
 <script type="module">
@@ -217,7 +281,7 @@ import {
 
 /* Bumped by hand every time this page is edited, so a stale deploy is obvious
    from the phone rather than something you have to take on trust. */
-const BUILD = '2026-09-20 17:38 UTC';
+const BUILD = '2026-09-20 18:32 UTC';
 
 const COUNT   = 300;   // arrowheads
 const WORLD_H = 22;    // world units from the top of the screen to the bottom
@@ -234,23 +298,32 @@ const elPlain   = document.getElementById('plain');
 /* The panel is a fixed set of rows, created once and then only ever written
    to, so a per-frame update never touches layout. */
 const ROWS = [
-  ['fallback',   'forced'],
-  ['navigator.gpu', 'gpu'],
-  ['adapter',    'adapter'],
-  ['gpu',        'gpuinfo'],
-  ['three',      'three'],
-  ['viewport',   'viewport'],
-  ['first frame','ttff'],
-  ['vendor bytes','bytes'],
-  ['fps (5s)',   'fps'],
-  ['worst frame','worst'],
-  ['build',      'build'],
-  ['agent',      'ua'],
+  ['load',           'load'],
+  ['fallback',       'forced'],
+  ['navigator.gpu',  'gpu'],
+  ['adapter',        'adapter'],
+  ['gpu',            'gpuinfo'],
+  ['three',          'three'],
+  ['viewport',       'viewport'],
+  ['first frame',    'ttff'],
+  ['timing (ms)',    'timing'],
+  ['vendor bytes',   'bytes'],
+  ['three.webgpu.js','fwebgpu'],
+  ['three.core.js',  'fcore'],
+  ['three.tsl.js',   'ftsl'],
+  ['refresh',        'refresh'],
+  ['fps (5s)',       'fps'],
+  ['worst 1%',       'worst'],
+  ['build',          'build'],
+  ['agent',          'ua'],
 ];
+const BLOCK = { timing: true };     // multi-line, monospace, own scroller
 const cell = {};
 for (const [label, key] of ROWS) {
   const dt = document.createElement('dt'); dt.textContent = label;
-  const dd = document.createElement('dd'); dd.className = 'num'; dd.textContent = '—';
+  const dd = document.createElement('dd');
+  dd.className = BLOCK[key] ? 'block' : 'num';
+  dd.textContent = '—';
   elRows.append(dt, dd);
   cell[key] = dd;
 }
@@ -259,7 +332,8 @@ const set = (k, v) => { cell[k].textContent = v; };
 set('build', BUILD);
 set('ua', navigator.userAgent);
 set('three', 'r' + REVISION);
-set('forced', FORCE_WEBGL ? 'yes — ?backend=webgl2' : 'no');
+set('forced', FORCE_WEBGL ? 'forced — ?backend=webgl2' : 'automatic if WebGPU fails');
+set('refresh', 'sampling…');
 
 /* Orientation is taken from the viewport, not from screen.orientation.type.
    The API answers for the device and can disagree with the window: in a
@@ -394,8 +468,9 @@ function layout (worldW) {
 
 /* -------------------------------------------------------------- renderer */
 
-const canvas = document.getElementById('gl');
-let renderer;
+/* Not const: an automatic fallback has to swap this element, see below. */
+let canvas = document.getElementById('gl');
+let renderer = null;
 
 function fit () {
   const w = innerWidth, h = innerHeight;
@@ -411,116 +486,303 @@ function fit () {
 /* ------------------------------------------------------ frame accounting */
 
 let firstFrameAt = null;
-let frames = [];          // { t, dt } for the last 5 seconds
+let frames = [];          // { t, dt } over the last 5 seconds
 let lastAt = null;
 
+/* Refresh sampling. The question it answers is whether 60.0 fps is the panel's
+   ceiling or an adaptive display idling at 60: a Pixel 9 can run at 120, and
+   if it does the frame budget is 8.3 ms rather than 16.7 ms and we have been
+   measuring against the wrong number. Sampling starts a couple of seconds
+   after the first frame so start-up hitches are outside the window, runs for
+   two seconds, and takes the median rather than the mean so one dropped frame
+   cannot move it.
+
+   What it measures is the requestAnimationFrame cadence while this scene is
+   drawing, which equals the display rate only while there is headroom. The row
+   says so, because a number that needs a caveat has to carry it. */
+const SAMPLE_WARMUP = 2000, SAMPLE_FOR = 2000;
+let sampleStart = null, sampleDts = [], sampleDone = false;
+
+function finishSample () {
+  sampleDone = true;
+  if (sampleDts.length < 8) { set('refresh', 'too few frames to measure'); return; }
+  const sorted = sampleDts.slice().sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  set('refresh', median.toFixed(2) + ' ms median  ·  ' +
+      (median > 0 ? (1000 / median).toFixed(0) : '?') + ' Hz' +
+      '  (rAF while drawing, ' + sampleDts.length + ' frames)');
+}
+
 function accountFrame (now) {
-  if (lastAt !== null) frames.push({ t: now, dt: now - lastAt });
+  if (lastAt !== null) {
+    const dt = now - lastAt;
+    frames.push({ t: now, dt });
+    if (!sampleDone && firstFrameAt > 0) {
+      if (sampleStart === null) { if (now - firstFrameAt >= SAMPLE_WARMUP) sampleStart = now; }
+      else {
+        sampleDts.push(dt);
+        /* Both conditions, not either: a slow device keeps sampling until it has
+           enough intervals for a median rather than reporting nothing. */
+        if (now - sampleStart >= SAMPLE_FOR && sampleDts.length >= 8) finishSample();
+      }
+    }
+  }
   lastAt = now;
   const cut = now - 5000;
   while (frames.length && frames[0].t < cut) frames.shift();
   if (frames.length > 1) {
     const span = frames[frames.length - 1].t - frames[0].t;
     const fps = span > 0 ? ((frames.length - 1) * 1000 / span) : 0;
-    let worst = 0;
-    for (const f of frames) if (f.dt > worst) worst = f.dt;
+    /* The 99th percentile, not the single worst frame. One 500 ms hitch while
+       a shader compiles says nothing about how it runs; the worst 1% is what
+       you actually feel. */
+    const sorted = frames.map(f => f.dt).sort((a, b) => a - b);
+    const p99 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.99))];
     set('fps', fps.toFixed(1) + ' avg over ' + (span / 1000).toFixed(1) + 's');
-    set('worst', worst.toFixed(1) + ' ms');
+    set('worst', p99.toFixed(1) + ' ms  (99th pct of ' + sorted.length + ' frames)');
   }
 }
 
+/* --------------------------------------------------------- what it cost */
+
 /* Resource Timing, filtered to the vendored library. transferSize is what came
-   down the wire including headers and is 0 on a memory or disk cache hit;
-   decodedBodySize is the uncompressed size, which is what the parser paid for.
-   Both are reported because the difference is the whole question about r186
-   shipping unminified. */
+   down the wire including headers; decodedBodySize is what the parser paid
+   for. The gap between them is the whole question about r186 shipping
+   unminified, so both are reported, per file and in total.
+
+   A cache hit is NOT transferSize === 0. On the Pixel 9 warm load Chrome
+   reported a few hundred bytes a file, the old test read that as a network
+   fetch, and the panel said "1 KB over the wire" as though the library were
+   free. deliveryType settles it outright where the browser has it; otherwise a
+   transfer that is a rounding error beside the decoded size is a cache hit. */
+const VENDOR_FILES = [
+  ['three.webgpu.js', 'fwebgpu'],
+  ['three.core.js',   'fcore'],
+  ['three.tsl.js',    'ftsl'],
+];
+
+function cameFromCache (e) {
+  if (e.deliveryType === 'cache') return true;
+  const t = e.transferSize || 0, d = e.decodedBodySize || 0;
+  if (d === 0) return false;
+  return t === 0 || t < Math.min(2048, d * 0.02);
+}
+
+const kb = v => (v / 1024).toFixed(0) + ' KB';
+
 function accountBytes () {
-  let transferred = 0, decoded = 0, n = 0, cached = 0;
+  const found = {};
   for (const e of performance.getEntriesByType('resource')) {
     if (e.name.indexOf('/vendor/three/') === -1) continue;
-    n++;
-    transferred += e.transferSize || 0;
-    decoded += e.decodedBodySize || 0;
-    if ((e.transferSize || 0) === 0 && (e.decodedBodySize || 0) > 0) cached++;
+    for (const [name, key] of VENDOR_FILES) if (e.name.indexOf('/' + name) !== -1) found[key] = e;
   }
-  const kb = v => (v / 1024).toFixed(0) + ' KB';
+  let wire = 0, decoded = 0, n = 0, cached = 0;
+  for (const [name, key] of VENDOR_FILES) {
+    const e = found[key];
+    if (!e) { set(key, 'not reported'); continue; }
+    n++;
+    const t = e.transferSize || 0, d = e.decodedBodySize || 0, c = cameFromCache(e);
+    wire += t; decoded += d; if (c) cached++;
+    set(key, kb(t) + ' wire  ·  ' + kb(d) + ' decoded  ·  ' + (c ? 'from cache' : 'network'));
+  }
   set('bytes', n === 0 ? 'not reported'
-    : kb(transferred) + ' over the wire, ' + kb(decoded) + ' decoded, ' +
-      n + ' file' + (n === 1 ? '' : 's') + (cached ? ' (' + cached + ' from cache)' : ''));
+    : kb(wire) + ' over the wire, ' + kb(decoded) + ' decoded, ' + n +
+      ' file' + (n === 1 ? '' : 's') +
+      (cached === 0 ? '  —  cold' : '  —  from cache, ' + cached + ' of ' + n));
+  const stamp = params.get('cold');
+  set('load', (n === 0 ? 'unknown' : cached === 0 ? 'cold' : cached === n ? 'warm' : 'mixed') +
+      (stamp ? '  —  cache-busting stamp ?cold=' + stamp : '  —  plain URL, no stamp'));
+}
+
+/* -------------------------------------------------------------- timing */
+
+/* Four moments from navigation start, so network and backend stop being one
+   figure. Brief 0 measured 2,464 ms cold and 832 ms warm on the phone, but the
+   cold run was WebGPU and the warm run was WebGL2, so the gap could have been
+   the download or the backend starting up and there was no way to tell them
+   apart. These split it: the bytes land at "modules", the backend costs "init
+   start" to "init end", and what is left is the first draw. */
+function accountTiming () {
+  const rows = [];
+  const paint = performance.getEntriesByType('paint');
+  if (paint.length) rows.push(['first paint', Math.min.apply(null, paint.map(e => e.startTime))]);
+
+  let modulesEnd = 0;
+  for (const e of performance.getEntriesByType('resource'))
+    if (e.name.indexOf('/vendor/three/') !== -1 && e.responseEnd > modulesEnd) modulesEnd = e.responseEnd;
+  if (modulesEnd > 0) {
+    try { performance.measure('manta:modules', { start: 0, end: modulesEnd }); } catch (e) {}
+    rows.push(['modules', modulesEnd]);
+  }
+
+  for (const [mark, label] of [
+    ['manta:init-start',  'init start'],   ['manta:init-end',  'init end'],
+    ['manta:init2-start', 'rebuild start'], ['manta:init2-end', 'rebuild end'],
+  ]) {
+    const m = performance.getEntriesByName(mark, 'mark');
+    if (m.length) rows.push([label, m[m.length - 1].startTime]);
+  }
+  try { performance.measure('manta:init', 'manta:init-start', 'manta:init-end'); } catch (e) {}
+  try { performance.measure('manta:rebuild', 'manta:init2-start', 'manta:init2-end'); } catch (e) {}
+
+  if (firstFrameAt > 0) {
+    try { performance.measure('manta:to-first-frame', { start: 0, end: firstFrameAt }); } catch (e) {}
+    rows.push(['first frame', firstFrameAt]);
+  }
+
+  rows.sort((a, b) => a[1] - b[1]);
+  let prev = null;
+  const lines = rows.map(([label, t]) => {
+    const d = prev === null ? '' : '+' + Math.round(t - prev);
+    prev = t;
+    return (label + '              ').slice(0, 14) +
+           String(Math.round(t)).padStart(6) + d.padStart(8);
+  });
+  set('timing', lines.length ? lines.join('\n') : 'not reported');
 }
 
 /* ------------------------------------------------------------------ boot */
 
-(async () => {
+/* The automatic fallback, which is a game rule and not a lab nicety. Chromium
+   141 reproduces the case exactly: WebGPU initialises cleanly and then the
+   first draw throws, because r186 sends swizzle as a string on every texture
+   view and that build wants a dictionary. Somebody on an older Chrome has to
+   get a game, not an apology, so the page rebuilds itself on WebGL2 and
+   carries on. The headline then names the backend that is drawing, and the
+   amber note says WebGPU failed and what it said.
+
+   Two things make this harder than it looks.
+
+   A canvas keeps the first context type it is ever given. Once
+   getContext('webgpu') has been called on it, getContext('webgl2') returns
+   null for the rest of its life, so the fallback has to swap in a new canvas
+   element. Reusing the old one draws nothing, and draws nothing silently.
+
+   And a backend that dies on frame 400 is not the same event as one that never
+   drew at all. Only the opening frames are on probation; after that a throw
+   stops the loop and is reported, which is what it did before. */
+const PROBATION = 10;
+let fellBack = false, goodFrames = 0;
+
+function announce () {
+  const isGPU = renderer.backend.isWebGPUBackend === true;
+  elBackend.dataset.name = isGPU ? 'WebGPU' : 'WebGL2';
+  elBackend.textContent = elBackend.dataset.name;
+  elBackend.className = isGPU ? '' : 'webgl2';
+  elSub.textContent =
+      FORCE_WEBGL ? 'fallback forced with ?backend=webgl2'
+    : isGPU       ? 'WebGPU was available and is in use'
+    : fellBack    ? 'WebGPU started and then could not draw, so this rebuilt itself on WebGL2 — the error is below'
+    :               'WebGPU was not available, so Three.js fell back to WebGL2 during init';
+
+  if (!isGPU && cell.gpuinfo.textContent === '—') {
+    /* The WebGL2 renderer string, where the browser exposes it. Many hide it
+       behind the debug extension and some hide it outright, so a plain
+       RENDERER read is the floor. */
+    try {
+      const gl = renderer.backend.gl;
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      const v = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+      if (v) set('gpuinfo', String(v));
+    } catch (e) { /* not exposed on this device, which is an answer too */ }
+  }
+}
+
+async function build (force, tag) {
+  const r = new WebGPURenderer({ canvas, antialias: true, forceWebGL: force });
+  r.setPixelRatio(Math.min(devicePixelRatio, 2));
+  r.setSize(innerWidth, innerHeight, false);
+  performance.mark('manta:' + tag + '-start');
+  await r.init();
+  performance.mark('manta:' + tag + '-end');
+  return r;
+}
+
+function freshCanvas () {
+  const old = canvas;
+  canvas = document.createElement('canvas');
+  canvas.id = 'gl';
+  old.replaceWith(canvas);
+}
+
+async function fallBack (what, err) {
+  if (fellBack || FORCE_WEBGL) return false;
+  fellBack = true;
+  if (renderer) {
+    try { renderer.setAnimationLoop(null); } catch (e) {}
+    try { await renderer.dispose(); } catch (e) {}
+    renderer = null;
+  }
+  freshCanvas();
   try {
-    renderer = new WebGPURenderer({ canvas, antialias: true, forceWebGL: FORCE_WEBGL });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    fit();
-    renderer.setSize(innerWidth, innerHeight, false);
-
-    await renderer.init();
-
-    /* Which backend actually came up. Asked of the backend after init, not of
-       the request: WebGPURenderer swaps in a WebGL2 backend by itself when
-       WebGPU is unavailable, and the request would still say WebGPU. */
-    const isGPU = renderer.backend.isWebGPUBackend === true;
-    elBackend.dataset.name = isGPU ? 'WebGPU' : 'WebGL2';
-    elBackend.textContent = elBackend.dataset.name;
-    elBackend.className = isGPU ? '' : 'webgl2';
-    elSub.textContent = FORCE_WEBGL
-      ? 'fallback forced with ?backend=webgl2'
-      : (isGPU ? 'WebGPU was available and is in use'
-               : 'WebGPU was asked for and was not available — fell back');
-
-    if (!isGPU && cell.gpuinfo.textContent === '—') {
-      /* The WebGL2 renderer string, where the browser exposes it. Many hide it
-         behind the debug extension and some hide it outright, so a plain
-         RENDERER read is the floor. */
-      try {
-        const gl = renderer.backend.gl;
-        const ext = gl.getExtension('WEBGL_debug_renderer_info');
-        const s = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
-        if (s) set('gpuinfo', String(s));
-      } catch (e) { /* not exposed on this device, which is an answer too */ }
-    }
-
-    renderer.setAnimationLoop(() => {
-      /* A backend can init cleanly and still fail on the first draw, which is
-         what an older browser does with r186's texture views. Stop rather than
-         throw sixty times a second, and point at the button that gets round
-         it. Nothing here falls back on its own: which backend is running is
-         the thing this page exists to report, so it never changes it quietly. */
-      try {
-        renderer.render(scene, camera);
-      } catch (e) {
-        renderer.setAnimationLoop(null);
-        window.__labError('render', e);
-        elSub.textContent = FORCE_WEBGL
-          ? 'the WebGL2 fallback itself failed to draw — the message above is why'
-          : 'this backend came up but cannot draw. Tap Switch backend for WebGL2.';
-        return;
-      }
-      const now = performance.now();
-      if (firstFrameAt === null) {
-        /* Timed on the animation frame after the first render is submitted, so
-           it is closer to when the pixels were presented than to when the work
-           was queued. performance.now() is measured from navigation start. */
-        requestAnimationFrame(() => {
-          firstFrameAt = performance.now();
-          set('ttff', firstFrameAt.toFixed(0) + ' ms from navigation start');
-          accountBytes();
-        });
-        firstFrameAt = -1;   // claimed, so the branch runs once
-      }
-      accountFrame(now);
-    });
-
-    window.__labReady = true;
+    renderer = await build(true, 'init2');
   } catch (e) {
+    window.__labError('WebGPU failed, and so did the WebGL2 rebuild', e);
+    elSub.textContent = 'nothing is being drawn — the messages above are why';
+    return false;
+  }
+  window.__labNote('WebGPU failed here, so this is drawing on WebGL2 instead. ' + what, err);
+  /* Measure the backend that is actually running, not the one that died. */
+  firstFrameAt = null; frames = []; lastAt = null;
+  sampleStart = null; sampleDts = []; sampleDone = false;
+  goodFrames = 0;
+  set('refresh', 'sampling…');
+  fit();
+  announce();
+  loop();
+  return true;
+}
+
+function loop () {
+  renderer.setAnimationLoop(() => {
+    try {
+      renderer.render(scene, camera);
+    } catch (e) {
+      renderer.setAnimationLoop(null);
+      if (!FORCE_WEBGL && !fellBack && goodFrames < PROBATION) { fallBack('First draw threw.', e); return; }
+      window.__labError('render', e);
+      elSub.textContent = FORCE_WEBGL
+        ? 'the WebGL2 fallback itself failed to draw — the message above is why'
+        : 'this backend stopped drawing after ' + goodFrames + ' frames — the message above is why';
+      return;
+    }
+    goodFrames++;
+    const now = performance.now();
+    if (firstFrameAt === null) {
+      firstFrameAt = -1;   // claimed, so the branch runs once
+      /* Timed on the animation frame after the first render is submitted, so
+         it is closer to when the pixels were presented than to when the work
+         was queued. performance.now() is measured from navigation start. */
+      requestAnimationFrame(() => {
+        firstFrameAt = performance.now();
+        performance.mark('manta:first-frame');
+        set('ttff', firstFrameAt.toFixed(0) + ' ms from navigation start');
+        accountBytes();
+        accountTiming();
+      });
+    }
+    accountFrame(now);
+  });
+}
+
+(async () => {
+  fit();
+  try {
+    renderer = await build(FORCE_WEBGL, 'init');
+  } catch (e) {
+    /* Three.js has its own fallback inside init(), so reaching here means both
+       backends refused. Try the rebuild anyway: it is one more attempt on a
+       fresh canvas and it costs nothing when it fails. */
+    if (!FORCE_WEBGL && await fallBack('renderer.init() rejected.', e)) { window.__labReady = true; return; }
     window.__labError('renderer init', e);
     elSub.textContent = 'nothing is being drawn — the message above is why';
+    return;
   }
+  announce();
+  loop();
+  window.__labReady = true;
 })();
+
 
 addEventListener('resize', fit);
 addEventListener('orientationchange', () => setTimeout(fit, 120));
@@ -534,11 +796,30 @@ document.getElementById('swap').addEventListener('click', () => {
   location.replace(u.toString());
 });
 
+/* Cold puts a fresh stamp on the three library URLs, so the browser has to go
+   to the network for them and the timing includes the download. Warm is a
+   plain reload of whatever is in the address bar, which is a true warm
+   measurement precisely because those exact URLs were just fetched. Between
+   them they replace opening an incognito window to get one number. */
+document.getElementById('cold').addEventListener('click', () => {
+  const u = new URL(location.href);
+  u.searchParams.set('cold', Date.now().toString(36));
+  location.replace(u.toString());
+});
+document.getElementById('warm').addEventListener('click', () => { location.reload(); });
+
 function report () {
   const lines = ['Manta lab — ' + elBackend.textContent, elSub.textContent, ''];
-  for (const [label, key] of ROWS) lines.push(label + ': ' + cell[key].textContent);
+  for (const [label, key] of ROWS) {
+    const v = cell[key].textContent;
+    /* The timing block is several lines. Indent them rather than flattening
+       them, so the pasted report still lines up. */
+    if (v.indexOf('\n') === -1) { lines.push(label + ': ' + v); continue; }
+    lines.push(label + ':');
+    for (const l of v.split('\n')) lines.push('  ' + l);
+  }
   const err = document.getElementById('err');
-  if (err.className === 'on') lines.push('', 'errors:', err.textContent);
+  if (err.className.indexOf('on') === 0) lines.push('', 'notes:', err.textContent);
   lines.push('', 'url: ' + location.href);
   return lines.join('\n');
 }
