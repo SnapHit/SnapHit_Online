@@ -1,8 +1,8 @@
 # Manta trains: design decisions
 
-Working title. Version 1.3, 20 September 2026 (1.3: the lab page, portrait-first layout, Three.js pinned at r186, Brief 0's scope and how this doc stays in sync; 1.2: WebGPU renderer, the look direction, the identity system and the build approach; 1.1: the prototype gets a cheap procedural look instead of grey shapes). Studio: SnapHit Studios (snap-hit.online). Owner: Nathan.
+Working title. Version 1.4, 21 September 2026 (1.4: the Pixel 9 result and the 60 Hz budget, the repo's paths, automatic fallback, the camera's fixed view area and the decision not to minify; 1.3: the lab page, portrait-first layout, Three.js pinned at r186, Brief 0's scope and how this doc stays in sync; 1.2: WebGPU renderer, the look direction, the identity system and the build approach; 1.1: the prototype gets a cheap procedural look instead of grey shapes). Studio: SnapHit Studios (snap-hit.online). Owner: Nathan.
 
-**Status:** concept locked; the next step is Brief 0 (recon, this doc, Three.js r186 and a diagnostics page), then the look spike (section 10).
+**Status:** concept locked. Briefs 0 and 0.1 are done: this doc, Three.js r186 and the lab page are committed, and snap-hit.online/lab/manta/ runs on WebGPU on the test phone with an automatic WebGL2 fallback. The next step is the look spike (section 10).
 
 **How to use this file:** sections 1 to 9 record what was decided and why, section 10 is the build plan, and sections 11 to 15 cover risks, open decisions, parked ideas, terms and sources. Anything marked (P) is a proposed default to confirm in the greybox; everything else is decided.
 
@@ -106,7 +106,8 @@ Supporting principles:
 - Decided: WebGPU from day one, expecting coverage to grow, through Three.js's WebGPURenderer with TSL shaders, which compile to both WebGPU and WebGL2 and fall back to WebGL2 automatically.
 - Why: WebGPU raises the ceiling for living-water effects (compute-driven plankton, fish schools and currents), and Three.js avoids writing every shader twice.
 - Known costs: coverage estimates range from about 83% (caniuse) to 95%. Samsung phones with Xclipse GPUs probably won't get WebGPU until Chrome 154, Firefox on Android has it behind a flag, and iPhones need iOS 26. Three.js's own docs still call WebGPURenderer experimental, and it's a large library to copy into the repo.
-- Rules that follow: the signature look must hold on the WebGL2 fallback; anything built on compute is an enhancement tier with a lesser fallback version; both backends are tested at every milestone.
+- Rules that follow: the signature look must hold on the WebGL2 fallback; anything built on compute is an enhancement tier with a lesser fallback version; both backends are tested at every milestone; and if WebGPU starts but fails in the first frames, the page rebuilds itself on WebGL2 with a fresh canvas and carries on, since a canvas keeps the first context type it is given.
+- Measured on the Pixel 9 (Chrome 153, Arm Valhall) in September 2026: WebGPU is live, both backends hold 60 fps, and neither is faster to a first frame. The gap the fallback exists for is older browsers, not this one.
 - Considered and rejected: Canvas 2D (fine for half decent, can't reach stunning), a custom WebGL2 renderer (lean and universal, but no WebGPU path without a rewrite), a custom WebGPU renderer with a hand-written WebGL2 fallback (every shader written twice) and WebGPU only (excludes too many phones).
 
 ### 5.6 Identity system selection
@@ -203,7 +204,7 @@ Scoring
 - **The mantas:** silhouettes whose wings flex in the shader, with each follower's wingbeat slightly behind the one ahead, so a whole train ripples like a single ribbon. Name-generated patterns, rim-lit from the glow beneath.
 - **Set pieces:** the cut (a shockwave ripple through the water, a light burst, a beat of slow motion), the crash (a train unravelling into scattered lights), the coil (the ring brightening as it closes), the whale shark (a vast dark shape visible only by the plankton it disturbs) and the pink manta's flash.
 - **Rendering:** an ocean and plankton shader; a light memory texture around the camera that fades each frame and is stamped by every moving manta; all mantas as one instanced mesh; particles; a low-resolution bloom chain; and a final grade with vignette, grain and shockwave distortion. On WebGPU devices, compute can later add living water (hundreds of thousands of plankton particles, fish schools and currents), with a lesser version on the fallback.
-- **Phone budget:** resolution scales with frame time, and quality tiers step down visuals, never gameplay. The plankton lives in a shader, so cost scales with pixels rather than object counts. Few shaders keep it opening instantly. Target: 60 fps on Nathan's phone and a cheap Android.
+- **Phone budget:** resolution scales with frame time, and quality tiers step down visuals, never gameplay. The plankton lives in a shader, so cost scales with pixels rather than object counts. Few shaders keep it opening instantly. Target: 60 fps on Nathan's phone and a cheap Android. Measured budget: 16.7 ms a frame, since the Pixel 9 reports 60 Hz; whether 120 Hz is reachable is a separate question. Resolution follows the adaptive ladder already proven in the repo's NOTES.md.
 - **Accessibility:** cap flashes at three a second, offer a reduced-flash setting, and never rely on hue alone to tell you from rivals.
 - **Precedent:** flOw, a free Flash game with a similar look, was praised for its visuals, but reviewers flagged its simple gameplay and some called it more art piece than game. Here the look serves the rules.
 - **Briefs carry specifics, not adjectives:** palette hex values, the brightness hierarchy, and reference footage (Hanifaru drone footage of manta trains, night bioluminescence).
@@ -251,7 +252,8 @@ Technical (the repo's CLAUDE.md invariants apply):
 - Zero external requests: no ad networks, analytics, external fonts, CDNs or third-party scripts. Everything ships in the repo.
 - No Worker script in wrangler.jsonc. Live rooms would need a Worker with Durable Objects, so they're a deliberate invariant change, not v1.
 - Renderer: WebGPU through Three.js's WebGPURenderer with TSL shaders, falling back to WebGL2 automatically. Three.js is pinned at r186 (npm three 0.186.0, released 8 September 2026) and copied into the repo with its licence file, never loaded from a CDN. Its unminified build carries its own JSDoc, so the vendored files double as version-exact API docs.
-- The prototype lives at snap-hit.online/lab/manta/ (Brief 0 confirms it fits the repo): a standalone page, not linked from the arcade shelf, marked noindex, and not embedded in a cabinet until launch.
+- The prototype lives at snap-hit.online/lab/manta/: a standalone page, not linked from the arcade shelf, marked noindex, and not embedded in a cabinet until launch.
+- Repo paths: the site is served from docs/, so the page is docs/lab/manta/, Three.js is docs/vendor/three/r186/, and this doc sits at the repo root, outside docs/, so it is never served. CLAUDE.md carries the lab's bounded exception to the one-file rule, plus the storage, vendoring and real-device rules that follow from it.
 - Audio: games default to silence when audio files can't load, recorded soundtracks aren't stored in the repo, and nothing streams from external hosts.
 - On-device storage for personal bests makes no network request, but confirm it against CLAUDE.md before using it.
 
@@ -271,7 +273,8 @@ Workflow:
 - Claude Code commits straight to main, so verification before each commit is the only safety check.
 - Check Claude Code's session reports carefully; one was once misdirected between sites.
 - Claude Code's cloud sessions reach package registries and GitHub but not snap-hit.online, so checks on the live site happen on Nathan's phone.
-- Test devices: Nathan's phone at every stage, plus one cheap Android for GPU variety. Every test page shows which backend is running and can force the WebGL2 fallback, so one phone covers both backends.
+- Test devices: Nathan's Pixel 9 (Chrome, Arm Valhall, WebGPU live) at every stage, plus one cheap Android for GPU variety and an iPhone before launch. Every test page shows which backend is running and can force the WebGL2 fallback, so one phone covers both backends.
+- Every brief caps how long verification may run and requires a hard timeout on each browser and server command, because a run once hung and had to be stopped by hand.
 
 ## 10. Build plan
 
@@ -339,7 +342,7 @@ Prototype look (all drawn in code, no image files):
 - The reef as a softly glowing ring, and blooms as faint luminous clouds.
 - A debug toggle that switches to flat shapes, to separate rendering cost from simulation cost.
 
-Starting parameters. These are guesses to tune on the phone; units are CSS pixels at zoom 1.
+Starting parameters. These are guesses to tune on the phone. Units are world units, and at zoom 1 every screen sees the same area of ocean, about what a 390 by 844 phone sees, fitted to the screen's shape. A laptop therefore never sees more ocean than a phone, challenge scores stay comparable across devices, and the light memory texture covers the same patch of water everywhere.
 
 | Parameter | Start | Notes |
 |---|---|---|
@@ -405,6 +408,7 @@ If tests 1 to 3 still fail after tuning, rethink the rules before any art.
 - Pin a Three.js release: decided, r186. Brief 0 copies its WebGPU build and TSL addons into the repo. The API changes between releases (by r186, PostProcessing has been renamed RenderPipeline), so every brief requires checking Three.js and TSL names against the vendored files rather than memory or online examples.
 - Commit this doc to the repo outside the served folder, so briefs can point at it instead of pasting it (Brief 0).
 - Add a bare diagnostics page at /lab/manta/ that reports the active backend, frame rate and time to first frame, and can force the fallback; the look spike grows out of it (Brief 0).
+- Done: Brief 0 committed this doc, Three.js r186 and the lab page; Brief 0.1 added the automatic fallback, honest cold and warm load reporting and a measured refresh rate.
 - Write each brief as one full copyable prompt block, using sections 6, 7.2 and 10.2 as the spec and 10.3 as the checklist.
 
 ### 10.5 Build approach
@@ -414,7 +418,7 @@ If tests 1 to 3 still fail after tuning, rethink the rules before any art.
 - Models: Opus 5 by default for both. Anthropic's docs recommend starting with Opus 5 and moving to Fable 5.1 for demanding long-horizon work, or when Opus at higher effort falls short. Keep Fable for a problem Opus fails to fix twice, a performance pass or a polish pass. Fable costs twice Opus's API price; on Pro it runs on usage credits from the first message, on Max it's included up to half the weekly limit, and it needs Claude Code 2.1.255 or later.
 - Sequence: brief 0 is read-only recon of the cabinet conventions, then committing this doc, Three.js r186 and the diagnostics page, each as its own verified commit; brief 1 is the look spike; brief 2 is the greybox in staged commits (movement and trains, then crash, burst and cut, then bots, then the look and debug panel), each verified before committing.
 - Tuning happens on the phone with the debug sliders; small briefs lock values in.
-- One source of truth: this doc lives in project knowledge and in the repo, outside the served folder. Brief 0 commits it in full; after that, changes travel inside briefs as exact edits, and Claude Code checks the result against a hash of the project knowledge version, so the two copies never drift.
+- One source of truth: this doc lives in project knowledge and in the repo, outside the served folder. Each new version is uploaded by hand to both, and the next brief gives Claude Code the hash to check the repo copy against, so the two can never drift.
 - Nathan sends screenshots and screen recordings to the architect chat, which turns what looks off into the next brief.
 
 ## 11. Risks and mitigations
@@ -431,7 +435,7 @@ If tests 1 to 3 still fail after tuning, rethink the rules before any art.
 - **A weak name.** Pick a one-word name that says the verb before launch.
 - **WebGPU coverage and fallback quality.** Design the signature look for the WebGL2 fallback, keep a toggle that forces it, and test both at every milestone.
 - **Three.js's WebGPU renderer is labelled experimental, and TSL changes between releases.** Pin a release, copy it into the repo, and give Claude Code the matching docs.
-- **Library weight against "Instant. Play."** r186 ships no minified build: about 3.8 MB of JavaScript, roughly 0.5 to 0.7 MB over the network. The diagnostics page measures load time and time to first frame on a phone before deciding whether to minify or trim it; get the first frame up fast.
+- **Library weight against "Instant. Play."** Measured on the Pixel 9: 732 KB over the wire, 3.7 MB decoded, and the whole library costs about 140 to 170 ms of a 480 ms first frame. Decided: don't minify and don't trim. Minifying needs a build step and trimming means editing the vendored library, and both are invariants to spend on a small prize. The ocean paints in CSS before Three.js loads instead, so the screen is never blank.
 - **Shader bugs on particular phone GPUs.** Test on at least one iPhone and one cheap Android.
 - **Glow soup.** The brightness hierarchy is non-negotiable: if a screenshot looks spectacular but you can't find your train, it's wrong.
 - **Photosensitivity.** Cap flashes and offer a reduced-flash setting.
@@ -459,7 +463,7 @@ If tests 1 to 3 still fail after tuning, rethink the rules before any art.
 15. What a manta link carries, and its length limit.
 16. How many visiting mantas one ocean holds, and how the pod is managed.
 17. The palette's hex values.
-18. How the camera scales across screen sizes (proposal: at a given zoom, every screen sees the same area of ocean).
+18. Whether 120 Hz is worth chasing on adaptive displays, and what that would cost.
 
 ## 13. Parked and rejected ideas
 
@@ -513,7 +517,7 @@ Parked, for later modes or future games:
 - **Challenge link:** a link carrying a seed and a score to beat.
 - **Crash card:** the small card after a crash showing your peak, your best, a clip button, a challenge link and a way to your manta card, while play continues.
 - **Look spike:** the one-screen visual test that proves the look and frame rate before any gameplay.
-- **Light memory:** a low-resolution texture that remembers recent movement and lights the plankton.
+- **Light memory:** a low-resolution texture that remembers recent movement and lights the plankton. It is locked to the world, so the look spike keeps its camera still and scrolling it with a moving camera is the greybox's problem.
 - **Fallback:** the WebGL2 backend Three.js switches to when WebGPU isn't available.
 - **Lab page:** the prototype's standalone page at /lab/manta/, unlinked and marked noindex; it starts as a diagnostics page and grows into the look spike.
 - **Catalogue number:** a manta's ID number, like a researcher's photo-ID entry.
