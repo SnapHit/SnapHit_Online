@@ -25,6 +25,7 @@ import { createMantas, COUNT } from './mantas.js';
 import { createPost } from './post.js';
 import { createCut, flashAllowed } from './cut.js';
 import { createQuality, TIER_SETTINGS } from './tiers.js';
+import { setSceneTime } from './clock.js';
 import { createDrawer } from './drawer.js';
 
 const query = new URLSearchParams(location.search);
@@ -153,6 +154,21 @@ function applyQuality (renderer) {
   if (lm) panel.set('lm', lm.size + '×' + lm.size + '  ·  ' + lm.note);
 }
 
+/* Hoisted out of the hooks so the step hook below can drive it. The cut owns
+   the clock while it is running: its own timeline advances in REAL time — a
+   250 ms beat of slow motion is 250 ms of the player's life — while the scene
+   advances in scaled time, so everything in the water slows together. That
+   scaled total is the one clock every shader reads; see clock.js. */
+function advance (now, dt) {
+  const scale = cut.update(dt);
+  simTime += dt * scale;
+  setSceneTime(simTime);
+  mantas.update(simTime);
+  /* Scaled too: the stamp is a deposit per unit of distance travelled, so a
+     slowed manta must not lay down a brighter trail. */
+  stampMantas(dt * scale);
+}
+
 const lab = createLab({
   scene,
   camera,
@@ -179,18 +195,7 @@ const lab = createLab({
     },
     /* The mantas are driven from the CPU: scripted paths in, instanced
        attributes out, once a frame before anything is drawn. */
-    onUpdate (now, dt) {
-      /* The cut owns the clock while it is running. Its own timeline advances
-         in REAL time — a 250 ms beat of slow motion is 250 ms of the player's
-         life — while the scene advances in scaled time, so everything in the
-         water slows together. */
-      const scale = cut.update(dt);
-      simTime += dt * scale;
-      mantas.update(simTime);
-      /* Scaled too: the stamp is a deposit per unit of distance travelled, so
-         a slowed manta must not lay down a brighter trail. */
-      stampMantas(dt * scale);
-    },
+    onUpdate: advance,
     onBeforeRender (renderer, dt) {
       if (!lm) return;
       /* Probed once, on the first frame, before anything has been drawn into
@@ -238,5 +243,17 @@ window.__lab.lab = lab;
 window.__lab.pause = () => lab.pause();
 window.__lab.resume = () => lab.resume();
 window.__lab.renderer = () => lab.renderer;
+/* Freeze and step. With the loop paused, this advances the scene by an exact
+   number of seconds and draws exactly one frame, so a test can compare two
+   renders that differ ONLY by what it changed. Every shader reads the scene
+   clock, so nothing moves unless this moves it. */
+window.__lab.step = (seconds = 1 / 60) => {
+  const r = lab.renderer;
+  if (!r) return null;
+  advance(performance.now(), seconds);
+  if (lm) { lm.setFade(P.fade); lm.render(r, seconds); }
+  if (post) post.render(); else r.render(scene, camera);
+  return simTime;
+};
 
 lab.start().then(ok => { if (ok) window.__labReady = true; });

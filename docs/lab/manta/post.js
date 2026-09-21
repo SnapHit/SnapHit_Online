@@ -16,7 +16,8 @@
  * renderer's LINEAR working space and must not tone map by hand.
  */
 import { RenderPipeline, ACESFilmicToneMapping, AgXToneMapping, NeutralToneMapping, NoToneMapping, Vector3 } from 'three';
-import { pass, uv, rand, fract, time, float, vec4, Fn, uniform } from 'three/tsl';
+import { pass, uv, rand, fract, float, vec4, Fn, uniform } from 'three/tsl';
+import { uTime } from './clock.js';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { vignette } from 'three/addons/tsl/display/CRT.js';
 import { P, U, onParam } from './params.js';
@@ -52,7 +53,7 @@ export function createPost ({ renderer, scene, camera, tone = 'neutral' }) {
   const graded = Fn(() => {
     const composed = sceneColor.rgb.add(bloomPass.rgb);
     const shaded = vignette(composed, uVignette, float(0.6), uv());
-    const grain = rand(fract(uv().add(time))).sub(0.5).mul(U.grain).mul(2.0);
+    const grain = rand(fract(uv().add(uTime))).sub(0.5).mul(U.grain).mul(2.0);
     return vec4(shaded.add(grain), 1.0);
   })();
 

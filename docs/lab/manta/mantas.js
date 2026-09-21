@@ -23,9 +23,10 @@ import {
   MeshBasicNodeMaterial, DoubleSide, DynamicDrawUsage, Matrix4
 } from 'three';
 import {
-  Fn, vec3, float, sin, cos, clamp, time, positionGeometry, varying,
+  Fn, vec3, float, sin, cos, clamp, positionGeometry, varying,
   instancedBufferAttribute
 } from 'three/tsl';
+import { uTime } from './clock.js';
 
 export const COUNT = 10;
 
@@ -150,8 +151,10 @@ export function createMantas (scene) {
     /* The beat. Amplitude grows with the span so the spine barely moves and
        the tips do the work, and the tip trails the root, so one wing is a
        travelling wave rather than a rigid plank. */
+    /* The scene's clock and not the renderer's, so the cut's slow motion
+       slows the wingbeat along with the water. See clock.js. */
     const theta = sin(
-      time.mul(TAU * BEATS_PER_SECOND).add(nPhase).sub(span.mul(SPAN_LAG))
+      uTime.mul(TAU * BEATS_PER_SECOND).add(nPhase).sub(span.mul(SPAN_LAG))
     ).mul(FLAP_AMPLITUDE).mul(span);
 
     /* Rotate each wing element about the spine. x narrows by cos, y lifts by

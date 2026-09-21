@@ -23,7 +23,8 @@
  * pixel. Colours are to be tuned on the phone.
  */
 import { Vector2 } from 'three';
-import { Fn, vec2, vec3, color, exp, float, length, max, mix, pow, sin, smoothstep, screenUV, texture, time, uniform } from 'three/tsl';
+import { Fn, vec2, vec3, color, exp, float, length, max, mix, pow, sin, smoothstep, screenUV, texture, uniform } from 'three/tsl';
+import { uTime } from './clock.js';
 import { U } from './params.js';
 
 /* Screen aspect, pushed in from fit() rather than read from a screen-size
@@ -127,7 +128,8 @@ export function oceanNode () {
        it on WebGL so both backends agree, which is why the same code works on
        either. Checked in the vendored source, then confirmed by sampling the
        render: an earlier guess had this upside down. */
-    const t = time;
+    /* The scene's clock, not the renderer's. See clock.js. */
+    const t = uTime;
 
     /* Where this pixel is in the ocean, before anything bends it. */
     const w0 = vec2(screenUV.x.sub(0.5).mul(uViewW), screenUV.y.sub(0.5).mul(uViewH));
