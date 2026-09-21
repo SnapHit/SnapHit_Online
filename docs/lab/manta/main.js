@@ -8,6 +8,7 @@
  *   lightmemory.js  the fading texture every moving thing stamps into
  *   mantas.js       one instanced mesh, ten mantas, wings flexed in TSL
  *   post.js         bloom and the final grade, through a RenderPipeline
+ *   cut.js          the cut set piece: shockwave, burst, scatter, slow motion
  *   renderer.js     the backend, the automatic WebGL2 fallback and the loop
  *
  * Imported by relative path from the same folder. No build step, no bundler,
@@ -17,20 +18,27 @@ import { REVISION } from 'three';
 import * as panel from './panel.js';
 import { P } from './params.js';
 import { createScene, describeView } from './scene.js';
-import { useLightMemory, uViewW, uViewH } from './ocean.js';
+import { useLightMemory, uViewW, uViewH, uShockC, uShockR, uShockA } from './ocean.js';
 import { createLightMemory } from './lightmemory.js';
 import { createLab } from './renderer.js';
 import { createMantas, COUNT } from './mantas.js';
 import { createPost } from './post.js';
+import { createCut, flashAllowed } from './cut.js';
 
 const query = new URLSearchParams(location.search);
 /* ?fx=off builds the page without the light memory, the plankton or anything
    that reads them, so the cost of the look can be measured against the bare
    scene on a real phone rather than guessed at. */
 export const FX = query.get('fx') !== 'off';
-/* ?bloom=gold|teal|white and ?tone=off|aces|agx|neutral, so the two judgement
-   calls in the grade can be compared on the phone rather than argued about. */
-const BLOOM_TINT = query.get('bloom') || 'gold';
+/* Untinted by default, which is what section 7.2's colour discipline means
+   for bloom: "blue-greens for the world; warm colours only for danger". A
+   bloom with no tint of its own amplifies whatever colour its source already
+   is, so your train's pale teal blooms pale teal and a rival's blue blooms
+   blue, and the identity colours survive the glow instead of being overwritten
+   by it. A gold tint made every bright thing gold, including the player's own
+   mantas, which is how a signal reserved for danger gets spent on everything.
+   ?bloom=gold and ?bloom=teal remain for comparison. */
+const BLOOM_TINT = query.get('bloom') || 'white';
 const TONE = query.get('tone') || 'neutral';
 /* ?vig=0 turns the vignette off, which is the only way to measure what it is
    actually doing: comparing the centre of the screen with its corners also
@@ -43,7 +51,9 @@ panel.probeAdapter();
 
 /* Before the scene: the ocean shader is built once, and whether it carries a
    plankton term at all depends on whether there is a light memory to read. */
-const lm = FX ? createLightMemory(COUNT) : null;
+/* One slot past the mantas, reserved for the cut's burst. */
+const BURST_SLOT = COUNT;
+const lm = FX ? createLightMemory(COUNT + 1) : null;
 if (lm) useLightMemory(lm);
 
 const { scene, camera, fit, view } = createScene();
@@ -53,6 +63,15 @@ panel.set('lm', lm ? (lm.size + '×' + lm.size + '  ·  ' + lm.note) : 'off (?fx
 
 window.__lab = { scene, camera, view, mantas, lm, FX };
 window.__lab.post = () => post;
+const cut = createCut({ mantas, lm, burstSlot: BURST_SLOT });
+window.__lab.cut = cut;
+panel.wireCut(cut);
+
+/* Debug handles. This is a lab page and a browser test has to be able to see
+   the shockwave's real uniforms and the scene's own clock, not infer them. */
+window.__lab.shock = () => ({ x: uShockC.value.x, z: uShockC.value.y, r: uShockR.value, a: uShockA.value });
+window.__lab.simTime = () => simTime;
+window.__lab.flashAllowed = flashAllowed;
 /* lab is assigned below, once createLab has run. */
 
 /* ------------------------------------------------------ stamping the wake */
@@ -61,7 +80,9 @@ window.__lab.post = () => post;
    swept rather than at a point. A fast manta must paint a line. */
 const prevX = new Float32Array(COUNT), prevZ = new Float32Array(COUNT);
 let havePrev = false;
+let burstCleared = false;
 let lmAttached = false;
+let simTime = 0;
 let post = null;
 
 /* Tuned against the render, not guessed: with a fade of 0.985 a pixel under a
@@ -85,6 +106,7 @@ const CRUISE = 120;               // world units a second, the reference speed
 
 function stampMantas (dt) {
   if (!lm) return;
+  if (!burstCleared) { lm.stamp(BURST_SLOT, 0, 0, 0, 0, 1, 0, 0, 0, 0); burstCleared = true; }
   const { aPos, aSize, aTint } = mantas;
   for (let i = 0; i < COUNT; i++) {
     const x = aPos.getX(i), z = aPos.getZ(i);
@@ -134,8 +156,16 @@ const lab = createLab({
     /* The mantas are driven from the CPU: scripted paths in, instanced
        attributes out, once a frame before anything is drawn. */
     onUpdate (now, dt) {
-      mantas.update(now / 1000);
-      stampMantas(dt);
+      /* The cut owns the clock while it is running. Its own timeline advances
+         in REAL time — a 250 ms beat of slow motion is 250 ms of the player's
+         life — while the scene advances in scaled time, so everything in the
+         water slows together. */
+      const scale = cut.update(dt);
+      simTime += dt * scale;
+      mantas.update(simTime);
+      /* Scaled too: the stamp is a deposit per unit of distance travelled, so
+         a slowed manta must not lay down a brighter trail. */
+      stampMantas(dt * scale);
     },
     onBeforeRender (renderer, dt) {
       if (!lm) return;

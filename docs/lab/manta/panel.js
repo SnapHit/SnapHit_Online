@@ -11,7 +11,7 @@
 
 /* Bumped by hand every time this page is edited, so a stale deploy is obvious
    from the phone rather than something you have to take on trust. */
-export const BUILD = '2026-09-21 20:40 UTC';
+export const BUILD = '2026-09-22 09:15 UTC';
 
 const params = new URLSearchParams(location.search);
 export const FORCE_WEBGL = params.get('backend') === 'webgl2';
@@ -54,7 +54,24 @@ const el = {
   rows:     document.getElementById('rows'),
   err:      document.getElementById('err'),
   plain:    document.getElementById('plain'),
+  cut:      document.getElementById('cut'),
+  reduce:   document.getElementById('reduceFlash'),
 };
+
+/* Wired from main.js once the cut exists. */
+export function wireCut (cut) {
+  el.cut.addEventListener('click', () => {
+    const fired = cut.trigger();
+    el.cut.textContent = fired ? 'Cut!' : 'still running…';
+    setTimeout(() => { el.cut.textContent = 'Cut the train'; }, 900);
+  });
+  /* Reflects the system setting on load, and can be turned on independently
+     of it, but never silently off: if the OS asks for reduced motion the
+     switch starts on. */
+  el.reduce.checked = cut.reduced;
+  cut.setUserReduced(el.reduce.checked);
+  el.reduce.addEventListener('change', () => cut.setUserReduced(el.reduce.checked));
+}
 
 const cell = {};
 for (const [label, key] of ROWS) {

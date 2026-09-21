@@ -22,7 +22,8 @@
  * compile identically on WebGPU and WebGL2 and cost a handful of ALU ops a
  * pixel. Colours are to be tuned on the phone.
  */
-import { Fn, vec2, vec3, color, float, mix, max, pow, sin, smoothstep, screenUV, texture, time, uniform } from 'three/tsl';
+import { Vector2 } from 'three';
+import { Fn, vec2, vec3, color, exp, float, length, max, mix, pow, sin, smoothstep, screenUV, texture, time, uniform } from 'three/tsl';
 import { U } from './params.js';
 
 /* Screen aspect, pushed in from fit() rather than read from a screen-size
@@ -32,6 +33,15 @@ export const uAspect = uniform(1.0);
    and read the light memory there. */
 export const uViewW = uniform(385);
 export const uViewH = uniform(855);
+
+/* The cut's shockwave: a ring expanding from a point, pushing the water
+   outward. Amplitude zero means no distortion and the ring costs a few ALU
+   ops a pixel, so it is always in the shader rather than being a second
+   variant that would have to compile on first use — a stutter exactly when
+   the set piece fires is the one thing it cannot afford. */
+export const uShockC = uniform(new Vector2(0, 0));
+export const uShockR = uniform(0);
+export const uShockA = uniform(0);
 
 /* Blue-green, from the palette already in use. */
 const PLANKTON = color(0x4fd8c8);
@@ -113,15 +123,33 @@ export function oceanNode () {
        either. Checked in the vendored source, then confirmed by sampling the
        render: an earlier guess had this upside down. */
     const t = time;
-    const p = vec2(screenUV.x.mul(uAspect), screenUV.y);
+
+    /* Where this pixel is in the ocean, before anything bends it. */
+    const w0 = vec2(screenUV.x.sub(0.5).mul(uViewW), screenUV.y.sub(0.5).mul(uViewH));
+    /* The shockwave, as a displacement in world units: a narrow ring at
+       uShockR, pushing directly away from the centre. Everything below reads
+       the displaced position, so the water, the seabed, the ripple and the
+       plankton all bend together rather than sliding over each other. */
+    const rel = w0.sub(uShockC);
+    const dist = length(rel);
+    const band = dist.sub(uShockR);
+    const ring = exp(band.mul(band).mul(-0.0009));
+    const push = rel.div(max(dist, float(0.001))).mul(ring.mul(uShockA));
+    const world = w0.add(push);
+    const suv = vec2(
+      world.x.div(uViewW).add(0.5),
+      world.y.div(uViewH).add(0.5)
+    );
+
+    const p = vec2(suv.x.mul(uAspect), suv.y);
 
     /* 1. the water. The gradient breathes very slowly, and a wide slow wave
           across it stops the horizontal banding a pure vertical ramp shows on
           an 8-bit display. */
-    const band = screenUV.y
+    const grad = suv.y
       .add(sin(p.x.mul(2.1).add(t.mul(0.045))).mul(0.055))
       .add(sin(t.mul(0.021)).mul(0.05));
-    const water = mix(WATER_TOP, WATER_DEEP, smoothstep(float(-0.15), float(1.05), band));
+    const water = mix(WATER_TOP, WATER_DEEP, smoothstep(float(-0.15), float(1.05), grad));
 
     /* 2. the seabed, on its own slow drift. Three sines at different angles
           and frequencies give a soft mottle with no repeat you can pick out
@@ -154,10 +182,6 @@ export function oceanNode () {
           there are, which is the point. */
     if (lm === null) return water.add(seabed).add(ripple);
 
-    const world = vec2(
-      screenUV.x.sub(0.5).mul(uViewW),
-      screenUV.y.sub(0.5).mul(uViewH)
-    );
     /* The exact inverse of the mapping the light memory pass uses, so the two
        agree by construction rather than by coincidence. */
     const lmUV = world.div(lm.uHalf.mul(2.0)).add(0.5);

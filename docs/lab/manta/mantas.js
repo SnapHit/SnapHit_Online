@@ -211,6 +211,14 @@ export function createMantas (scene) {
       tint: tint(RIVALS[i + 2], RIVAL_LEVEL) });
   }
 
+  /* The identity colour each manta was given. Brightness is scaled against
+     this rather than against whatever is in the buffer, so a flash and a fade
+     cannot drift the hue: the cut changes how bright a manta is, never which
+     colour it is. 7.2 forbids relying on hue alone, and the inverse matters
+     just as much — the hue has to survive the effect. */
+  const baseTint = roles.map(r => r.tint.slice());
+  const tintScale = new Float32Array(COUNT).fill(1);
+
   for (let i = 0; i < COUNT; i++) {
     aSize.setX(i, roles[i].size);
     const t = roles[i].tint;
@@ -262,6 +270,21 @@ export function createMantas (scene) {
     return arcT[lo] + (arcT[hi] - arcT[lo]) * f;
   }
 
+  function setTintScale (i, k) {
+    const t = baseTint[i];
+    tintScale[i] = k;
+    aTint.setXYZ(i, t[0] * k, t[1] * k, t[2] * k);
+    aTint.needsUpdate = true;
+  }
+  const getTintScale = i => tintScale[i];
+
+  /* A manta cut out of the train stops being placed on the path and starts
+     carrying its own position and heading, exactly as the loose singles do.
+     Null puts it back under the train's control. */
+  const freed = new Array(COUNT).fill(null);
+  function setFree (i, state) { freed[i] = state; }
+  const isFree = i => freed[i] !== null;
+
   let half = { w: 200, h: 420 };
   function setBounds (view) { half = { w: view.w / 2, h: view.h / 2 }; }
 
@@ -296,12 +319,28 @@ export function createMantas (scene) {
   }
 
   function update (secs) {
+    /* Clamped, so a hidden tab or a test driving update() out of order cannot
+       teleport anyone. Hoisted: the scattered mantas and the loose singles
+       both integrate against it. */
+    const dt = lastSecs === null ? 0 : Math.min(Math.max(secs - lastSecs, 0), 0.1);
+    lastSecs = secs;
+
     /* Your train. The leader's position along the path is a distance, not a
        parameter, and each follower is exactly SPACING units of path behind
        the one ahead. Heading comes from half a unit further along the same
        curve, so it is right even where the parameter is moving fastest. */
     const sLead = secs * TRAIN_SPEED;
     for (let i = 0; i < 5; i++) {
+      const f = freed[i];
+      if (f !== null) {
+        /* Scattered, and still swimming headfirst: heading first, then move
+           along it, which is the rule the loose mantas already follow. */
+        f.head += (f.turn || 0) * dt;
+        f.x += -Math.sin(f.head) * f.speed * dt;
+        f.z += -Math.cos(f.head) * f.speed * dt;
+        place(i, wrap(f.x, half.w + 34), wrap(f.z, half.h + 34), 0, f.head);
+        continue;
+      }
       const s = sLead - i * SPACING;
       const [x, z] = fig8(tAtArc(s));
       const [x2, z2] = fig8(tAtArc(s + 0.5));
@@ -315,10 +354,6 @@ export function createMantas (scene) {
        dead space off screen, which made the unattached one hard to find
        simply because it was often not there. */
     const MARGIN = 34;
-    /* Clamped, so a hidden tab or a test driving update() out of order cannot
-       teleport anyone. */
-    const dt = lastSecs === null ? 0 : Math.min(Math.max(secs - lastSecs, 0), 0.1);
-    lastSecs = secs;
     for (let i = 0; i < 3; i++) {
       const m = singles[i];
       /* A slow weave: the turn rate is what oscillates, so the heading rolls
@@ -355,5 +390,6 @@ export function createMantas (scene) {
   /* aPos is exposed so a test can drive update() across a whole cycle and
      measure the gaps, which is the only honest way to check the spacing. */
   return { mesh, update, setBounds, count: COUNT, aPos, aHead, aSize, aTint,
+           setFree, isFree, setTintScale, getTintScale,
            pathLength: PATH_LENGTH, spacing: SPACING };
 }

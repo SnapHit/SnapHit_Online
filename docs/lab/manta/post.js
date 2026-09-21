@@ -48,7 +48,7 @@ export const TINTS = {
    puts the edges at (1 - intensity), so this number IS the percentage. */
 const uVignette = uniform(0.15);
 
-export function createPost ({ renderer, scene, camera, tint = 'gold', tone = 'neutral' }) {
+export function createPost ({ renderer, scene, camera, tint = 'white', tone = 'neutral' }) {
   const scenePass = pass(scene, camera);
   const sceneColor = scenePass.getTextureNode('output');
 
