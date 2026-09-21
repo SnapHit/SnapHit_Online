@@ -18,10 +18,11 @@ import { REVISION } from 'three';
 import * as panel from './panel.js';
 import { P, U } from './params.js';
 import { createScene, describeView } from './scene.js';
-import { useLightMemory, useLongMemory, useSeabed, useCaustics, uCausticLayers, uViewW, uViewH, uShockC, uShockR, uShockA, uRippleOn } from './ocean.js';
+import { useLightMemory, useLongMemory, useSeabed, useCaustics, useShadows, uCausticLayers, uViewW, uViewH, uShockC, uShockR, uShockA, uRippleOn } from './ocean.js';
 import { createLightMemory } from './lightmemory.js';
 import { createSeabed } from './seabed.js';
 import { createCaustics } from './caustics.js';
+import { createShadows } from './shadow.js';
 import { createLab } from './renderer.js';
 import { createMantas, COUNT } from './mantas.js';
 import { createPost } from './post.js';
@@ -70,6 +71,11 @@ const seabed = FX ? createSeabed() : null;
 if (seabed) useSeabed(seabed);
 const caustics = FX ? createCaustics() : null;
 if (caustics) useCaustics(caustics);
+/* The shadow target is made before the ocean's shader is built, because the
+   shader reads it; the mesh that draws into it is attached once the mantas
+   exist a few lines below. */
+const shadows = FX ? createShadows() : null;
+if (shadows) useShadows(shadows);
 /* The long memory: the same machinery at a quarter of the resolution and a
    fade measured in tens of seconds. 0.9994 a frame at 60 is a half life of
    about nineteen seconds. Stamped by the same calls, rendered only when the
@@ -80,11 +86,13 @@ let slowAttached = false;
 
 const { scene, camera, fit, view } = createScene();
 const mantas = createMantas(scene);
+if (shadows) shadows.attach(mantas.shadowMesh);
 panel.set('mantas', String(mantas.count) + ' in 1 instanced mesh');
 /* WebGPU guarantees eight vertex buffers per pipeline and three allocates one
    per attribute. Over the limit the device refuses the pipeline in silence:
    nothing throws, nothing is logged, the mesh simply is not drawn. */
 panel.set('vbuf', mantas.vertexBuffers + ' of 8 that WebGPU guarantees' +
+                  (shadows ? '  \u00b7  same on the shadow pass' : '') +
                   (mantas.vertexBuffers > 8 ? '  \u00b7  OVER THE LIMIT' : ''));
 panel.set('lm', lm ? (lm.size + '×' + lm.size + '  ·  ' + lm.note) : 'off (?fx=off)');
 
@@ -105,6 +113,7 @@ const quality = createQuality({ forcedTier: FORCED_TIER, dpr: devicePixelRatio }
 window.__lab = window.__lab || {};
 const cut = createCut({ mantas, lm, burstSlot: BURST_SLOT });
 window.__lab.cut = cut;
+window.__lab.shadows = shadows;
 /* A test can stand the set piece still: the short parts of it are over
    before a headless browser has drawn a frame (see cut.js). The page itself
    never calls this, so the phone still runs on the real clock. */
@@ -239,6 +248,7 @@ const lab = createLab({
       mantas.setBounds(v);
       uViewW.value = v.w; uViewH.value = v.h;
       if (lm) lm.setView(v);
+      if (shadows) shadows.setView(v);
       if (lmSlow) lmSlow.setView(v);
       panel.set('view', describeView(v));
       panel.set('viewport', panel.describeViewport());
@@ -270,6 +280,9 @@ const lab = createLab({
                             ' ms to generate  ·  ' + seabed.tile + ' units a tile' +
                             (caustics ? '  ·  caustics ' + caustics.size + '²' : ''));
       }
+      /* Before the frame is drawn, so the ocean samples this frame's shadows
+         and not the last one's. */
+      if (shadows) shadows.render(renderer);
       lm.setFade(P.fade);
       lm.render(renderer, dt);
       if (lmSlow && P.longMemory > 0) {

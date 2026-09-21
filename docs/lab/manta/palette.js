@@ -31,9 +31,8 @@ export const TURQUOISE = { key: 'turquoise', hex: 0x3cf0d0, cool: true };
    while the same check over a lime manta read 2.6. The condition is about
    every manta, so the dim hues carry their own level.
 
-   Only upward. A bright hue is never dimmed to match the others: it already
-   passes, and pulling lime down to red's luminance would take the whole
-   palette with it. */
+   The band below does both: it lifts the dim hues to a floor and holds the
+   bright ones under a ceiling. */
 const toLinear = c => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
 
 /* Relative luminance, linear, the same weights the conditions are measured

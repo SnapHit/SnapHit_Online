@@ -98,6 +98,9 @@ export const SPEC = [
      flash. */
   { key: 'cloud',          label: 'cloud amount',         def: 0.80,  min: 0,    max: 1.5,   step: 0.05,  gpu: true  },
   { key: 'moonlight',      label: 'moonlight strength',   def: 2.00,  min: 0,    max: 2.75,  step: 0.05,  gpu: true  },
+  /* How dark a manta's shadow makes the sand under it. The shadow is on the
+     FLOOR only, offset down and left about half a wingspan. */
+  { key: 'shadow',         label: 'shadow strength',      def: 0.55,  min: 0,    max: 1,     step: 0.05,  gpu: true  },
   { key: 'snow',           label: 'marine snow density',  def: 1.70,  min: 0,    max: 2,     step: 0.05,  gpu: true  },
   /* The fading light painting 7.2 calls the signature effect. 0 by default,
      and at 0 the whole pass is skipped rather than merely multiplied out.

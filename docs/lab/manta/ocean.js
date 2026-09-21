@@ -137,6 +137,21 @@ let caustics = null;
 export function useCaustics (c) { caustics = c; }
 /* High crosses two caustic webs, medium one, low holds it still. */
 export const uCausticLayers = uniform(2);
+/* The mantas' shadows on the floor, drawn by shadow.js into a world-locked
+   target. Null until it is created, and the shader is built without the term
+   in that case. */
+let shadows = null;
+export function useShadows (s) { shadows = s; }
+/* Down and to the LEFT, about half a wingspan, which is where the moon in the
+   top right corner of the sky would throw them.
+
+   MIND THE SIGN. A pixel at w shows the ink it finds at w + offset, so the
+   darkening appears at m - offset for a manta at m. Down and left is
+   (-half, +half) in world terms — world.y grows downward on screen — so the
+   SAMPLE has to be taken at (+half, -half). Getting this backwards puts every
+   shadow up and to the right, which still looks like a shadow and is wrong. */
+const SHADOW_OFFSET = 20;        // world units, half of a 40-unit wingspan
+
 /* A second, slower light memory under the fast one: the fading light painting
    a match leaves behind. Off by default. */
 let lmSlow = null;
@@ -258,7 +273,29 @@ export function oceanNode () {
     const cloudF = sin(cloudPhase);
     const cloud = float(1.0).sub(smoothstep(float(0.15), float(0.95), cloudF).mul(U.cloud).mul(0.67));
 
-    const seabed = bedHue.mul(bedV.mul(moon).mul(caustic).mul(cloud).mul(SEABED_LEVEL));
+    /* The shadows, on the FLOOR only. Darkening the water as well would put a
+       grey smear over the whole column and read as dirt rather than as a
+       shadow; the animal is between the moon and the sand, so what it takes
+       away is the light landing on the sand.
+
+       Blurred as it is read, not in a pass of its own: nine taps a texel and
+       a half apart, which at 256 over a 15% oversized view is about six world
+       units — enough to lose the polygon edges without a second target and a
+       second pipeline. */
+    let shade = float(1.0);
+    if (shadows !== null) {
+      const sUV = w => w.div(shadows.uHalf.mul(2.0)).add(0.5);
+      const step2 = shadows.uHalf.mul(2.0).div(float(256.0)).mul(1.5);
+      let acc = float(0.0);
+      for (const [ox, oz] of [[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]) {
+        const at = world.add(vec2(float(SHADOW_OFFSET).add(step2.mul(ox)),
+                                  float(-SHADOW_OFFSET).add(step2.mul(oz))));
+        acc = acc.add(texture(shadows.out, sUV(at)).r);
+      }
+      shade = float(1.0).sub(acc.div(9.0).mul(U.shadow));
+    }
+
+    const seabed = bedHue.mul(bedV.mul(moon).mul(caustic).mul(cloud).mul(SEABED_LEVEL)).mul(shade);
 
     /* 3. the surface ripple. Two crossing waves, and only the tops of their
           product are kept, which gives short broken highlights rather than

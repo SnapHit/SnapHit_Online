@@ -212,7 +212,22 @@ export function createMantas (scene) {
   material.colorNode = markings(nTintV, shade, positionGeometry.x, positionGeometry.z)
     .mul(clamp(lit, 0.5, 1.5));
 
-  const mesh = new InstancedMesh(mantaGeometry(), material, COUNT);
+  const geometry = mantaGeometry();
+  const mesh = new InstancedMesh(geometry, material, COUNT);
+
+  /* The same animals again, flat white on black, for the shadow pass.
+     The SAME geometry and the SAME position node, so a shadow beats its
+     wings with the manta that casts it and cannot drift out of step with it;
+     only the colour differs. A second InstancedMesh rather than the same one
+     moved into another scene, because adding an Object3D to a second scene
+     REMOVES IT FROM THE FIRST, and a shadow pass that quietly steals the
+     mantas out of the picture is worse than no shadow pass. Same attributes,
+     so this pipeline is the same 6 vertex buffers as the one above. */
+  const shadowMaterial = new MeshBasicNodeMaterial({ side: DoubleSide });
+  shadowMaterial.positionNode = material.positionNode;
+  shadowMaterial.colorNode = vec3(1.0, 1.0, 1.0);
+  const shadowMesh = new InstancedMesh(geometry, shadowMaterial, COUNT);
+  shadowMesh.frustumCulled = false;
 
   /* Every attribute this mesh needs is one WebGPU vertex buffer, and WebGPU
      guarantees only eight. Counted from the objects rather than written down,
@@ -226,8 +241,9 @@ export function createMantas (scene) {
      and size all come from the attributes above. InstancedMesh allocates it
      zeroed, and a zero matrix would collapse the mesh to a point. */
   const I = new Matrix4();
-  for (let i = 0; i < COUNT; i++) mesh.setMatrixAt(i, I);
+  for (let i = 0; i < COUNT; i++) { mesh.setMatrixAt(i, I); shadowMesh.setMatrixAt(i, I); }
   mesh.instanceMatrix.needsUpdate = true;
+  shadowMesh.instanceMatrix.needsUpdate = true;
   scene.add(mesh);
 
   /* --------------------------------------------- who each instance is */
@@ -272,7 +288,7 @@ export function createMantas (scene) {
   /* aPos and aHead are exposed so a test can drive update() across a whole
      cycle and measure the gaps, which is the only honest way to check the
      spacing. */
-  return { mesh, update, setBounds, count: COUNT, aPos, aHead, aSize, aTint, aMotion, vertexBuffers, isWild,
+  return { mesh, shadowMesh, update, setBounds, count: COUNT, aPos, aHead, aSize, aTint, aMotion, vertexBuffers, isWild,
            rollColours: colours.rollColours, reroll: colours.reroll,
            get colours () { return colours.colours; }, get seed () { return colours.seed; },
            gainFor: colours.gainFor,
