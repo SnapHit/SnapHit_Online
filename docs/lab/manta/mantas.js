@@ -28,9 +28,16 @@ import {
 } from 'three/tsl';
 import { uTime } from './clock.js';
 import { P, U, onParam } from './params.js';
+import { PALETTE, deal, levelFor, levelForYours } from './palette.js';
 import { mantaGeometry, markings, STATIONS, HEAD_FRONT, BODY_BACK, TAIL_LEN, TAIL_Z0, TAIL_W0, TAIL_W1, TURN_REF } from './shape.js';
 
-export const COUNT = 10;
+/* Your train of five, three rival trains of three, four wild. Doc v1.8's
+   scene: the lab has to show rival TRAINS against wild mantas, not lone
+   rivals, because a train is what the game is about. */
+export const COUNT = 18;
+const RIVAL_TRAINS = 3;
+const RIVAL_LEN = 3;              // a leader and two followers
+const WILD_COUNT = 4;
 
 const TAU = Math.PI * 2;
 /* 0.35: one full beat every 2.9 seconds. 1.4 read as fluttering, 0.65 was
@@ -50,34 +57,18 @@ const SPAN_LAG = 1.4;             // travelling wave: the tip trails the root
 /* The brightness hierarchy from section 7.2, and it is not negotiable: your
    train brightest, rivals bright, anything unattached dim, background darkest.
    No warm colours anywhere in this spike; warm is reserved for danger. */
-/* Electric lime, doc v1.6: "Slither's lesson is saturated colour on dark".
-   White was ruled out because it merges with the fresh wake and the moonlight,
-   and at whiteness 1.00 the freshest wake IS white. The presets are what the
-   drawer offers; PLAYERS[0] is the committed one. */
-const PLAYERS = [0xc8ff3c, 0xeaf6ff, 0xa8fff2];
-const YOURS  = PLAYERS[0];
-/* Lime is a slightly darker colour than the mint it replaces — 229 against
-   236 in sRGB luminance — and 7.2 says your train is the brightest thing on
-   screen, so the level carries it back rather than the hue being compromised.
-   Measured against the render, not computed: at 1.00 the train's median read
-   218 where mint read 225. */
-const PLAYER_LEVEL = 1.12;
-/* Teal, blue, violet: three rivals, per doc v1.7's scene. */
-const RIVALS = [0x58d8c0, 0x64b4ff, 0x9a9bff];
-/* The real animal from above: a near-black back with a slight cool tint.
-   Not a dim glow any more — v1.7 retires that, and with it the cap it forced
-   on every light in the water. A wild manta is now DARKER than the seabed it
-   glides over, and reads better the brighter that seabed is. */
-const WILD   = 0x080c10;
-const RIVAL_LEVEL = 0.45;
-/* 0.75, not 0.15. The percentages in the brief describe where each tier sits,
-   but #2b4a52 is ALREADY a dark colour: cutting it to 15% of its linear value
-   put an unattached manta at rgb(18,29,33) against an ocean that reaches
-   rgb(8,16,26), so it was invisible on the phone rather than dim. At 0.75 it
-   lands near rgb(38,64,71) — about seven times the brightest water and still
-   a quarter of a rival, so the hierarchy is intact and the tier can be found.
-   Yours and the rivals are untouched: those read correctly. */
-const WILD_LEVEL  = 1.0;
+/* Every manta is bright and saturated now: v1.8 retires the dark wild manta
+   along with the conditions that needed it. One base level for everyone —
+   scaled per colour, because the seven hues are not equally bright and a flat
+   level leaves the dim ones failing condition 3 (see levelFor in palette.js)
+   — and your train burns hotter on top of that. */
+const BASE_LEVEL = 0.62;
+/* Your train is at least 1.4 times the same colour at the base level, and it
+   is lifted towards white as well: a saturated hue at full value has nowhere
+   brighter to go in its own channels, so the extra has to come out of the
+   saturation or it does not come out at all. */
+const YOURS_GAIN = 1.55;
+const YOURS_WHITE = 0.22;
 
 /* The design doc's table gives leader radius 14 and follower radius 10, which
    is where 28 and 20 came from. Those are greybox gameplay sizes, set against
@@ -273,28 +264,71 @@ export function createMantas (scene) {
 
   /* ------------------------------------------------------ the ten paths */
 
-  /* 0-4  your train: a leader and four followers on the figure eight
-     5-7  three singles cruising with a slight drift
-     8-9  two circling at different depths                                */
+  /* 0-4    your train, on the figure eight
+     5-13   three rival trains: a leader and two followers each
+     14-17  four wild mantas                                          */
   const roles = [];
   for (let i = 0; i < 5; i++) {
     roles.push({ kind: 'train', idx: i,
-      size: i === 0 ? LEADER_SIZE : FOLLOWER_SIZE,
-      tint: tint(YOURS, PLAYER_LEVEL) });
+      size: i === 0 ? LEADER_SIZE : FOLLOWER_SIZE, group: 'you' });
   }
-  /* Three singles: one rival leader and two wild. */
-  for (let i = 0; i < 3; i++) {
-    const rival = i < 1;
-    roles.push({ kind: 'single', idx: i,
-      size: rival ? LEADER_SIZE : FOLLOWER_SIZE,
-      wild: !rival,
-      tint: rival ? tint(RIVALS[0], RIVAL_LEVEL) : tint(WILD, WILD_LEVEL) });
+  for (let r = 0; r < RIVAL_TRAINS; r++) {
+    for (let k = 0; k < RIVAL_LEN; k++) {
+      roles.push({ kind: 'rival', idx: k, rival: r,
+        size: k === 0 ? LEADER_SIZE : FOLLOWER_SIZE, group: 'rival' + r });
+    }
   }
-  /* Two circling rivals: blue and violet. */
-  for (let i = 0; i < 2; i++) {
-    roles.push({ kind: 'circle', idx: i,
-      size: LEADER_SIZE,
-      tint: tint(RIVALS[i + 1], RIVAL_LEVEL) });
+  for (let i = 0; i < WILD_COUNT; i++) {
+    roles.push({ kind: 'wild', idx: i, size: FOLLOWER_SIZE, wild: true, group: 'wild' });
+  }
+
+  /* The deal. A seed per load, ?seed= to reproduce one, ?player= to pin the
+     roll for a test. */
+  const query = new URLSearchParams(location.search);
+  const seedParam = parseInt(query.get('seed'), 10);
+  let seed = Number.isFinite(seedParam) ? seedParam : (Math.random() * 0xffffffff) >>> 0;
+  let pinned = query.get('player');
+  let dealt = null;
+
+  /* A saturated hue at full value cannot get brighter in its own channels, so
+     your train's extra comes out of the saturation too — and now that the dim
+     hues carry a level of their own, some of them ask for more than a channel
+     has left. Nothing is allowed to sit above 1 and be clipped, because
+     clipping a channel moves the HUE, which 7.2 forbids: the colour is scaled
+     back inside the range and the luminance that costs is paid back as white,
+     by solving for it rather than guessing. */
+  const LUM = t => 0.2126 * t[0] + 0.7152 * t[1] + 0.0722 * t[2];
+  /* The level every manta that is not in your train uses, per colour. */
+  const baseTintFor = hex => tint(hex, levelFor(hex, BASE_LEVEL));
+  const yoursTint = hex => {
+    const t = tint(hex, levelForYours(hex, BASE_LEVEL) * YOURS_GAIN);
+    const want = LUM(t);
+    const over = Math.max(1, t[0], t[1], t[2]);
+    const scaled = t.map(v => v / over);
+    const top = Math.max(scaled[0], scaled[1], scaled[2]);
+    const have = LUM(scaled);
+    /* w whitens each channel towards the peak, which lifts the luminance from
+       `have` towards `top`. Solve w for the luminance the gain asked for, and
+       never go below the 22% that was already there. */
+    const solved = top > have ? (Math.min(want, top) - have) / (top - have) : 0;
+    const w = Math.min(1, Math.max(YOURS_WHITE, solved));
+    return scaled.map(v => v + (top - v) * w);
+  };
+
+  function rollColours (newSeed) {
+    if (newSeed !== undefined) seed = newSeed >>> 0;
+    dealt = deal({ seed, pinned, coolWild: P.coolWild >= 0.5,
+                   rivals: RIVAL_TRAINS, wilds: WILD_COUNT });
+    for (let i = 0; i < COUNT; i++) {
+      const r = roles[i];
+      let t;
+      if (r.kind === 'train') t = yoursTint(dealt.mine.hex);
+      else if (r.kind === 'rival') t = baseTintFor(dealt.rivals[r.rival].hex);
+      else t = baseTintFor(dealt.wilds[r.idx].hex);
+      r.tint = t;
+      baseTint[i] = t.slice();
+      applyTint(i);
+    }
   }
 
   /* The identity colour each manta was given. Brightness is scaled against
@@ -302,32 +336,18 @@ export function createMantas (scene) {
      cannot drift the hue: the cut changes how bright a manta is, never which
      colour it is. 7.2 forbids relying on hue alone, and the inverse matters
      just as much — the hue has to survive the effect. */
-  const baseTint = roles.map(r => r.tint.slice());
+  const baseTint = roles.map(() => [0, 0, 0]);
+  function applyTint (i) {
+    const t = baseTint[i], k = tintScale[i];
+    aTint.setXYZ(i, t[0] * k, t[1] * k, t[2] * k);
+    aTint.needsUpdate = true;
+  }
   const prevHead = new Float32Array(COUNT);
   const lagTurn  = new Float32Array(COUNT);
   const tintScale = new Float32Array(COUNT).fill(1);
 
-  /* The player's colour is a preset the drawer can change, so the train's
-     base tint is rewritten rather than baked. Everything downstream reads
-     baseTint, including the cut's fades, so a colour change cannot be undone
-     by the next flash. */
-  function setPlayer (which) {
-    const hex = PLAYERS[Math.max(0, Math.min(PLAYERS.length - 1, Math.round(which)))];
-    for (let i = 0; i < COUNT; i++) {
-      if (roles[i].kind !== 'train') continue;
-      const t = tint(hex, PLAYER_LEVEL);
-      baseTint[i] = t.slice();
-      const k = tintScale[i];
-      aTint.setXYZ(i, t[0] * k, t[1] * k, t[2] * k);
-    }
-    aTint.needsUpdate = true;
-  }
-  onParam((key, value) => { if (key === 'player') setPlayer(value); });
-
   for (let i = 0; i < COUNT; i++) {
     aSize.setX(i, roles[i].size);
-    const t = roles[i].tint;
-    aTint.setXYZ(i, t[0], t[1], t[2]);
     /* Each follower's beat is about half a radian behind the one ahead, so
        the whole train ripples like a single ribbon rather than flapping in
        unison. Everything else gets a scattered phase. */
@@ -407,16 +427,27 @@ export function createMantas (scene) {
   
      Steering the heading and then moving ALONG it cannot produce that, and it
      is what the greybox will have to do anyway. */
-  const singles = [0, 1, 2].map(i => ({
+  const rivalLeads = [0, 1, 2].map(i => ({
     head:  0.9 + i * 2.1,
-    speed: 62 + i * 11,
+    speed: 72 + i * 9,
     phase: i * 2.0,
-    x: (i - 1) * 60,
-    z: (i - 1) * 150,
+    x: (i - 1) * 90,
+    z: (i - 1) * 170,
+    trail: [],
+  }));
+  const wilds = [0, 1, 2, 3].map(i => ({
+    head:  0.4 + i * 1.6,
+    speed: 48 + i * 7,
+    phase: i * 1.3,
+    x: (i % 2 ? 1 : -1) * (70 + i * 35),
+    z: (i < 2 ? -1 : 1) * (110 + i * 45),
   }));
   let lastSecs = null;
 
   const wrap = (v, lim) => { const s = lim * 2; return ((v + lim) % s + s) % s - lim; };
+  /* The shorter way round from b to a, so interpolating two headings across
+     the seam of a full turn does not spin a manta the long way. */
+  const angleTo = (a, b) => { let d = (a - b) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; };
 
   function place (i, x, z, y, heading) {
     aPos.setXYZ(i, x, y, z);
@@ -452,40 +483,93 @@ export function createMantas (scene) {
       place(i, x, z, 0, Math.atan2(-(x2 - x), -(z2 - z)));
     }
 
-    /* Three singles, cruising with a slight drift so they are never quite
-       straight lines. They wrap just far enough outside the view to hide the
-       pop — a manta is 40 units across, so 34 clears it — and no further.
-       At the old margin of 70 they spent nearly a third of their time in
-       dead space off screen, which made the unattached one hard to find
-       simply because it was often not there. */
+    /* Three rival trains. Each leader cruises with a slow weave, exactly as
+       the loose mantas do, and its followers sit a fixed spacing back along
+       its RECENT PATH measured by arc length — the greybox's follower rule
+       from 10.2, and the same rule your own train follows on the figure
+       eight. A follower steers to the heading of the path there and moves
+       along it, so nothing ever crabs sideways. */
     const MARGIN = 34;
-    for (let i = 0; i < 3; i++) {
-      const m = singles[i];
-      /* A slow weave: the turn rate is what oscillates, so the heading rolls
-         gently either side of where it started and the manta always swims
-         along its own nose. */
-      m.head += Math.sin(secs * 0.17 + m.phase) * 0.10 * dt;
-      m.x = wrap(m.x - Math.sin(m.head) * m.speed * dt, half.w + MARGIN);
-      m.z = wrap(m.z - Math.cos(m.head) * m.speed * dt, half.h + MARGIN);
-      place(5 + i, m.x, m.z, 0, m.head);
+    for (let r = 0; r < RIVAL_TRAINS; r++) {
+      const lead = rivalLeads[r];
+      lead.head += Math.sin(secs * 0.17 + lead.phase) * 0.10 * dt;
+      const nx = lead.x - Math.sin(lead.head) * lead.speed * dt;
+      const nz = lead.z - Math.cos(lead.head) * lead.speed * dt;
+      /* Wrapping would put a kink in the recorded path, so the trail is reset
+         when the leader crosses the edge and the followers close up again. */
+      const wx = wrap(nx, half.w + MARGIN), wz = wrap(nz, half.h + MARGIN);
+      const jumped = Math.hypot(wx - lead.x, wz - lead.z) > 200;
+      lead.x = wx; lead.z = wz;
+      const base = 5 + r * RIVAL_LEN;
+      place(base, lead.x, lead.z, r * 6 - 6, lead.head);
+
+      const trail = lead.trail;
+      /* A WRAP MUST NOT COLLAPSE THE TRAIN. Emptying the trail left the
+         followers with nowhere to sit, so they stacked on the leader and the
+         train closed to a point until it had swum a spacing clear again —
+         measured over a lap, a rival gap of 0 against a spacing of 31. The
+         trail is re-seeded as a straight line behind the leader's new
+         position instead, so the whole train wraps together and comes back
+         on at the far edge still in formation. */
+      if (jumped) {
+        trail.length = 0;
+        const bx = Math.sin(lead.head), bz = Math.cos(lead.head);   // behind it
+        const need = (RIVAL_LEN - 1) * SPACING + 60;
+        for (let q = 16; q >= 0; q--) {
+          const d = need * (q / 16);
+          trail.push({ x: lead.x + bx * d, z: lead.z + bz * d, h: lead.head, s: need - d });
+        }
+      }
+      const lastP = trail[trail.length - 1];
+      const step = lastP ? Math.hypot(lead.x - lastP.x, lead.z - lastP.z) : 0;
+      if (!lastP || step > 1.5) {
+        trail.push({ x: lead.x, z: lead.z, h: lead.head, s: (lastP ? lastP.s : 0) + step });
+        const need = (RIVAL_LEN - 1) * SPACING + 60;
+        while (trail.length > 2 && trail[trail.length - 1].s - trail[0].s > need) trail.shift();
+      }
+      /* The leader is up to 1.5 units past the last point it recorded, and
+         measuring the spacing from that point instead of from where it
+         actually is let the first gap read 32.5 against a spacing of 31. So
+         the leader's live position is the head of the path, carried in a
+         reused object rather than a fresh one every frame. */
+      const tailP = trail[trail.length - 1];
+      const headPt = lead.headPt || (lead.headPt = { x: 0, z: 0, h: 0, s: 0 });
+      if (tailP) {
+        headPt.x = lead.x; headPt.z = lead.z; headPt.h = lead.head;
+        headPt.s = tailP.s + Math.hypot(lead.x - tailP.x, lead.z - tailP.z);
+      }
+      const at = q => (q < trail.length ? trail[q] : headPt);
+      const top = trail.length;                       // index of headPt
+      const headS = tailP ? headPt.s : 0;
+      for (let k = 1; k < RIVAL_LEN; k++) {
+        const want = headS - k * SPACING;
+        if (!trail.length) { place(base + k, lead.x, lead.z, r * 6 - 6, lead.head); continue; }
+        /* Between the two recorded points, not snapped to the earlier one:
+           the path is only sampled every 1.5 units, and snapping let a gap
+           run up to 1.5 units long and step as the trail advanced. */
+        let pt = trail[0];
+        for (let q = top; q >= 0; q--) {
+          const a = at(q);
+          if (a.s > want) continue;
+          const nx2 = q < top ? at(q + 1) : null;
+          if (!nx2) { pt = a; break; }
+          const f = (want - a.s) / Math.max(nx2.s - a.s, 1e-6);
+          pt = { x: a.x + (nx2.x - a.x) * f,
+                 z: a.z + (nx2.z - a.z) * f,
+                 h: a.h + angleTo(nx2.h, a.h) * f };
+          break;
+        }
+        place(base + k, pt.x, pt.z, r * 6 - 6, pt.h);
+      }
     }
 
-    /* Two circling, at different depths. Under an orthographic top-down
-       camera the depth does not change how big they look, but it does decide
-       which passes over which, which is what gives the ocean volume. */
-    for (let i = 0; i < 2; i++) {
-      const j = 8 + i;
-      /* Radius and centre both scaled off the half-view, so each circle stays
-         inside the frame at either orientation instead of swinging out of it
-         on the short axis. */
-      const radius = Math.min(96 + i * 40, half.w * 0.42);
-      const dir = i === 0 ? 1 : -1;
-      const w = dir * (0.30 - i * 0.09);
-      const a = secs * w + i * 2.4;
-      const cx = (i === 0 ? -1 : 1) * (half.w * 0.40);
-      const cz = (i === 0 ? 1 : -1) * (half.h * 0.30);
-      place(j, cx + Math.cos(a) * radius, cz + Math.sin(a) * radius, i === 0 ? -18 : 18,
-            Math.atan2(-(-Math.sin(a) * dir), -(Math.cos(a) * dir)));
+    /* Four wild mantas, cruising and weaving on their own. */
+    for (let i = 0; i < WILD_COUNT; i++) {
+      const m = wilds[i];
+      m.head += Math.sin(secs * 0.13 + m.phase) * 0.12 * dt;
+      m.x = wrap(m.x - Math.sin(m.head) * m.speed * dt, half.w + MARGIN);
+      m.z = wrap(m.z - Math.cos(m.head) * m.speed * dt, half.h + MARGIN);
+      place(5 + RIVAL_TRAINS * RIVAL_LEN + i, m.x, m.z, (i % 2) * 24 - 12, m.head);
     }
 
     /* How hard everyone is turning, worked out from the headings this frame
@@ -516,11 +600,26 @@ export function createMantas (scene) {
 
   /* aPos is exposed so a test can drive update() across a whole cycle and
      measure the gaps, which is the only honest way to check the spacing. */
-  setPlayer(P.player);
+  rollColours();
+  onParam(key => { if (key === 'coolWild' || key === 'player') { pinned = pinnedFromParam(); rollColours(); } });
 
   const isWild = i => roles[i].wild === true;
+  /* 0 is the random roll; 1 to 7 pin one of the palette's colours. */
+  function pinnedFromParam () {
+    const n = Math.round(P.player);
+    return n >= 1 && n <= PALETTE.length ? PALETTE[n - 1].key : (query.get('player') || null);
+  }
 
-  return { mesh, update, setBounds, count: COUNT, aPos, aHead, aSize, aTint, aMotion, vertexBuffers, setPlayer, PLAYERS, isWild,
+  return { mesh, update, setBounds, count: COUNT, aPos, aHead, aSize, aTint, aMotion, vertexBuffers, isWild,
+           rollColours, reroll: () => rollColours((Math.random() * 0xffffffff) >>> 0),
+           get colours () { return dealt; }, get seed () { return seed; },
+           /* How much hotter your train burns than the same colour would at
+              the level every other manta uses. Condition 1, exactly. */
+           gainFor: key => {
+             const c = PALETTE.find(x => x.key === key); if (!c) return null;
+             const L = a => 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+             return L(yoursTint(c.hex)) / L(tint(c.hex, levelFor(c.hex, BASE_LEVEL)));
+           },
            setFree, isFree, setTintScale, getTintScale,
            pathLength: PATH_LENGTH, spacing: SPACING,
            /* The outline, so a test can measure what was built against the

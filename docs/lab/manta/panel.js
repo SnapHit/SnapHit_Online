@@ -11,7 +11,7 @@
 
 /* Bumped by hand every time this page is edited, so a stale deploy is obvious
    from the phone rather than something you have to take on trust. */
-export const BUILD = '2026-09-22 13:01 UTC';
+export const BUILD = '2026-09-22 13:20 UTC';
 
 const params = new URLSearchParams(location.search);
 export const FORCE_WEBGL = params.get('backend') === 'webgl2';
@@ -26,6 +26,7 @@ const ROWS = [
   ['viewport',       'viewport'],
   ['view',           'view'],
   ['mantas',         'mantas'],
+  ['your colour',    'roll'],
   ['draw calls',     'draws'],
   ['vertex buffers', 'vbuf'],
   ['errors',         'issues'],

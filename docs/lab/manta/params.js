@@ -81,8 +81,15 @@ export const SPEC = [
      white next to a white-hot wake does not. */
   /* How brightly the moon lights the floor. 1 puts the lit centre's median
      near 35 on the suites' 0-255 scale, where the old water body sat at 13.
-     Capped at 2, and the cap is where conditions 1 and 2 still hold: the
-     brightest seabed has to stay under a rival's median. */
+     The cap is where the conditions still hold, measured at the two tiers
+     that hold it tightest, on a frame with every source of life switched off
+     so what is measured is moonlight. It is NOT condition 2 that binds here:
+     the crests stay under the dimmest manta up to about 3.5. It is condition
+     3 — a manta has to be twice the ring of water around it, and moonlight
+     brightens that ring. At 2.75 it reads 2.04 and 2.09; at 3.00 it is
+     exactly 2.00 and 2.01, on the bar; at 4.00 both conditions fail, 1.76
+     and 1.74 with crests at 88.7 against a dimmest manta of 84.5. So 2.75,
+     which leaves margin rather than sitting on the line. */
   { key: 'caustic',        label: 'caustic strength',     def: 1.50,  min: 0,    max: 1.5,   step: 0.01,  gpu: true  },
   { key: 'causticSpeed',   label: 'caustic speed',        def: 2.80,  min: 0,    max: 3,     step: 0.05,  gpu: true  },
   /* How deeply a cloud dims the moon. 1 takes it to about a third at the
@@ -90,13 +97,18 @@ export const SPEC = [
      several seconds each way — 7.2 says moonlight changes slowly, never a
      flash. */
   { key: 'cloud',          label: 'cloud amount',         def: 0.80,  min: 0,    max: 1.5,   step: 0.05,  gpu: true  },
-  { key: 'moonlight',      label: 'moonlight strength',   def: 2.00,  min: 0,    max: 2,     step: 0.05,  gpu: true  },
+  { key: 'moonlight',      label: 'moonlight strength',   def: 2.00,  min: 0,    max: 2.75,  step: 0.05,  gpu: true  },
   { key: 'snow',           label: 'marine snow density',  def: 1.70,  min: 0,    max: 2,     step: 0.05,  gpu: true  },
   /* The fading light painting 7.2 calls the signature effect. 0 by default,
      and at 0 the whole pass is skipped rather than merely multiplied out.
      Capped at 0.6: it is added to the same water the hierarchy measures. */
   { key: 'longMemory',     label: 'long memory',          def: 0,     min: 0,    max: 0.6,   step: 0.01,  gpu: true  },
-  { key: 'player',         label: 'player colour 0lime 1ice 2mint', def: 0, min: 0, max: 2, step: 1, gpu: false },
+  /* 0 is the random roll that v1.8 asks for; 1 to 7 pin one of the palette's
+     colours, in its order: lime, coral, orange, red, violet, purple, azure. */
+  { key: 'player',         label: 'player colour 0=random 1-7', def: 0, min: 0, max: 7, step: 1, gpu: false },
+  /* Which colours wild mantas may be dealt. 0 is warm and cool, 1 swaps the
+     four warm hues for a turquoise so the comparison is like for like. */
+  { key: 'coolWild',       label: 'wild palette 0=warm+cool 1=cool', def: 0, min: 0, max: 1, step: 1, gpu: false },
   { key: 'marks',          label: 'marking strength',     def: 1.00,  min: 0,    max: 2,     step: 0.05,  gpu: true  },
 ];
 

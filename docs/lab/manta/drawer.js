@@ -22,6 +22,7 @@ const el = {
   list:   document.getElementById('drawerList'),
   copy:   document.getElementById('copyValues'),
   reset:  document.getElementById('resetValues'),
+  reroll: document.getElementById('rerollColour'),
   plain:  document.getElementById('plain'),
 };
 
@@ -94,6 +95,14 @@ export function createDrawer () {
     document.body.classList.toggle('tuning', !open);
   });
 
+  /* A new colour without a reload, so Nathan can flick through the palette on
+     the phone. It deals a fresh seed, so the rivals and the wild mantas are
+     re-dealt with it and your colour still cannot appear on anyone else. */
+  el.reroll.addEventListener('click', () => {
+    const got = window.__lab && window.__lab.reroll ? window.__lab.reroll() : null;
+    flash(el.reroll, got ? got : 'Reroll', 'Reroll', 1400);
+  });
+
   el.reset.addEventListener('click', () => {
     resetParams();
     syncAll();
@@ -104,8 +113,19 @@ export function createDrawer () {
      the text on screen and selected, so a long press offers Copy. iOS refuses
      the clipboard outside a few narrow cases and a silent failure here would
      lose a tuning session. */
+  /* The roll is not a slider, but it decides what Nathan is looking at, so a
+     set of values copied off the phone is no use without it. */
+  function rollLine () {
+    const L = window.__lab;
+    if (!L || !L.mantas || !L.mantas.colours) return '';
+    const c = L.mantas.colours;
+    return '\nyour colour: ' + c.mine.key + '  \u00b7  seed ' + L.mantas.seed +
+           '  \u00b7  rivals ' + c.rivals.map(r => r.key).join(', ') +
+           '  \u00b7  wild ' + c.wilds.map(r => r.key).join(', ');
+  }
+
   el.copy.addEventListener('click', async () => {
-    const text = paramText();
+    const text = paramText() + rollLine();
     try {
       if (!navigator.clipboard) throw new Error('no clipboard API');
       await navigator.clipboard.writeText(text);
