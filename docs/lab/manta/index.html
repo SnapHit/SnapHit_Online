@@ -65,6 +65,8 @@
   #chip.webgl2 { color: #ffd9a8; } #chip.webgl2 .dot { background: #ffc46b; }
   #chip.failed { color: #ffb3ab; } #chip.failed .dot { background: #ff8a80; }
   #chip .fps { color: #8fa6bb; font-weight: 400; font-variant-numeric: tabular-nums; }
+  /* Something complained. Not necessarily fatal — see __labIssue. */
+  #chip .warn { color: #ffc46b; font-size: 15px; line-height: 1; }
 
   /* ---- the panel: everything, once you ask for it ---- */
   #panel {
@@ -294,8 +296,27 @@
     box.textContent = (box.textContent ? box.textContent + '\n\n' : '') + line;
     if (box.className !== 'on') box.className = 'on note';
   };
-  window.addEventListener('error', function (e) { window.__labError('uncaught error', e.error || e.message); });
-  window.addEventListener('unhandledrejection', function (e) { window.__labError('unhandled rejection', e.reason); });
+  /* An uncaught error is not the same thing as a dead page. Headless Chrome
+     153 on SwiftShader throws "Instance dropped in popErrorScope" while the
+     renderer runs at 54 fps, and calling that FAILED buries the one word the
+     page exists to say. So: if a frame has ever been drawn, this is a note
+     and a mark on the chip; if nothing has ever drawn, it is a failure.
+     renderer.js still calls __labError directly when a draw actually dies. */
+  window.__labIssue = function (what, e) {
+    var msg = (e && (e.stack || e.message)) ? (e.stack || e.message) : String(e);
+    if (window.__labDrew === true) { window.__labNote(what, e); window.__labMark(); }
+    else window.__labError(what, e);
+  };
+  window.__labMark = function () {
+    var chip = document.getElementById('chip');
+    if (chip && chip.querySelector('.warn') === null) {
+      var s = document.createElement('span');
+      s.className = 'warn'; s.textContent = '\u26a0'; s.title = 'errors were reported';
+      chip.appendChild(s);
+    }
+  };
+  window.addEventListener('error', function (e) { window.__labIssue('uncaught error', e.error || e.message); });
+  window.addEventListener('unhandledrejection', function (e) { window.__labIssue('unhandled rejection', e.reason); });
 })();
 </script>
 

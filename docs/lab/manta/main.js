@@ -26,6 +26,7 @@ import { createPost } from './post.js';
 import { createCut, flashAllowed } from './cut.js';
 import { createQuality, TIER_SETTINGS } from './tiers.js';
 import { setSceneTime } from './clock.js';
+import { watchConsole, watchDevice, onIssue, issueText, counts } from './watch.js';
 import { createDrawer } from './drawer.js';
 
 const query = new URLSearchParams(location.search);
@@ -42,6 +43,15 @@ const FORCED_TIER = query.get('tier');
    measures the ocean's own gradient and whatever the bloom is doing to the
    wake near the middle. */
 const VIG = query.has('vig') ? Number(query.get('vig')) : null;
+
+/* Before anything else builds: a complaint during init is the one most worth
+   catching, and console.error is where three makes most of them. */
+watchConsole();
+onIssue(() => {
+  panel.set('issues', issueText());
+  if (counts().errors > 0 && window.__labMark) window.__labMark();
+});
+panel.set('issues', issueText());
 
 panel.initRows(REVISION);
 panel.probeAdapter();
@@ -237,9 +247,15 @@ const lab = createLab({
       panel.set('draws', String(renderer.info.render.drawCalls));
       if (quality.feed(rawMs, now)) applyQuality(renderer);
     },
-    onFirstFrame () { panel.markFirstFrame(); },
+    onFirstFrame () {
+      panel.markFirstFrame();
+      /* Something has been drawn, so from here an uncaught error is a mark
+         and not a verdict. */
+      window.__labDrew = true;
+      panel.set('watch', watchDevice(lab.renderer));
+    },
     onReset () { panel.resetFrames(); },
-    onNote (what, e) { window.__labNote(what, e); },
+    onNote (what, e) { window.__labNote(what, e); if (window.__labMark) window.__labMark(); },
     onError (what, e) { window.__labError(what, e); },
   },
 });
