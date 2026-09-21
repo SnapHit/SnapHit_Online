@@ -158,6 +158,8 @@ function stampMantas (dt) {
 /* One place where a tier or a rung becomes something on screen. Nothing here
    touches the scene: the same ten mantas swim the same paths at every tier. */
 function applyQuality (renderer) {
+  /* Multisampling is a high-tier luxury: the tiers exist to give things up. */
+  if (post) post.setAntialiasAllowed(quality.tier === 'high');
   const t = TIER_SETTINGS[quality.tier];
   lab.setPixelRatio(quality.scale);
   U.grain.value = t.grain ? P.grain : 0;

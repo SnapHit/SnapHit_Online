@@ -40,7 +40,11 @@ export const TONE_MODES = {
 const uVignette = uniform(0.15);
 
 export function createPost ({ renderer, scene, camera, tone = 'neutral' }) {
-  const scenePass = pass(scene, camera);
+  /* 4x multisampling on the scene pass. r186's PassNode takes a samples
+     option and hands it to its render target, so this is the supported route
+     and not a hack. High tier only, and switchable, because it is the kind of
+     thing that is free on a desktop and is not free on a phone. */
+  const scenePass = pass(scene, camera, { samples: P.antialias ? 4 : 0 });
   const sceneColor = scenePass.getTextureNode('output');
 
   const bloomPass = bloom(sceneColor, P.bloomStrength, P.bloomRadius, P.bloomThreshold);
@@ -69,11 +73,21 @@ export function createPost ({ renderer, scene, camera, tone = 'neutral' }) {
   onParam((key, value) => {
     if (key === 'bloomStrength') bloomPass.strength.value = value;
     if (key === 'bloomRadius') bloomPass.radius.value = value;
+    if (key === 'antialias') applySamples();
     if (key === 'bloomThreshold') bloomPass.threshold.value = value;
   });
 
+  /* The tier has the last word: medium and low never multisample, whatever
+     the switch says. */
+  let tierAllows = true;
+  function applySamples () {
+    scenePass.options.samples = (tierAllows && P.antialias >= 0.5) ? 4 : 0;
+  }
+
   return {
     render () { pipeline.render(); },
+    setAntialiasAllowed (allowed) { tierAllows = allowed; applySamples(); },
+    get samples () { return scenePass.options.samples; },
     /* Halved again on the medium tier: the bloom chain is the most expensive
        thing on the page and its resolution is the cheapest thing to give up. */
     setBloomResolution (s) { bloomPass.setResolutionScale(s); },

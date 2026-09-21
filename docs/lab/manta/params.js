@@ -56,6 +56,17 @@ export const SPEC = [
   { key: 'bloomRadius',    label: 'bloom radius',         def: 0.00,  min: 0,    max: 1,     step: 0.01,  gpu: false },
   { key: 'bloomThreshold', label: 'bloom threshold',      def: 0.40,  min: 0,    max: 1,     step: 0.01,  gpu: false },
   { key: 'grain',          label: 'grain',                def: 0.02,  min: 0,    max: 0.10,  step: 0.002, gpu: true  },
+  /* 0.45 radians at the tip, down from 0.75. The outline is right when the
+     animal is still and the stroke was ruining it: cos(0.75) narrows the
+     outer wing by 27 per cent, which steepens the leading edge from 29 to
+     about 40 degrees and makes the crescent read as a kite for much of every
+     beat. At 0.45 a straight-swimming manta never narrows by more than about
+     10 per cent. What the stroke lost in shape it gets back in light. */
+  { key: 'flap',           label: 'wingbeat depth',       def: 0.45,  min: 0.2,  max: 0.9,   step: 0.01,  gpu: true  },
+  /* 4x multisampling on the scene pass, high tier only. A switch rather than
+     a number because it is a render target option, and here so Nathan can see
+     what it costs on the phone. */
+  { key: 'antialias',      label: 'antialias (4x)',       def: 1,     min: 0,    max: 1,     step: 1,     gpu: false },
 ];
 
 /* Plain numbers, read from JS each frame. */

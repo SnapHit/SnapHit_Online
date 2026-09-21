@@ -23,10 +23,11 @@ import {
   MeshBasicNodeMaterial, DoubleSide, DynamicDrawUsage, Matrix4
 } from 'three';
 import {
-  Fn, vec3, float, sin, cos, clamp, mix, smoothstep, step, positionGeometry, varying,
+  Fn, vec3, float, sin, cos, sign, clamp, mix, smoothstep, step, positionGeometry, varying,
   instancedBufferAttribute
 } from 'three/tsl';
 import { uTime } from './clock.js';
+import { U } from './params.js';
 import { mantaGeometry, STATIONS, HEAD_FRONT, BODY_BACK, TAIL_LEN, TAIL_Z0, TAIL_W0, TAIL_W1, TURN_REF } from './shape.js';
 
 export const COUNT = 10;
@@ -37,7 +38,9 @@ const TAU = Math.PI * 2;
    The half-radian phase offset between followers is unchanged, because the
    ripple down the train was the one part that already worked. */
 const BEATS_PER_SECOND = 0.35;
-const FLAP_AMPLITUDE = 0.75;      // radians at the wingtip
+/* The wingbeat's depth now lives in params.js as U.flap, so the drawer can
+   move it. 0.45 radians at the tip; 0.75 was what made the crescent read as a
+   kite through half of every beat. */
 /* 1.4, up from 1.1. Grace is not only rate: the further the tip trails the
    root, the more a wing behaves like something flexible being swept through
    water and the less like a hinged plank. At a slower beat there is room for
@@ -100,6 +103,20 @@ function tint (hex, level) {
 
 /* ------------------------------------------------------------- the mesh */
 
+/* The stroke, as an angle about the spine. Amplitude grows with the span so
+   the spine barely moves and the tips do the work, and the tip trails the
+   root, so one wing is a travelling wave rather than a rigid plank. Shared,
+   because the colour has to know the same angle the position used and a
+   varying between them would cost a slot this mesh cannot spare. */
+const beat = (span, phase) => sin(
+  uTime.mul(TAU * BEATS_PER_SECOND).add(phase).sub(span.mul(SPAN_LAG))
+).mul(U.flap).mul(span);
+
+/* A light from the top right of the screen, the same corner stage 4's water
+   is lit from. The camera looks straight down with screen-right at +x and
+   screen-up at -z, so "top right and above" is this. */
+const LIGHT = { x: 0.55, y: 0.66, z: -0.51 };
+
 export function createMantas (scene) {
   const aPos   = new InstancedBufferAttribute(new Float32Array(COUNT * 3), 3).setUsage(DynamicDrawUsage);
   const aHead  = new InstancedBufferAttribute(new Float32Array(COUNT), 1).setUsage(DynamicDrawUsage);
@@ -122,6 +139,13 @@ export function createMantas (scene) {
   const nMotion = instancedBufferAttribute(aMotion, 'vec3');
   const nTint  = instancedBufferAttribute(aTint,  'vec3');
 
+  /* Per-instance attributes cannot be read in the fragment stage on either
+     backend, so each one the colour needs crosses as a varying. These are
+     varyings, not new attributes: the vertex buffer count is unchanged. */
+  const nTintV   = varying(nTint);
+  const nMotionV = varying(nMotion);
+  const nHeadV   = varying(nHead);
+
   const material = new MeshBasicNodeMaterial({ side: DoubleSide });
 
   material.positionNode = Fn(() => {
@@ -134,9 +158,7 @@ export function createMantas (scene) {
        travelling wave rather than a rigid plank. */
     /* The scene's clock and not the renderer's, so the cut's slow motion
        slows the wingbeat along with the water. See clock.js. */
-    const theta = sin(
-      uTime.mul(TAU * BEATS_PER_SECOND).add(nMotion.x).sub(span.mul(SPAN_LAG))
-    ).mul(FLAP_AMPLITUDE).mul(span);
+    const theta = beat(span, nMotion.x);
 
     /* Rotate each wing element about the spine. x narrows by cos, y lifts by
        sin. Under a top-down camera the narrowing is the visible half. */
@@ -185,10 +207,34 @@ export function createMantas (scene) {
   const zg = positionGeometry.z;
   const zNorm = clamp(zg.sub(HEAD_FRONT).div(BODY_BACK), 0, 1);
   const bodyShade = float(1.0).sub(zNorm.mul(0.18));
+  /* The tail: 0.55 of the tier colour at the root running to 0.8, so it reads
+     as a fine pale thread and is never brighter than the body. */
   const tailRun = clamp(zg.sub(TAIL_Z0).div(TAIL_LEN), 0, 1);
-  const tailShade = mix(float(0.55), float(1.10), smoothstep(float(0.04), float(0.40), tailRun));
+  const tailShade = mix(float(0.55), float(0.80), smoothstep(float(0.04), float(0.45), tailRun));
   const shade = mix(bodyShade, tailShade, step(float(0.001), tailRun));
-  material.colorNode = varying(nTint.mul(shade));
+
+  /* The stroke, shown by light rather than by shape. Each wing element is a
+     flat strip rotated about the spine, so its normal is (-sign(x) sin t,
+     cos t, 0) before the heading turns it about Y. Against a fixed light the
+     two wings alternately catch and lose it through the beat — up to about 15
+     per cent at the tips and nothing at the spine, where the rotation is
+     nothing. It averages out across an animal, so the hierarchy's medians
+     barely move, but the eye reads the stroke.
+
+     theta is recomputed rather than passed: a varying from the vertex stage
+     would be another slot, and beat() is the same function the position used
+     with the same inputs. */
+  const gx = positionGeometry.x;
+  const spanC = gx.abs().mul(2.0);
+  const thetaC = beat(spanC, nMotionV.x);
+  const nx = sign(gx).negate().mul(sin(thetaC));
+  const ny = cos(thetaC);
+  const ch = cos(nHeadV), sh = sin(nHeadV);
+  /* Only the x component turns; the normal has no z before the heading. */
+  const lambert = nx.mul(ch).mul(LIGHT.x).add(ny.mul(LIGHT.y)).add(nx.mul(sh).negate().mul(LIGHT.z));
+  const lit = float(1.0).add(lambert.sub(LIGHT.y).mul(0.55).mul(spanC));
+
+  material.colorNode = nTintV.mul(shade).mul(clamp(lit, 0.5, 1.5));
 
   const mesh = new InstancedMesh(mantaGeometry(), material, COUNT);
 

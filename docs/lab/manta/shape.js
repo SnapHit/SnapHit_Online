@@ -44,8 +44,13 @@ export const BODY_BACK  = 0.52;
    CSS pixels across at the base and 1.3 at the tip on a 412-wide phone, which
    still reads on the lowest resolution rung. */
 export const TAIL_LEN   = 0.30;
-export const TAIL_W0    = 0.034;
-export const TAIL_W1    = 0.022;
+/* A fine pale thread, not a bright blunt stick. At 1E's widths the tail read
+   as a stick with a square end: 2.0 CSS pixels across, full width all the way
+   to a flat tip, and a rear brighter than the body. These put it at about 1.3
+   CSS pixels at the root and 0.5 at the tip on the smallest manta on a
+   412-wide phone. */
+export const TAIL_W0    = 0.022;
+export const TAIL_W1    = 0.008;
 const TAIL_SEGS  = 6;
 
 /* How hard a turn has to be before the bank and the tail's sway reach full
