@@ -33,6 +33,7 @@ const ROWS = [
   ['tier',           'tier'],
   ['render scale',   'scale'],
   ['light memory',   'lm'],
+  ['seabed',         'seabed'],
   ['render passes',  'passes'],
   ['first frame',    'ttff'],
   ['timing (ms)',    'timing'],

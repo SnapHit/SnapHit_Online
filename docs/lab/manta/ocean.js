@@ -25,6 +25,7 @@
 import { Vector2 } from 'three';
 import { Fn, vec2, vec3, color, clamp, exp, float, floor, fract, length, max, min, mix, pow, rand, sin, smoothstep, screenUV, texture, uniform } from 'three/tsl';
 import { uTime } from './clock.js';
+import { TILE_UNITS as SEABED_TILE } from './seabed.js';
 import { U } from './params.js';
 
 /* Screen aspect, pushed in from fit() rather than read from a screen-size
@@ -99,7 +100,12 @@ const PLANKTON_AMBIENT = 0.020;
    the world still reads blue-GREEN, which is what section 7.2 asks for. */
 const WATER_TOP  = color(0x061228);
 const WATER_DEEP = color(0x01040c);
-const SEABED     = color(0x0b2430);
+/* Hue 195 where the moon reaches, 207 in shadow, saturation 0.93. */
+const SEABED_LIT    = color(0x12c4ff);
+const SEABED_SHADOW = color(0x1294ff);
+/* Set so the lit centre's median lands near 35 on the suites' 0-255 scale,
+   where the old water body sat at 13. Measured against the render. */
+const SEABED_LEVEL  = 0.058;
 const RIPPLE     = color(0x0f3352);
 /* Marine snow sits 10 to 20 per cent above the water it is in. */
 const SNOW_LEVEL = 0.16;
@@ -111,7 +117,7 @@ const SNOW_LEVEL = 0.16;
    only just beats a seabed crest is not dim, it is lost. The blue stays in the
    base water, which is what was asked for; the additive layers give up the
    headroom instead. */
-const SEABED_LEVEL = 0.16;
+
 /* "Low opacity", but measured rather than guessed. At 0.16 of the original
    dim colour the ripple was a sub-one-in-255 modulation and invisible. It is
    0.18 of a brighter blue now, which is about the same on screen as the 0.30
@@ -123,6 +129,9 @@ const RIPPLE_LEVEL = 0.18;
    draws if the light memory could not be created. */
 let lm = null;
 export function useLightMemory (memory) { lm = memory; }
+/* The baked seabed, set before the ocean node is built. */
+let seabedTex = null;
+export function useSeabed (s) { seabedTex = s; }
 /* A second, slower light memory under the fast one: the fading light painting
    a match leaves behind. Off by default. */
 let lmSlow = null;
@@ -165,17 +174,41 @@ export function oceanNode () {
       .add(sin(t.mul(0.021)).mul(0.05));
     const water = mix(WATER_TOP, WATER_DEEP, smoothstep(float(-0.15), float(1.05), grad));
 
-    /* 2. the seabed, on its own slow drift. Three sines at different angles
-          and frequencies give a soft mottle with no repeat you can pick out
-          at this brightness, and the whole field creeps so the ocean has a
-          floor moving under it. */
-    const q = vec2(p.x.mul(3.1).add(t.mul(0.0075)), p.y.mul(5.3).add(t.mul(0.0115)));
-    const n1 = sin(q.x.add(sin(q.y.mul(1.7)).mul(1.3))).mul(0.5).add(0.5);
-    const n2 = sin(q.x.mul(2.3).sub(q.y.mul(1.1)).add(1.7)).mul(0.5).add(0.5);
-    const n3 = sin(q.y.mul(3.7).add(q.x.mul(0.6)).sub(2.2)).mul(0.5).add(0.5);
-    const bed = n1.mul(0.5).add(n2.mul(0.3)).add(n3.mul(0.2));
-    /* Squared, so the faint patches stay dark and only the crests show. */
-    const seabed = SEABED.mul(bed.mul(bed).mul(SEABED_LEVEL));
+    /* 2. the moonlit seabed. A real floor — sand, rubble and dark reef, from
+          the texture baked in seabed.js — seen through moonlit water, on slow
+          parallax so it sits BELOW the swimming layer rather than on it.
+
+          Slightly soft, on purpose: the floor is several metres down and the
+          swimming layer is not, so a crisp floor would fight the animals for
+          the eye. The parallax factor doubles as that softening, since the
+          same world distance covers fewer texels.
+
+          The moonlight is a lit pool on the view, about 0.6 at the edges as
+          the reference photo is, with a broad brighter haze towards the moon
+          at the top right. Hue follows the light: cyan-teal where the moon
+          reaches, bluer in shadow. Only the water and the floor take this —
+          the animals and their wakes are added afterwards and never see it. */
+    /* 1.6, not 0.55. At 0.55 one tile covered 545 world units against a
+       385-unit view, so the largest features were bigger than the screen and
+       the floor rendered as a smooth gradient with no texture in it at all.
+       At 1.6 a tile is 187 units, so reef and sand patches run one and a half
+       to five wingspans and the grain lands under a CSS pixel. */
+    const floorUV = world.mul(1.6).div(SEABED_TILE);
+    const bedV = seabedTex === null ? float(0.5) : texture(seabedTex.texture, floorUV).r;
+
+    /* The pool, in screen space so it follows the view and not the world. */
+    const fromCentre = length(vec2(suv.x.sub(0.5).mul(uAspect), suv.y.sub(0.5)));
+    const pool = mix(float(1.0), float(0.60), smoothstep(float(0.0), float(0.46), fromCentre));
+    /* The moon is up and to the right: screenUV.y is 0 at the top. */
+    const toMoon = length(vec2(suv.x.sub(0.86).mul(uAspect), suv.y.sub(0.10)));
+    const haze = smoothstep(float(0.95), float(0.0), toMoon).mul(0.30);
+    const litness = clamp(pool.add(haze), 0, 1.35);
+    const moon = litness.mul(U.moonlight);
+
+    /* 195 degrees lit, 207 in shadow, saturation 0.93, straight off the
+       reference photo. */
+    const bedHue = mix(SEABED_SHADOW, SEABED_LIT, clamp(litness.sub(0.6).div(0.6), 0, 1));
+    const seabed = bedHue.mul(bedV.mul(moon).mul(SEABED_LEVEL));
 
     /* 3. the surface ripple. Two crossing waves, and only the tops of their
           product are kept, which gives short broken highlights rather than

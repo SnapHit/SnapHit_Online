@@ -79,6 +79,11 @@ export const SPEC = [
      2 the old mint. Lime is the committed one: the brightest of the saturated
      hues, opposite the blue world, and it survives video compression, which
      white next to a white-hot wake does not. */
+  /* How brightly the moon lights the floor. 1 puts the lit centre's median
+     near 35 on the suites' 0-255 scale, where the old water body sat at 13.
+     Capped at 2, and the cap is where conditions 1 and 2 still hold: the
+     brightest seabed has to stay under a rival's median. */
+  { key: 'moonlight',      label: 'moonlight strength',   def: 1.00,  min: 0,    max: 2,     step: 0.05,  gpu: true  },
   { key: 'snow',           label: 'marine snow density',  def: 1.70,  min: 0,    max: 2,     step: 0.05,  gpu: true  },
   /* The fading light painting 7.2 calls the signature effect. 0 by default,
      and at 0 the whole pass is skipped rather than merely multiplied out.

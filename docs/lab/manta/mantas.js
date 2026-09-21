@@ -62,8 +62,13 @@ const YOURS  = PLAYERS[0];
    Measured against the render, not computed: at 1.00 the train's median read
    218 where mint read 225. */
 const PLAYER_LEVEL = 1.12;
-const RIVALS = [0x58d8c0, 0x64b4ff, 0x9a9bff, 0x58d8c0];
-const WILD   = 0x2b4a52;
+/* Teal, blue, violet: three rivals, per doc v1.7's scene. */
+const RIVALS = [0x58d8c0, 0x64b4ff, 0x9a9bff];
+/* The real animal from above: a near-black back with a slight cool tint.
+   Not a dim glow any more — v1.7 retires that, and with it the cap it forced
+   on every light in the water. A wild manta is now DARKER than the seabed it
+   glides over, and reads better the brighter that seabed is. */
+const WILD   = 0x080c10;
 const RIVAL_LEVEL = 0.45;
 /* 0.75, not 0.15. The percentages in the brief describe where each tier sits,
    but #2b4a52 is ALREADY a dark colour: cutting it to 15% of its linear value
@@ -72,7 +77,7 @@ const RIVAL_LEVEL = 0.45;
    lands near rgb(38,64,71) — about seven times the brightest water and still
    a quarter of a rival, so the hierarchy is intact and the tier can be found.
    Yours and the rivals are untouched: those read correctly. */
-const WILD_LEVEL  = 0.75;
+const WILD_LEVEL  = 1.0;
 
 /* The design doc's table gives leader radius 14 and follower radius 10, which
    is where 28 and 20 came from. Those are greybox gameplay sizes, set against
@@ -277,17 +282,19 @@ export function createMantas (scene) {
       size: i === 0 ? LEADER_SIZE : FOLLOWER_SIZE,
       tint: tint(YOURS, PLAYER_LEVEL) });
   }
+  /* Three singles: one rival leader and two wild. */
   for (let i = 0; i < 3; i++) {
-    /* Two of the singles are rival leaders, one is unattached and dim. */
-    const rival = i < 2;
+    const rival = i < 1;
     roles.push({ kind: 'single', idx: i,
       size: rival ? LEADER_SIZE : FOLLOWER_SIZE,
-      tint: rival ? tint(RIVALS[i], RIVAL_LEVEL) : tint(WILD, WILD_LEVEL) });
+      wild: !rival,
+      tint: rival ? tint(RIVALS[0], RIVAL_LEVEL) : tint(WILD, WILD_LEVEL) });
   }
+  /* Two circling rivals: blue and violet. */
   for (let i = 0; i < 2; i++) {
     roles.push({ kind: 'circle', idx: i,
       size: LEADER_SIZE,
-      tint: tint(RIVALS[i + 2], RIVAL_LEVEL) });
+      tint: tint(RIVALS[i + 1], RIVAL_LEVEL) });
   }
 
   /* The identity colour each manta was given. Brightness is scaled against
@@ -511,7 +518,9 @@ export function createMantas (scene) {
      measure the gaps, which is the only honest way to check the spacing. */
   setPlayer(P.player);
 
-  return { mesh, update, setBounds, count: COUNT, aPos, aHead, aSize, aTint, aMotion, vertexBuffers, setPlayer, PLAYERS,
+  const isWild = i => roles[i].wild === true;
+
+  return { mesh, update, setBounds, count: COUNT, aPos, aHead, aSize, aTint, aMotion, vertexBuffers, setPlayer, PLAYERS, isWild,
            setFree, isFree, setTintScale, getTintScale,
            pathLength: PATH_LENGTH, spacing: SPACING,
            /* The outline, so a test can measure what was built against the

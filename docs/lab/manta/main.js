@@ -18,8 +18,9 @@ import { REVISION } from 'three';
 import * as panel from './panel.js';
 import { P, U } from './params.js';
 import { createScene, describeView } from './scene.js';
-import { useLightMemory, useLongMemory, uViewW, uViewH, uShockC, uShockR, uShockA, uRippleOn } from './ocean.js';
+import { useLightMemory, useLongMemory, useSeabed, uViewW, uViewH, uShockC, uShockR, uShockA, uRippleOn } from './ocean.js';
 import { createLightMemory } from './lightmemory.js';
+import { createSeabed } from './seabed.js';
 import { createLab } from './renderer.js';
 import { createMantas, COUNT } from './mantas.js';
 import { createPost } from './post.js';
@@ -62,6 +63,10 @@ panel.probeAdapter();
 const BURST_SLOT = COUNT;
 const lm = FX ? createLightMemory(COUNT + 1) : null;
 if (lm) useLightMemory(lm);
+/* The seabed, generated once into a texture on the first draw: the renderer
+   has to exist before anything can be rendered into a target. */
+const seabed = FX ? createSeabed() : null;
+if (seabed) useSeabed(seabed);
 /* The long memory: the same machinery at a quarter of the resolution and a
    fade measured in tens of seconds. 0.9994 a frame at 60 is a half life of
    about nineteen seconds. Stamped by the same calls, rendered only when the
@@ -151,10 +156,18 @@ function stampMantas (dt) {
     const speed = dt > 0 ? moved / dt : 0;
     const speedFactor = Math.min(Math.max(speed / CRUISE, 0.25), 1.5);
     const s = STAMP_BASE * P.stamp * (dt * 60) * speedFactor;
+    /* A wake takes the colour of the train that made it (7.2), and a wild
+       manta is not in one: it stirs only the plankton's own faint blue-green,
+       at a fraction of the deposit, so a dark animal does not paint a dark
+       trail and does not glow by proxy either. */
+    const wild = mantas.isWild && mantas.isWild(i);
+    const wr = wild ? 0.10 : aTint.getX(i);
+    const wg = wild ? 0.42 : aTint.getY(i);
+    const wb = wild ? 0.36 : aTint.getZ(i);
     lm.stamp(i,
       jumped ? x : x0, jumped ? z : z0, x, z,
       aSize.getX(i) * 1.2,                       // about 1.2 wingspans
-      aTint.getX(i), aTint.getY(i), aTint.getZ(i), s);
+      wr, wg, wb, wild ? s * 0.35 : s);
     if (lmSlow && P.longMemory > 0) lmSlow.stamp(i,
       jumped ? x : x0, jumped ? z : z0, x, z,
       aSize.getX(i) * 1.2,
@@ -230,6 +243,11 @@ const lab = createLab({
          the targets: changing the texture type afterwards would be too late. */
       if (!lmAttached) { lm.attach(renderer); lmAttached = true;
         panel.set('lm', lm.size + '×' + lm.size + '  ·  ' + lm.note); }
+      if (seabed && !seabed.baked) {
+        seabed.bake(renderer);
+        panel.set('seabed', seabed.size + '×' + seabed.size + '  ·  ' + seabed.ms.toFixed(1) +
+                            ' ms to generate  ·  ' + seabed.tile + ' units a tile');
+      }
       lm.setFade(P.fade);
       lm.render(renderer, dt);
       if (lmSlow && P.longMemory > 0) {

@@ -161,6 +161,9 @@ export const TAIL_Z0 = HEAD_FRONT + BODY_BACK;
    ocean where the animals carry the light. So the pattern carries over and the
    contrast does not: the back stays at the tier colour and the marks are
    paler — mixed towards a white of the same peak component — and brighter. */
+/* The moon's own cool blue-white, for the rim on a dark animal. */
+const MOONRIM = vec3(0.34, 0.62, 0.82);
+
 const ellipse = (du, dv) => {
   const e = clamp(float(1.0).sub(length(vec2(du, dv))), 0, 1);
   return e.mul(e).mul(float(3.0).sub(e.mul(2.0)));
@@ -201,6 +204,23 @@ export function markings (tint, shade, gx, gz) {
        between the two shoulder patches that read as neither, and dropping it
        lets the patches be the pattern. It is in the history if a close-up
        ever wants it back. */
+
+    /* A faint cool moonlit rim along the leading edges, for DARK animals
+       only. A near-black manta over dark reef would otherwise be a hole in
+       the picture; a rim is what the real one has, catching the light on the
+       edge that faces it. Detected from the tint's own peak rather than from
+       a per-instance flag, because a flag would be another vertex buffer and
+       there are only eight. */
+    const dark = float(1.0).sub(smoothstep(float(0.03), float(0.14), peak));
+    /* Thin and faint, and both matter. MOONRIM is a LINEAR colour, so 0.22 of
+       it came out near 100 on the 0-255 scale — four times the seabed — over a
+       band a thirtieth of a wingspan wide, and it dragged a near-black
+       animal's median up to 0.96 of the water around it against a bar of 0.4.
+       A rim is meant to find the edge, not light the animal. */
+    const rim = smoothstep(lead.add(0.012), lead.sub(0.002), v)
+      .mul(smoothstep(float(0.0), float(0.03), v))
+      .mul(dark);
+    col.assign(col.add(MOONRIM.mul(rim.mul(0.030))));
 
     return col;
   })();
