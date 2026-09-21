@@ -43,7 +43,7 @@ export function createPost ({ renderer, scene, camera, tone = 'neutral' }) {
   const scenePass = pass(scene, camera);
   const sceneColor = scenePass.getTextureNode('output');
 
-  const bloomPass = bloom(sceneColor, P.bloomStrength, 0.5, P.bloomThreshold);
+  const bloomPass = bloom(sceneColor, P.bloomStrength, P.bloomRadius, P.bloomThreshold);
   bloomPass.setResolutionScale(0.5);          // low resolution, as the doc asks
 
   /* The grade, in linear working space. Bloom is added, then the vignette,
@@ -68,6 +68,7 @@ export function createPost ({ renderer, scene, camera, tone = 'neutral' }) {
      uniform write and not a shader rebuild. */
   onParam((key, value) => {
     if (key === 'bloomStrength') bloomPass.strength.value = value;
+    if (key === 'bloomRadius') bloomPass.radius.value = value;
     if (key === 'bloomThreshold') bloomPass.threshold.value = value;
   });
 

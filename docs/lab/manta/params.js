@@ -46,6 +46,14 @@ export const SPEC = [
      and the top of the hierarchy collapsed, leaving hue as the only thing
      telling your train from a rival's. Section 7.2 forbids exactly that.
      The brief says to pull the threshold up rather than brighten anything. */
+  /* The halo's reach, not its brightness. BloomNode blends five mip levels
+     and this is the blend: at 0 the tight mips dominate and the glow hugs its
+     source, at 1 the wide ones do and it spreads. The reach is what lifts the
+     water two wingspans from a 220-bright train member and puts an unattached
+     manta below 2.5 times its surroundings, so this is the lever for
+     condition 3 — not the strength, which Nathan set, and not the threshold,
+     which is what keeps a rival from clipping to the player's white. */
+  { key: 'bloomRadius',    label: 'bloom radius',         def: 0.00,  min: 0,    max: 1,     step: 0.01,  gpu: false },
   { key: 'bloomThreshold', label: 'bloom threshold',      def: 0.40,  min: 0,    max: 1,     step: 0.01,  gpu: false },
   { key: 'grain',          label: 'grain',                def: 0.02,  min: 0,    max: 0.10,  step: 0.002, gpu: true  },
 ];
