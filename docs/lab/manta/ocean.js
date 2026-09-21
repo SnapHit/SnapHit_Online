@@ -43,6 +43,11 @@ export const uShockC = uniform(new Vector2(0, 0));
 export const uShockR = uniform(0);
 export const uShockA = uniform(0);
 
+/* The low tier drops the surface ripple. A uniform rather than a second
+   shader variant: compiling a new one the moment the device is already
+   struggling is exactly the wrong time to pay for it. */
+export const uRippleOn = uniform(1);
+
 /* Blue-green, from the palette already in use. */
 const PLANKTON = color(0x4fd8c8);
 /* "An ambient 2 to 3 percent so the water has depth at rest." At the bottom
@@ -173,7 +178,7 @@ export function oceanNode () {
     const r1 = sin(p.x.mul(34.0).add(p.y.mul(13.0)).add(t.mul(0.55)));
     const r2 = sin(p.y.mul(30.0).sub(p.x.mul(9.0)).sub(t.mul(0.40)));
     const crest = smoothstep(float(0.40), float(1.0), r1.mul(r2));
-    const ripple = RIPPLE.mul(crest.mul(RIPPLE_LEVEL));
+    const ripple = RIPPLE.mul(crest.mul(RIPPLE_LEVEL)).mul(uRippleOn);
 
     /* 4. the plankton, which is the only part of the ocean that knows what has
           happened in it. It reads the light memory at this pixel's world

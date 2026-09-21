@@ -109,6 +109,11 @@ export function createLab ({ scene, camera, forceWebGL, hooks }) {
       const now = performance.now();
       /* Clamped: a hidden tab must not hand the light memory a one-second
          step and wipe it, or the mantas a teleport. */
+      /* The RAW wall time between frames, unclamped. The quality controller
+         is judged on this and not on the clamped dt below: the clamp exists
+         so a hidden tab cannot teleport anything, and feeding it to the
+         controller would report a sleeping device as a fast one. */
+      const rawMs = prevNow === null ? 1000 / 60 : now - prevNow;
       const dt = prevNow === null ? 1 / 60 : Math.min(Math.max((now - prevNow) / 1000, 1 / 240), 0.1);
       prevNow = now;
       try {
@@ -131,7 +136,7 @@ export function createLab ({ scene, camera, forceWebGL, hooks }) {
            was queued. */
         requestAnimationFrame(() => hooks.onFirstFrame(renderer));
       }
-      hooks.onFrame(now, renderer);
+      hooks.onFrame(now, renderer, rawMs);
     });
   }
 
@@ -165,8 +170,19 @@ export function createLab ({ scene, camera, forceWebGL, hooks }) {
      a manta is with what the pixels show has to freeze both at the same
      instant; without this the scene moves between reading the positions and
      taking the screenshot, which is about twenty world units at cruise. */
+  /* A resolution step, and nothing else. It deliberately does NOT go through
+     onFit: the camera frustum, the manta layout and the light memory's world
+     coverage all depend only on CSS geometry, which a change of backing-store
+     density does not alter. Rebuilding them on every rung would be the
+     130 ms hitch NOTES.md already records paying for once. */
+  function setPixelRatio (r) {
+    if (!renderer) return;
+    renderer.setPixelRatio(r);
+    renderer.setSize(innerWidth, innerHeight, false);
+  }
+
   function pause () { if (renderer) renderer.setAnimationLoop(null); }
   function resume () { if (renderer) loop(); }
 
-  return { start, resize, pause, resume, get renderer () { return renderer; } };
+  return { start, resize, pause, resume, setPixelRatio, get renderer () { return renderer; } };
 }

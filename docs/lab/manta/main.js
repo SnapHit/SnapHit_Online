@@ -16,30 +16,25 @@
  */
 import { REVISION } from 'three';
 import * as panel from './panel.js';
-import { P } from './params.js';
+import { P, U } from './params.js';
 import { createScene, describeView } from './scene.js';
-import { useLightMemory, uViewW, uViewH, uShockC, uShockR, uShockA } from './ocean.js';
+import { useLightMemory, uViewW, uViewH, uShockC, uShockR, uShockA, uRippleOn } from './ocean.js';
 import { createLightMemory } from './lightmemory.js';
 import { createLab } from './renderer.js';
 import { createMantas, COUNT } from './mantas.js';
 import { createPost } from './post.js';
 import { createCut, flashAllowed } from './cut.js';
+import { createQuality, TIER_SETTINGS } from './tiers.js';
 
 const query = new URLSearchParams(location.search);
 /* ?fx=off builds the page without the light memory, the plankton or anything
    that reads them, so the cost of the look can be measured against the bare
    scene on a real phone rather than guessed at. */
 export const FX = query.get('fx') !== 'off';
-/* Untinted by default, which is what section 7.2's colour discipline means
-   for bloom: "blue-greens for the world; warm colours only for danger". A
-   bloom with no tint of its own amplifies whatever colour its source already
-   is, so your train's pale teal blooms pale teal and a rival's blue blooms
-   blue, and the identity colours survive the glow instead of being overwritten
-   by it. A gold tint made every bright thing gold, including the player's own
-   mantas, which is how a signal reserved for danger gets spent on everything.
-   ?bloom=gold and ?bloom=teal remain for comparison. */
-const BLOOM_TINT = query.get('bloom') || 'white';
 const TONE = query.get('tone') || 'neutral';
+/* ?tier=high|medium|low pins the tier so each one can be looked at and
+   measured on demand instead of waiting for a device slow enough to pick it. */
+const FORCED_TIER = query.get('tier');
 /* ?vig=0 turns the vignette off, which is the only way to measure what it is
    actually doing: comparing the centre of the screen with its corners also
    measures the ocean's own gradient and whatever the bloom is doing to the
@@ -63,6 +58,8 @@ panel.set('lm', lm ? (lm.size + '×' + lm.size + '  ·  ' + lm.note) : 'off (?fx
 
 window.__lab = { scene, camera, view, mantas, lm, FX };
 window.__lab.post = () => post;
+const quality = createQuality({ forcedTier: FORCED_TIER, dpr: devicePixelRatio });
+window.__lab = window.__lab || {};
 const cut = createCut({ mantas, lm, burstSlot: BURST_SLOT });
 window.__lab.cut = cut;
 panel.wireCut(cut);
@@ -72,6 +69,10 @@ panel.wireCut(cut);
 window.__lab.shock = () => ({ x: uShockC.value.x, z: uShockC.value.y, r: uShockR.value, a: uShockA.value });
 window.__lab.simTime = () => simTime;
 window.__lab.flashAllowed = flashAllowed;
+window.__lab.quality = quality;
+/* Applying a decision the test made by hand, so the controller's policy and
+   its effects can be exercised without a device slow enough to trigger it. */
+window.__lab.applyQuality = () => applyQuality(lab.renderer);
 /* lab is assigned below, once createLab has run. */
 
 /* ------------------------------------------------------ stamping the wake */
@@ -129,6 +130,20 @@ function stampMantas (dt) {
 
 /* ---------------------------------------------------------------- the lab */
 
+/* One place where a tier or a rung becomes something on screen. Nothing here
+   touches the scene: the same ten mantas swim the same paths at every tier. */
+function applyQuality (renderer) {
+  const t = TIER_SETTINGS[quality.tier];
+  lab.setPixelRatio(quality.scale);
+  U.grain.value = t.grain ? P.grain : 0;
+  uRippleOn.value = t.ripple ? 1 : 0;
+  if (post) post.setBloomResolution(t.bloomRes);
+  if (lm) lm.setSize(renderer, t.lm);
+  panel.set('tier', quality.tier + (quality.locked ? '  ·  forced with ?tier=' : '  ·  automatic'));
+  panel.set('scale', quality.scale.toFixed(2) + '×  (rung ' + quality.rung + ' of ' + 4 + ')');
+  if (lm) panel.set('lm', lm.size + '×' + lm.size + '  ·  ' + lm.note);
+}
+
 const lab = createLab({
   scene,
   camera,
@@ -182,9 +197,10 @@ const lab = createLab({
          Note that renderer.render() is NOT called when there is a pipeline:
          the scene render happens inside the pass. */
       if (FX && post === null) {
-        post = createPost({ renderer, scene: sc, camera: cam, tint: BLOOM_TINT, tone: TONE });
+        post = createPost({ renderer, scene: sc, camera: cam, tone: TONE });
         if (VIG !== null && isFinite(VIG)) post.setVignette(VIG);
-        panel.set('passes', String(post.passes) + '  ·  bloom ' + BLOOM_TINT + ', tone ' + TONE);
+        applyQuality(renderer);
+        panel.set('passes', String(post.passes) + ' passes  ·  tone ' + TONE);
       }
       if (post) post.render(); else renderer.render(sc, cam);
     },
@@ -197,9 +213,10 @@ const lab = createLab({
          renderer that just died. */
       if (post) { post.dispose(); post = null; }
     },
-    onFrame (now, renderer) {
+    onFrame (now, renderer, rawMs) {
       panel.accountFrame(now);
       panel.set('draws', String(renderer.info.render.drawCalls));
+      if (quality.feed(rawMs, now)) applyQuality(renderer);
     },
     onFirstFrame () { panel.markFirstFrame(); },
     onReset () { panel.resetFrames(); },

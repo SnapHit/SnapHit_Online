@@ -112,11 +112,34 @@ export function createLightMemory (count) {
     }
   }
 
-  function setSize (n) {
-    if (n === size) return;
-    size = n;
-    rtA.setSize(size, size);
-    rtB.setSize(size, size);
+  /* A copy of whatever is currently in the memory, for resizing. */
+  const copyTex = texture(rtA.texture);
+  const copyMat = new NodeMaterial();
+  copyMat.name = 'manta_lightmemory_copy';
+  copyMat.fragmentNode = Fn(() => vec4(texture(copyTex, uv()).rgb, 1.0))();
+
+  /* RESAMPLE, do not clear. RenderTarget.setSize reallocates and throws the
+     contents away, so a tier change would wipe every wake on screen at the
+     exact moment the device is already struggling — a pop that looks far
+     worse than the resolution drop it came from. This renders the old memory
+     into new targets at the new size first, so the wake survives the change
+     at whatever fidelity the new size allows. */
+  function setSize (renderer, n) {
+    if (n === size || !renderer) return false;
+    const src = rtA;
+    const nextA = new RenderTarget(n, n, opts());
+    const nextB = new RenderTarget(n, n, opts());
+    copyTex.value = src.texture;
+    rendererState = RendererUtils.resetRendererState(renderer, rendererState);
+    renderer.setRenderTarget(nextA);
+    quad.material = copyMat;
+    quad.render(renderer);
+    renderer.setRenderTarget(null);
+    RendererUtils.restoreRendererState(renderer, rendererState);
+    try { rtA.dispose(); rtB.dispose(); } catch (e) {}
+    rtA = nextA; rtB = nextB; size = n;
+    out.value = rtA.texture;
+    return true;
   }
 
   /* The covered square follows the view, so the same patch of water is

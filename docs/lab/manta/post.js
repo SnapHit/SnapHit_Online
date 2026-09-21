@@ -28,42 +28,22 @@ export const TONE_MODES = {
   neutral: NeutralToneMapping,
 };
 
-/* Bloom tints, linear, and normalised so that changing the tint changes the
-   COLOUR of the bloom and not how much of it there is. Without the
-   normalisation a saturated tint also dims the effect and the two are
-   impossible to judge separately. */
-function linearTint (r, g, b) {
-  const s = c => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
-  const v = [s(r / 255), s(g / 255), s(b / 255)];
-  const y = 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
-  return v.map(c => c / Math.max(y, 1e-4));
-}
-export const TINTS = {
-  gold: linearTint(255, 200, 112),   // #ffc870
-  teal: linearTint(120, 232, 214),   // #78e8d6, the blue-green the world uses
-  white: [1, 1, 1],
-};
+/* Bloom is UNTINTED, and that is settled in section 7.2: "Bloom is untinted,
+   so it amplifies each source's own colour and identity hues survive the
+   glow." The tint options that existed during the spike are gone with the
+   code that applied them — a gold tint spent the danger colour on everything
+   bright and turned the player's own train yellow-green. */
 
 /* "A subtle vignette at about 15 percent in the corners." CRT.js's vignette
    puts the edges at (1 - intensity), so this number IS the percentage. */
 const uVignette = uniform(0.15);
 
-export function createPost ({ renderer, scene, camera, tint = 'white', tone = 'neutral' }) {
+export function createPost ({ renderer, scene, camera, tone = 'neutral' }) {
   const scenePass = pass(scene, camera);
   const sceneColor = scenePass.getTextureNode('output');
 
   const bloomPass = bloom(sceneColor, P.bloomStrength, 0.5, P.bloomThreshold);
   bloomPass.setResolutionScale(0.5);          // low resolution, as the doc asks
-
-  function setTint (name) {
-    const t = TINTS[name] || TINTS.white;
-    /* Five entries, one per mip. Tinting every mip equally keeps the colour
-       constant across the bloom's whole falloff. */
-    for (let i = 0; i < bloomPass.bloomTintColors.length; i++) {
-      bloomPass.bloomTintColors[i].set(t[0], t[1], t[2]);
-    }
-  }
-  setTint(tint);
 
   /* The grade, in linear working space. Bloom is added, then the vignette,
      then grain. Grain is centred on zero and scaled: FilmNode's own grain is
@@ -92,7 +72,9 @@ export function createPost ({ renderer, scene, camera, tint = 'white', tone = 'n
 
   return {
     render () { pipeline.render(); },
-    setTint,
+    /* Halved again on the medium tier: the bloom chain is the most expensive
+       thing on the page and its resolution is the cheapest thing to give up. */
+    setBloomResolution (s) { bloomPass.setResolutionScale(s); },
     setTone (name) {
       renderer.toneMapping = TONE_MODES[name] !== undefined ? TONE_MODES[name] : NeutralToneMapping;
     },
