@@ -23,7 +23,7 @@
  * pixel. Colours are to be tuned on the phone.
  */
 import { Vector2 } from 'three';
-import { Fn, vec2, vec3, color, exp, float, length, max, mix, pow, sin, smoothstep, screenUV, texture, uniform } from 'three/tsl';
+import { Fn, vec2, vec3, color, clamp, exp, float, floor, fract, length, max, min, mix, pow, rand, sin, smoothstep, screenUV, texture, uniform } from 'three/tsl';
 import { uTime } from './clock.js';
 import { U } from './params.js';
 
@@ -48,6 +48,7 @@ export const uShockA = uniform(0);
    shader variant: compiling a new one the moment the device is already
    struggling is exactly the wrong time to pay for it. */
 export const uRippleOn = uniform(1);
+
 
 /* Blue-green, from the palette already in use. */
 const PLANKTON = color(0x4fd8c8);
@@ -100,6 +101,8 @@ const WATER_TOP  = color(0x061228);
 const WATER_DEEP = color(0x01040c);
 const SEABED     = color(0x0b2430);
 const RIPPLE     = color(0x0f3352);
+/* Marine snow sits 10 to 20 per cent above the water it is in. */
+const SNOW_LEVEL = 0.16;
 
 /* 0.16, down from 0.25, and the ripple with it. Pushing the water blue lifted
    its bright crests to a luminance of 34 while the dim tier of mantas sits at
@@ -120,6 +123,10 @@ const RIPPLE_LEVEL = 0.18;
    draws if the light memory could not be created. */
 let lm = null;
 export function useLightMemory (memory) { lm = memory; }
+/* A second, slower light memory under the fast one: the fading light painting
+   a match leaves behind. Off by default. */
+let lmSlow = null;
+export function useLongMemory (memory) { lmSlow = memory; }
 
 export function oceanNode () {
   return Fn(() => {
@@ -194,12 +201,28 @@ export function oceanNode () {
     const lmUV = world.div(lm.uHalf.mul(2.0)).add(0.5);
     const stir = texture(lm.out, lmUV).rgb;
 
-    /* A drifting high-frequency field. Two crossing waves, raised to a power
-       so only the crests survive as points rather than bands. */
-    const sp = vec2(world.x.mul(0.085).add(t.mul(0.9)), world.y.mul(0.085).sub(t.mul(0.6)));
-    const s1 = sin(sp.x.mul(6.7).add(sin(sp.y.mul(4.9)).mul(2.1)));
-    const s2 = sin(sp.y.mul(8.9).sub(sp.x.mul(3.1)).add(t.mul(0.4)));
-    const sparkle = pow(max(s1.mul(s2), float(0.0)), float(9.0)).mul(U.plankton);
+    /* POINTS, not dashes. This was two crossing sine waves raised to a power,
+       and the product of two waves is bright along the line where both are
+       bright — so every speck in the ocean leaned the same way, like rain on
+       glass. Nathan called it out twice. A hash-placed point per cell of a
+       world grid has no preferred direction at all: the cell says where, the
+       distance from it says how bright, and nothing in it knows about an
+       angle.
+
+       Drift, and only drift: the field moves, and no point ever changes
+       brightness where it stands, so nothing twinkles. */
+    const dot1 = (cell, dx, dz, seed, sharp) => {
+      const q = vec2(world.x.div(cell).add(t.mul(dx)), world.y.div(cell).add(t.mul(dz)));
+      const id = floor(q), f = fract(q);
+      const h = vec2(rand(id.add(seed)), rand(id.add(seed).add(vec2(11.3, 7.7))));
+      const d = length(f.sub(h));
+      return pow(max(float(1.0).sub(d.mul(sharp)), float(0.0)), float(2.0));
+    };
+    /* Three grids at different sizes, so the field is not a lattice. */
+    const sparkle = dot1(7.0, 0.020, -0.014, vec2(0.0, 0.0), 7.0)
+      .add(dot1(4.3, -0.016, 0.022, vec2(23.0, 51.0), 8.5).mul(0.7))
+      .add(dot1(2.9, 0.011, 0.017, vec2(71.0, 13.0), 10.0).mul(0.45))
+      .mul(U.plankton);
 
     /* Fresh wake whiteness. The newest, brightest light a manta leaves burns
        towards white before it cools back to the blue-green it deposited, which
@@ -212,10 +235,28 @@ export function oceanNode () {
     const hot = mix(stir, vec3(peak, peak, peak),
                     smoothstep(float(0.04), float(0.22), peak).mul(U.whiteness));
 
+    /* Marine snow: points of one to three device pixels, only a little
+       brighter than the water they sit in, at three depths drifting at
+       different slow rates so there is parallax. Denser where the water is
+       lighter. Well under the bloom threshold, and nothing here twinkles. */
+    const lightHere = clamp(float(1.0).sub(grad), 0, 1);
+    const snowKeep = (cell, seed) => smoothstep(float(0.0), float(0.10),
+      clamp(mix(float(0.25), float(1.0), lightHere).mul(U.snow), 0, 1)
+        .sub(rand(floor(vec2(world.x.div(cell), world.y.div(cell))).add(seed).add(vec2(3.7, 9.2)))));
+    const snowMask = dot1(64.0, 0.010, 0.014, vec2(5.0, 2.0), 26.0).mul(snowKeep(64.0, vec2(5.0, 2.0)))
+      .add(dot1(36.0, -0.007, 0.026, vec2(41.0, 17.0), 30.0).mul(snowKeep(36.0, vec2(41.0, 17.0))).mul(0.6))
+      .add(dot1(26.0, 0.015, -0.008, vec2(93.0, 61.0), 34.0).mul(snowKeep(26.0, vec2(93.0, 61.0))).mul(0.4));
+    const snow = water.mul(min(snowMask, float(1.5)).mul(SNOW_LEVEL));
+
     const plankton = PLANKTON.mul(sparkle.mul(PLANKTON_AMBIENT))   // everywhere, faint
       .add(hot.mul(sparkle).mul(U.sparkle))                        // bright where stirred
-      .add(hot.mul(U.ribbon));                                     // the ribbon itself
+      .add(hot.mul(U.ribbon))
+      /* The long memory, faint and blue-green, under everything else. At 0
+         the CPU skips its pass entirely, so it costs nothing until asked. */
+      .add(lmSlow === null ? vec3(0, 0, 0)
+        : PLANKTON.mul(texture(lmSlow.out, world.div(lmSlow.uHalf.mul(2.0)).add(0.5)).rgb)
+            .mul(U.longMemory).mul(0.8));                                     // the ribbon itself
 
-    return water.add(seabed).add(ripple).add(plankton);
+    return water.add(seabed).add(ripple).add(snow).add(plankton);
   })();
 }

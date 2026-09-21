@@ -18,7 +18,7 @@ import { REVISION } from 'three';
 import * as panel from './panel.js';
 import { P, U } from './params.js';
 import { createScene, describeView } from './scene.js';
-import { useLightMemory, uViewW, uViewH, uShockC, uShockR, uShockA, uRippleOn } from './ocean.js';
+import { useLightMemory, useLongMemory, uViewW, uViewH, uShockC, uShockR, uShockA, uRippleOn } from './ocean.js';
 import { createLightMemory } from './lightmemory.js';
 import { createLab } from './renderer.js';
 import { createMantas, COUNT } from './mantas.js';
@@ -62,6 +62,13 @@ panel.probeAdapter();
 const BURST_SLOT = COUNT;
 const lm = FX ? createLightMemory(COUNT + 1) : null;
 if (lm) useLightMemory(lm);
+/* The long memory: the same machinery at a quarter of the resolution and a
+   fade measured in tens of seconds. 0.9994 a frame at 60 is a half life of
+   about nineteen seconds. Stamped by the same calls, rendered only when the
+   slider asks for it. */
+const lmSlow = FX ? createLightMemory(COUNT + 1) : null;
+if (lmSlow) { lmSlow.setFade(0.9994); useLongMemory(lmSlow); }
+let slowAttached = false;
 
 const { scene, camera, fit, view } = createScene();
 const mantas = createMantas(scene);
@@ -148,6 +155,10 @@ function stampMantas (dt) {
       jumped ? x : x0, jumped ? z : z0, x, z,
       aSize.getX(i) * 1.2,                       // about 1.2 wingspans
       aTint.getX(i), aTint.getY(i), aTint.getZ(i), s);
+    if (lmSlow && P.longMemory > 0) lmSlow.stamp(i,
+      jumped ? x : x0, jumped ? z : z0, x, z,
+      aSize.getX(i) * 1.2,
+      aTint.getX(i), aTint.getY(i), aTint.getZ(i), s);
     prevX[i] = x; prevZ[i] = z;
   }
   havePrev = true;
@@ -221,6 +232,10 @@ const lab = createLab({
         panel.set('lm', lm.size + '×' + lm.size + '  ·  ' + lm.note); }
       lm.setFade(P.fade);
       lm.render(renderer, dt);
+      if (lmSlow && P.longMemory > 0) {
+        if (!slowAttached) { lmSlow.attach(renderer); lmSlow.setSize(renderer, 256); slowAttached = true; }
+        lmSlow.render(renderer, dt);
+      }
     },
     onDraw (renderer, sc, cam) {
       /* The pipeline needs the renderer, which only exists once the backend
@@ -239,6 +254,7 @@ const lab = createLab({
       /* The renderer that owned these has gone. Probe the new backend and let
          the targets reallocate against it. */
       lmAttached = false;
+      slowAttached = false;
       havePrev = false;
       /* The pipeline, its pass target and the bloom mips all belong to the
          renderer that just died. */

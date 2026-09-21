@@ -79,6 +79,11 @@ export const SPEC = [
      2 the old mint. Lime is the committed one: the brightest of the saturated
      hues, opposite the blue world, and it survives video compression, which
      white next to a white-hot wake does not. */
+  { key: 'snow',           label: 'marine snow density',  def: 1.00,  min: 0,    max: 2,     step: 0.05,  gpu: true  },
+  /* The fading light painting 7.2 calls the signature effect. 0 by default,
+     and at 0 the whole pass is skipped rather than merely multiplied out.
+     Capped at 0.6: it is added to the same water the hierarchy measures. */
+  { key: 'longMemory',     label: 'long memory',          def: 0,     min: 0,    max: 0.6,   step: 0.01,  gpu: true  },
   { key: 'player',         label: 'player colour 0lime 1ice 2mint', def: 0, min: 0, max: 2, step: 1, gpu: false },
   { key: 'marks',          label: 'marking strength',     def: 1.00,  min: 0,    max: 2,     step: 0.05,  gpu: true  },
 ];
