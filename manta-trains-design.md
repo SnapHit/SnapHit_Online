@@ -1,8 +1,8 @@
 # Manta trains: design decisions
 
-Working title. Version 1.5, 22 September 2026 (1.5: the look spike's tuned values, how the brightness hierarchy is measured, untinted bloom and no gold, a page-wide flash cap, three lessons for the greybox, and names for the wake, the sparkle and the bloom; 1.4: the Pixel 9 result and the 60 Hz budget, the repo's paths, automatic fallback, the camera's fixed view area and the decision not to minify; 1.3: the lab page, portrait-first layout, Three.js pinned at r186, Brief 0's scope and how this doc stays in sync; 1.2: WebGPU renderer, the look direction, the identity system and the build approach; 1.1: the prototype gets a cheap procedural look instead of grey shapes). Studio: SnapHit Studios (snap-hit.online). Owner: Nathan.
+Working title. Version 1.6, 22 September 2026 (1.6: a moonlit ocean where life makes the brightest light, the manta measured from a reference photo, electric lime for the player's train, a tighter bloom, and the WebGPU limits learned the hard way; 1.5: the look spike's tuned values, how the brightness hierarchy is measured, untinted bloom and no gold, a page-wide flash cap, three lessons for the greybox, and names for the wake, the sparkle and the bloom; 1.4: the Pixel 9 result and the 60 Hz budget, the repo's paths, automatic fallback, the camera's fixed view area and the decision not to minify; 1.3: the lab page, portrait-first layout, Three.js pinned at r186, Brief 0's scope and how this doc stays in sync; 1.2: WebGPU renderer, the look direction, the identity system and the build approach; 1.1: the prototype gets a cheap procedural look instead of grey shapes). Studio: SnapHit Studios (snap-hit.online). Owner: Nathan.
 
-**Status:** concept locked. Briefs 0 to 1B are done: snap-hit.online/lab/manta/ runs the ocean, the mantas, the light memory wake, bloom, the grade and the cut set piece on WebGPU and WebGL2 on the test phone. The next step is Brief 1C (quality tiers, dynamic resolution and a tuning drawer), then the look spike faces its pass criteria (section 10.2).
+**Status:** concept locked. Briefs 0 to 1F are done: snap-hit.online/lab/manta/ runs the mantas drawn from a reference photo, the light memory wake, bloom, the grade, the cut set piece, quality tiers and a tuning drawer, on WebGPU and WebGL2 on the test phone. The next step is Brief 1G (the moonlit ocean and the player's colour), then the look spike faces its pass criteria (section 10.2).
 
 **How to use this file:** sections 1 to 9 record what was decided and why, section 10 is the build plan, and sections 11 to 15 cover risks, open decisions, parked ideas, terms and sources. Anything marked (P) is a proposed default to confirm in the greybox; everything else is decided.
 
@@ -10,7 +10,7 @@ Working title. Version 1.5, 22 September 2026 (1.5: the look spike's tuned value
 
 **Pitch:** lead a train of wild manta rays; touch another train and yours scatters, burst through one and you slice it.
 
-Manta trains is a top-down browser arcade game. You play a manta that can never stop swimming. Wild mantas you swim near fall in behind you, and your train's length is your score. Your train is also a wall: a rival leader who touches it crashes and loses their whole train. Bursting costs you followers but lets you slice straight through a rival's train, scattering everything behind the cut. It keeps the proven heart of slither.io, grounds every rule in something real mantas do, and fits SnapHit's static setup by filling the ocean with wild mantas and rival bots. It's set in a night ocean where only life makes light, and every manta is a catalogued individual whose challenge links carry it into friends' oceans, so the game feels social without a server.
+Manta trains is a top-down browser arcade game. You play a manta that can never stop swimming. Wild mantas you swim near fall in behind you, and your train's length is your score. Your train is also a wall: a rival leader who touches it crashes and loses their whole train. Bursting costs you followers but lets you slice straight through a rival's train, scattering everything behind the cut. It keeps the proven heart of slither.io, grounds every rule in something real mantas do, and fits SnapHit's static setup by filling the ocean with wild mantas and rival bots. It's set in a moonlit night ocean where life makes the brightest light, and every manta is a catalogued individual whose challenge links carry it into friends' oceans, so the game feels social without a server.
 
 ## 2. Goal
 
@@ -186,7 +186,7 @@ Scoring
 - Rival leader bots behave like real mantas with personalities (greedy, timid, bully) and carry honest bot tags. Each is a catalogued individual, like a player's manta.
 - A rare pink manta flees and can only be caught with a burst. The real one off Lady Elliot Island has a black back and a pink belly, so from above it looks ordinary until it rolls and flashes pink. It gets an original name (the real one's nickname comes from the Pink Panther films). (P) It's worth more than one follower; the exact value is open.
 - Identity: every manta is a catalogued individual, with crews, secret names and friends' mantas swimming in your ocean; no skin menu and nothing before the first swim (full system in 7.3).
-- Look: a night ocean where only life makes light (full direction in 7.2). Followers keep individual wingbeats and break formation the moment they're cut or scattered, so a train reads as a line of creatures rather than a snake.
+- Look: a moonlit night ocean where life makes the brightest light (full direction in 7.2). Followers keep individual wingbeats and break formation the moment they're cut or scattered, so a train reads as a line of creatures rather than a snake.
 - No death screen: a crash pops a small card with your run's peak length, your best, a clip button, a challenge link and a way to your manta card, while you keep swimming.
 - Top-ten leaderboard.
 - Daily seeded ocean plus events: a plankton bloom that drags every train together, a whale shark that ploughs through lines, the pink manta's appearances. (P) The whale shark cuts any train it crosses, and touching its body counts as a crash.
@@ -195,17 +195,17 @@ Scoring
 - Controls: steering plus one burst input, on touch, keyboard and mouse (candidates in section 10.2).
 - Camera: follows your leader and zooms out as your train grows, so big trains can see the danger coming.
 
-### 7.2 Look: only life makes light
+### 7.2 Look: life makes the brightest light
 
-- **The idea:** a night ocean seen from above, near black. Every moving thing stirs bioluminescent plankton, which glows when disturbed, so trains paint glowing ribbons, bursts flare, cuts explode into light, and each match leaves a fading light painting of itself. This is the signature effect, and it's what every clip will show.
-- **Light carries information:** background darkest, wild mantas dim, rival trains bright, your train brightest, events at peak. It is measured, not eyeballed. Medians keep that order; the wake's median never exceeds an unattached manta's; an unattached manta is at least 2.5 times the water in a ring around it, inside a wake as well as in clear water; and your train is at least 1.8 times a rival, so the two can never clip to the same white. Sparkle crests may be as bright as they like, since a few bright pixels hide nothing.
-- **Colour discipline:** blue-greens for the world; a small set of harmonious hues for rivals and player identities; warm colours only for danger (the reef edge glowing like fluorescing coral); pink only for the pink manta, so its flash is the rarest colour on screen. Bloom is untinted, so it amplifies each source's own colour and identity hues survive the glow. The wake stays blue-green, as real bioluminescent plankton does. A gold tint was tried in the spike and ruled out: it spent the danger colour on everything bright and turned the player's own train yellow-green.
-- **Depth:** three layers, with a faint seabed in slow parallax, the swimming layer, and a subtle surface ripple over everything. Wild mantas at varying depths give the ocean volume.
-- **The mantas:** silhouettes whose wings flex in the shader, with each follower's wingbeat slightly behind the one ahead, so a whole train ripples like a single ribbon. Name-generated patterns, rim-lit from the glow beneath.
+- **The idea:** a moonlit night ocean seen from above. Moonlight refracted through the waves lays a slow, flowing web of caustics across the seabed, the mantas' shadows glide over it, and now and then a cloud dims the moon and lets it back, so the water itself is alive and never quite the same twice. Against that stage, every moving thing stirs bioluminescent plankton, which glows when disturbed, so trains paint glowing ribbons, bursts flare, cuts explode into light, and each match leaves a fading light painting of itself. The living light is the signature effect, and it's what every clip will show. Moonlight sets the stage; life makes the brightest light.
+- **Light carries information:** background darkest, wild mantas dim, rival trains bright, your train brightest, events at peak. It is measured, not eyeballed. Medians keep that order; the wake's median never exceeds an unattached manta's; an unattached manta is at least 2.5 times the water in a ring around it, inside a wake as well as in clear water; and your train is at least 1.8 times a rival, so the two can never clip to the same white. Sparkle crests may be as bright as they like, since a few bright pixels hide nothing. Moonlight never outshines life: the caustics' brightest crests stay below an unattached manta's median, so a moonlit patch can never hide an animal.
+- **Colour discipline:** blue-greens for the world; a small set of harmonious hues for rivals and player identities; warm colours only for danger (the reef edge glowing like fluorescing coral); pink only for the pink manta, so its flash is the rarest colour on screen. Bloom is untinted, so it amplifies each source's own colour and identity hues survive the glow. The wake stays blue-green, as real bioluminescent plankton does. A gold tint was tried in the spike and ruled out: it spent the danger colour on everything bright and turned the player's own train yellow-green. The moonlight is a cool blue-white. (P) Your own train is electric lime. Slither's lesson is saturated colour on dark, which reads at a glance, in thumbnails and through video compression; lime is the brightest of the saturated hues, so it keeps your train the brightest thing on screen; it sits opposite the blue world; and it is neither warm (danger) nor pink (the pink manta). White was ruled out because it merges with the fresh wake and the moonlight.
+- **Depth:** three layers: the seabed, where the caustics and the mantas' shadows play in slow parallax; the swimming layer; and a subtle surface ripple over everything, which also bends the light beneath it. Marine snow at three depths and wild mantas at varying depths give the ocean volume.
+- **The mantas:** silhouettes whose wings flex in the shader, with each follower's wingbeat slightly behind the one ahead, so a whole train ripples like a single ribbon. Name-generated patterns, rim-lit from the glow beneath. The outline is measured from a reference photo (10.2). At play scale a manta is about 40 CSS pixels across, so identity reads through colour, brightness and silhouette; patterns and marks read in close-ups (the manta card and the victory roll), and at play scale they only need to register as texture.
 - **Set pieces:** the cut (a shockwave ripple through the water, a light burst, a beat of slow motion), the crash (a train unravelling into scattered lights), the coil (the ring brightening as it closes), the whale shark (a vast dark shape visible only by the plankton it disturbs) and the pink manta's flash.
-- **Rendering:** an ocean and plankton shader; a light memory texture around the camera that fades each frame and is stamped by every moving manta; all mantas as one instanced mesh; particles; a low-resolution bloom chain; and a final grade with vignette, grain and shockwave distortion. On WebGPU devices, compute can later add living water (hundreds of thousands of plankton particles, fish schools and currents), with a lesser version on the fallback.
+- **Rendering:** an ocean and plankton shader; a caustic pattern generated once in code and sampled twice per pixel as it flows; a low-resolution pass that casts the mantas' shadows onto the seabed; a light memory texture around the camera that fades each frame and is stamped by every moving manta; all mantas as one instanced mesh; particles; a low-resolution bloom chain; and a final grade with vignette, grain and shockwave distortion. On WebGPU devices, compute can later add living water (hundreds of thousands of plankton particles, fish schools and currents), with a lesser version on the fallback.
 - **Phone budget:** resolution scales with frame time, and quality tiers step down visuals, never gameplay. The plankton lives in a shader, so cost scales with pixels rather than object counts. Few shaders keep it opening instantly. Target: 60 fps on Nathan's phone and a cheap Android. Measured budget: 16.7 ms a frame, since the Pixel 9 reports 60 Hz; whether 120 Hz is reachable is a separate question. Resolution follows the adaptive ladder already proven in the repo's NOTES.md.
-- **Accessibility:** cap flashes at three a second across the whole page rather than per effect, offer a reduced-flash setting that also follows the system's reduced motion preference, and never rely on hue alone to tell you from rivals. Reduced flash keeps the information (the scatter after a cut) and drops the flash to 30 percent, the slow motion and the distortion.
+- **Accessibility:** cap flashes at three a second across the whole page rather than per effect, offer a reduced-flash setting that also follows the system's reduced motion preference, and never rely on hue alone to tell you from rivals. Reduced flash keeps the information (the scatter after a cut) and drops the flash to 30 percent, the slow motion and the distortion. Moonlight changes slowly: a cloud pass takes seconds, never a flash.
 - **Precedent:** flOw, a free Flash game with a similar look, was praised for its visuals, but reviewers flagged its simple gameplay and some called it more art piece than game. Here the look serves the rules.
 - **Briefs carry specifics, not adjectives:** palette hex values, the brightness hierarchy, and reference footage (Hanifaru drone footage of manta trains, night bioluminescence).
 
@@ -234,7 +234,7 @@ All of it is cosmetic or social; the four rules and the five-point test are unto
 
 ## 8. Against slither
 
-Matched or beaten: upsets (two routes), death feeds the living (a glowing swarm), a price on power, constant motion and coiling, a chase target (the pink manta), identity (catalogued mantas, crews, secret names and friends' mantas), look (only life makes light), and restart (the crash card).
+Matched or beaten: upsets (two routes), death feeds the living (a glowing swarm), a price on power, constant motion and coiling, a chase target (the pink manta), identity (catalogued mantas, crews, secret names and friends' mantas), look (a moonlit ocean where life makes the brightest light), and restart (the crash card).
 
 Slither's weak spots beaten: lag (none with bots on a static site), ads (none, since zero external requests rules them out, and nothing to buy), names (nobody sees a name you didn't share), replay value (daily ocean and events).
 
@@ -254,6 +254,7 @@ Technical (the repo's CLAUDE.md invariants apply):
 - Renderer: WebGPU through Three.js's WebGPURenderer with TSL shaders, falling back to WebGL2 automatically. Three.js is pinned at r186 (npm three 0.186.0, released 8 September 2026) and copied into the repo with its licence file, never loaded from a CDN. Its unminified build carries its own JSDoc, so the vendored files double as version-exact API docs.
 - The prototype lives at snap-hit.online/lab/manta/: a standalone page, not linked from the arcade shelf, marked noindex, and not embedded in a cabinet until launch.
 - Repo paths: the site is served from docs/, so the page is docs/lab/manta/, Three.js is docs/vendor/three/r186/, and this doc sits at the repo root, outside docs/, so it is never served. CLAUDE.md carries the lab's bounded exception to the one-file rule, plus the storage, vendoring and real-device rules that follow from it.
+- WebGPU guarantees 8 vertex buffers per render pipeline, and three.js spends one per attribute unless they are interleaved. Going over draws nothing and reports nothing (ten mantas once vanished that way), so the lab page counts its buffers and watches the device for errors on the phone. Headless Chrome 153 runs the WebGPU path for wiring and errors, but its canvas can't be read for pixel checks, which still run on WebGL2.
 - Audio: games default to silence when audio files can't load, recorded soundtracks aren't stored in the repo, and nothing streams from external hosts.
 - On-device storage for personal bests makes no network request, but confirm it against CLAUDE.md before using it.
 
@@ -318,13 +319,31 @@ Passes when:
 Tuned so far on the Pixel 9 (22 September), and the starting point for everything after the spike:
 
 - Wingspan 40 for leaders and 28 for followers, with followers 31 apart along the path. Collision radii stay 14 and 10 until the greybox tunes them, since those are gameplay numbers.
-- Wingbeat 0.35 Hz, a travelling wave of 1.4 radians along each wing, each follower 0.5 radians behind the one ahead.
-- Water made blue by hue rather than brightness, about rgb(4, 14, 29) in its body, so it stays dark enough for the hierarchy.
+- The outline in the table below: twice as wide as long, a leading edge swept back about 29 degrees, and a sickle wing ending in a sharp tip. The tail runs 0.30 W from the body's end, tapering from about 1.3 CSS pixels to 0.5, dark at the root and pale behind.
+- Wingbeat 0.35 Hz, a travelling wave of 1.4 radians along each wing, each follower 0.5 radians behind the one ahead, and 0.45 radians of depth at the tip. At 0.75 the outline narrowed by 27 percent and read as a kite, so the stroke now shows mostly as light moving across the wings.
+- Markings brighten rather than darken, so the hierarchy's medians hold: soft pale shoulder patches parting in a V, pale wingtips and a faint spine stripe.
+- Water made blue by hue rather than brightness, about rgb(4, 14, 29) in its body, moving to the reference photo's purer hue at the same brightness, about rgb(0, 15, 29).
 - Unattached mantas at 0.75 of #2b4a52.
-- The wake: deposit 0.0018 and fade 0.993 a frame, a half-life of about 1.9 seconds, carried mostly by sparkle (4.0) over a smooth ribbon (0.20). A smooth glow at the same brightness drowned an unattached manta swimming through it (1.43 times its surroundings against 2.72 to 3.64 with sparkle).
-- Bloom untinted at threshold 0.40, strength 0.6 and radius 0.5. At 0.25 a rival clipped to the same white as the player's train.
-- Neutral tone mapping, since without it the water nearly doubles in brightness and unattached mantas stop reading. Vignette 15 percent at the corners, grain 2 percent.
-- Cost on the Pixel 9 before bloom: 60 fps on both backends with the wake on. Bloom takes the page from 4 draw calls to 16.
+- The wake, in the drawer's units: fade 0.991, deposit 2.70, sparkle 6.4, ribbon 0.41, fresh wake whiteness 1.00 and plankton 0.60, as Nathan set them, trimmed only where the hierarchy requires. Sparkle carries it rather than a smooth glow, which drowned an unattached manta swimming through it (1.43 times its surroundings against 2.72 to 3.64 with sparkle).
+- Bloom untinted: strength 0.25, radius 0 and threshold 0.40. A wider radius lifted the water up to two wingspans from the train and hid wild mantas beside it; at threshold 0.25 a rival clipped to the same white as the player's train.
+- Neutral tone mapping, since without it the water nearly doubles in brightness and unattached mantas stop reading. Vignette 15 percent at the corners, grain 2 percent, and 4x multisampling at the high tier.
+- Cost on the Pixel 9: 60 fps on both backends with all of the above, 16 draw calls and 13 passes.
+
+The manta's outline, measured from a reference photo of a manta seen from above with both wings averaged. Values are fractions of the wingspan W: across is the distance out from the midline, and the edges are how far behind the head's front they sit. From 0.00 to 0.10 across is the head, a blunt front about 0.03 back made of two short rounded lobes (the rolled head fins). At the midline the body ends 0.52 back, where the tail starts.
+
+| Across | Leading edge | Trailing edge |
+|---|---|---|
+| 0.12 (shoulder) | 0.08 | 0.43 |
+| 0.16 | 0.10 | 0.39 |
+| 0.20 | 0.13 | 0.37 |
+| 0.25 | 0.15 | 0.33 |
+| 0.30 | 0.17 | 0.31 |
+| 0.35 | 0.19 | 0.29 |
+| 0.40 | 0.22 | 0.28 |
+| 0.44 | 0.24 | 0.28 |
+| 0.47 | 0.26 | 0.29 |
+| 0.49 | 0.28 | 0.30 |
+| 0.50 (tip) | 0.29 | 0.30 |
 
 **Greybox (milestone 2)**
 
@@ -452,6 +471,7 @@ If tests 1 to 3 still fail after tuning, rethink the rules before any art.
 - **Library weight against "Instant. Play."** Measured on the Pixel 9: 732 KB over the wire, 3.7 MB decoded, and the whole library costs about 140 to 170 ms of a 480 ms first frame. Decided: don't minify and don't trim. Minifying needs a build step and trimming means editing the vendored library, and both are invariants to spend on a small prize. The ocean paints in CSS before Three.js loads instead, so the screen is never blank.
 - **Shader bugs on particular phone GPUs.** Test on at least one iPhone and one cheap Android.
 - **Glow soup.** The brightness hierarchy is non-negotiable: if a screenshot looks spectacular but you can't find your train, it's wrong. It is measured by the four conditions in 7.2 at every stage and every quality tier.
+- **Moonlight competing with life.** Caustics that move everywhere could bury the information the light carries. They are capped below the dim tier, measured with the hierarchy at every stage, and stepped down by the quality tiers.
 - **Photosensitivity.** Cap flashes and offer a reduced-flash setting.
 - **Offensive names in links.** Names only reach people a player chose to send them to, and crew emblems are abstract.
 - **Country flags and politics.** A curated list, with disputed territories handled deliberately rather than by accident.
@@ -476,7 +496,7 @@ If tests 1 to 3 still fail after tuning, rethink the rules before any art.
 14. The country list, including disputed territories.
 15. What a manta link carries, and its length limit.
 16. How many visiting mantas one ocean holds, and how the pod is managed.
-17. The final palette: the spike's tuned values are in 10.2, and rival and identity hues still need a full, harmonious set.
+17. The final palette: the spike's tuned values are in 10.2, your own train is electric lime (P), and rival and identity hues still need a full, harmonious set.
 18. Whether 120 Hz is worth chasing on adaptive displays, and what that would cost.
 
 ## 13. Parked and rejected ideas
@@ -526,14 +546,16 @@ Parked, for later modes or future games:
 - **Run (P):** from starting alone to your next crash.
 - **Peak length:** the highest length in a run, and that run's score.
 - **Reef:** the arena's deadly boundary.
-- **Bloom:** a patch of dense plankton that draws wild mantas.
+- **Plankton bloom:** a patch of dense plankton that draws wild mantas. Briefs always say plankton bloom for this, because bloom alone means the renderer's glow.
 - **Daily ocean:** the seeded ocean everyone shares each day.
 - **Challenge link:** a link carrying a seed and a score to beat.
 - **Crash card:** the small card after a crash showing your peak, your best, a clip button, a challenge link and a way to your manta card, while play continues.
 - **Look spike:** the one-screen visual test that proves the look and frame rate before any gameplay.
 - **Wake:** the glowing trail a moving manta leaves in the light memory, carried mostly by sparkle.
 - **Sparkle:** the plankton's glittering crests, visible only where the water has been stirred.
-- **Bloom:** the soft glow that spreads around anything bright on screen. It is untinted, so it takes each source's own colour.
+- **Bloom:** the renderer's soft glow around anything bright on screen. It is untinted, so it takes each source's own colour.
+- **Caustics:** the moving web of light that moonlight refracted through the waves lays on the seabed.
+- **Marine snow:** faint specks drifting at three depths that give the water volume and scale.
 - **Light memory:** a low-resolution texture that remembers recent movement and lights the plankton. It is locked to the world, so the look spike keeps its camera still and scrolling it with a moving camera is the greybox's problem.
 - **Fallback:** the WebGL2 backend Three.js switches to when WebGPU isn't available.
 - **Lab page:** the prototype's standalone page at /lab/manta/, unlinked and marked noindex; it starts as a diagnostics page and grows into the look spike.
