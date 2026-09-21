@@ -27,6 +27,7 @@ import { Fn, vec2, vec3, color, clamp, exp, float, floor, fract, length, max, mi
 import { uTime } from './clock.js';
 import { TILE_UNITS as SEABED_TILE } from './seabed.js';
 import { U } from './params.js';
+import { lightTarget } from './lighten.js';
 
 /* Screen aspect, pushed in from fit() rather than read from a screen-size
    node, so the pattern is never stretched and the plumbing stays explicit. */
@@ -352,7 +353,10 @@ export function oceanNode () {
        the light memory's own steady state near a manta sits around 0.25: below
        0.04 is a cooled tail and should not burn at all. */
     const peak = max(max(stir.x, stir.y), stir.z);
-    const hot = mix(stir, vec3(peak, peak, peak),
+    /* Towards a WARM white where the wake is warm: a scarlet train's wake
+       lightened towards plain white read pink, and a wake is the widest
+       lightened thing on the screen. See lighten.js. */
+    const hot = mix(stir, lightTarget(stir),
                     smoothstep(float(0.04), float(0.22), peak).mul(U.whiteness));
 
     /* Marine snow: points of one to three device pixels, only a little

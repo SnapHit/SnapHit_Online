@@ -10,13 +10,19 @@
  * train.
  */
 export const PALETTE = [
-  { key: 'lime',   hex: 0xc8ff3c, cool: false },
-  { key: 'coral',  hex: 0xff6f4d, cool: false },
-  { key: 'orange', hex: 0xff9a3c, cool: false },
-  { key: 'red',    hex: 0xff4d5e, cool: false },
-  { key: 'violet', hex: 0xa07bff, cool: true  },
-  { key: 'purple', hex: 0xc46bff, cool: true  },
-  { key: 'azure',  hex: 0x3aa8ff, cool: true  },
+  { key: 'lime',    hex: 0xc8ff3c, cool: false },
+  { key: 'orange',  hex: 0xff9a3c, cool: false, warm: true },
+  /* Scarlet is for rivals and wild mantas only. Your train burns 1.4 times
+     hotter than its colour at everyone else's level, and a red that is
+     lightened that far is pink whatever the saturation floor does — so the
+     roll never deals it to you. 7.2 keeps pink for the pink manta. */
+  { key: 'scarlet', hex: 0xff3b30, cool: false, warm: true, player: false },
+  { key: 'violet',  hex: 0xa07bff, cool: true  },
+  { key: 'purple',  hex: 0xc46bff, cool: true  },
+  { key: 'azure',   hex: 0x3aa8ff, cool: true  },
+  /* Green replaces coral, which sat at hue 12 and read pink the moment
+     anything lightened it. At hue 137 this is clear of lime and of azure. */
+  { key: 'green',   hex: 0x3ddc84, cool: false },
 ];
 /* The cool-only wild set swaps the four warm hues for one turquoise, so the
    switch compares like with like rather than simply removing colours. */
@@ -96,9 +102,11 @@ export function rng (seed) {
 export function deal ({ seed, pinned, coolWild, rivals, wilds, train = 0 }) {
   const next = rng(seed);
   const all = PALETTE.slice();
+  /* The colours your train may roll. Scarlet is not one of them. */
+  const mineable = all.filter(c => c.player !== false);
   let mine = null;
   if (pinned) mine = all.find(c => c.key === pinned) || null;
-  if (!mine) mine = all[Math.floor(next() * all.length) % all.length];
+  if (!mine) mine = mineable[Math.floor(next() * mineable.length) % mineable.length];
 
   const rest = all.filter(c => c.key !== mine.key);
   /* Shuffled with the same generator, so one seed fixes the whole table. */

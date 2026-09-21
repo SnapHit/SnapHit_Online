@@ -7,6 +7,7 @@
 import { BufferGeometry, Float32BufferAttribute } from 'three';
 import { Fn, vec2, vec3, float, clamp, length, max, mix, smoothstep } from 'three/tsl';
 import { U } from './params.js';
+import { lightTarget } from './lighten.js';
 
 /* A manta seen from above, measured off Nathan's reference photo with both
    wings averaged. Wingspan 1.0, nose towards -Z.
@@ -174,7 +175,10 @@ export function markings (tint, shade, gx, gz) {
     const u = gx.abs();
     const v = gz.sub(HEAD_FRONT);
     const peak = max(max(tint.x, tint.y), tint.z);
-    const white = vec3(peak, peak, peak);
+    /* Not plain white: a warm colour lightens towards its own hue at the
+       saturation floor, so a marked scarlet or orange manta reads as lighter
+       red or orange rather than pink or peach. See lighten.js. */
+    const white = lightTarget(vec3(tint.x, tint.y, tint.z));
     const col = tint.mul(shade).toVar();
 
     /* Two shoulder patches, one each side of the spine, from just behind the

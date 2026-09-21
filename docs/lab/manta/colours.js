@@ -8,6 +8,7 @@
  */
 import { PALETTE, deal, levelFor, levelForYours } from './palette.js';
 import { P, onParam } from './params.js';
+import { lightTargetJS } from './lighten.js';
 
 /* Every manta is bright and saturated: v1.8 retires the dark wild manta
    along with the conditions that needed it. One base level for everyone —
@@ -48,14 +49,19 @@ export function yoursTint (hex) {
   const want = LUM(t);
   const over = Math.max(1, t[0], t[1], t[2]);
   const scaled = t.map(v => v / over);
-  const top = Math.max(scaled[0], scaled[1], scaled[2]);
+  /* Towards white for a cool colour, towards its own hue at the saturation
+     floor for a warm one — the same rule the markings and the wake use, so a
+     scarlet or orange train reads as lighter red or orange and never as pink
+     or peach. See lighten.js. */
+  const target = lightTargetJS(scaled);
+  const top = LUM(target);
   const have = LUM(scaled);
   /* w whitens each channel towards the peak, which lifts the luminance from
      `have` towards `top`. Solve w for the luminance the gain asked for, and
      never go below the 22% that was already there. */
   const solved = top > have ? (Math.min(want, top) - have) / (top - have) : 0;
   const w = Math.min(1, Math.max(YOURS_WHITE, solved));
-  return scaled.map(v => v + (top - v) * w);
+  return scaled.map((v, i) => v + (target[i] - v) * w);
 }
 
 /* How much hotter your train burns than the same colour would at the level
