@@ -18,9 +18,10 @@ import { REVISION } from 'three';
 import * as panel from './panel.js';
 import { P, U } from './params.js';
 import { createScene, describeView } from './scene.js';
-import { useLightMemory, useLongMemory, useSeabed, uViewW, uViewH, uShockC, uShockR, uShockA, uRippleOn } from './ocean.js';
+import { useLightMemory, useLongMemory, useSeabed, useCaustics, uCausticLayers, uViewW, uViewH, uShockC, uShockR, uShockA, uRippleOn } from './ocean.js';
 import { createLightMemory } from './lightmemory.js';
 import { createSeabed } from './seabed.js';
+import { createCaustics } from './caustics.js';
 import { createLab } from './renderer.js';
 import { createMantas, COUNT } from './mantas.js';
 import { createPost } from './post.js';
@@ -67,6 +68,8 @@ if (lm) useLightMemory(lm);
    has to exist before anything can be rendered into a target. */
 const seabed = FX ? createSeabed() : null;
 if (seabed) useSeabed(seabed);
+const caustics = FX ? createCaustics() : null;
+if (caustics) useCaustics(caustics);
 /* The long memory: the same machinery at a quarter of the resolution and a
    fade measured in tens of seconds. 0.9994 a frame at 60 is a half life of
    about nineteen seconds. Stamped by the same calls, rendered only when the
@@ -184,6 +187,7 @@ function stampMantas (dt) {
 function applyQuality (renderer) {
   /* Multisampling is a high-tier luxury: the tiers exist to give things up. */
   if (post) post.setAntialiasAllowed(quality.tier === 'high');
+  uCausticLayers.value = quality.tier === 'high' ? 2 : 1;
   const t = TIER_SETTINGS[quality.tier];
   lab.setPixelRatio(quality.scale);
   U.grain.value = t.grain ? P.grain : 0;
@@ -220,6 +224,7 @@ const lab = createLab({
       mantas.setBounds(v);
       uViewW.value = v.w; uViewH.value = v.h;
       if (lm) lm.setView(v);
+      if (lmSlow) lmSlow.setView(v);
       panel.set('view', describeView(v));
       panel.set('viewport', panel.describeViewport());
     },
@@ -243,10 +248,12 @@ const lab = createLab({
          the targets: changing the texture type afterwards would be too late. */
       if (!lmAttached) { lm.attach(renderer); lmAttached = true;
         panel.set('lm', lm.size + '×' + lm.size + '  ·  ' + lm.note); }
+      if (caustics && !caustics.baked) caustics.bake(renderer);
       if (seabed && !seabed.baked) {
         seabed.bake(renderer);
         panel.set('seabed', seabed.size + '×' + seabed.size + '  ·  ' + seabed.ms.toFixed(1) +
-                            ' ms to generate  ·  ' + seabed.tile + ' units a tile');
+                            ' ms to generate  ·  ' + seabed.tile + ' units a tile' +
+                            (caustics ? '  ·  caustics ' + caustics.size + '²' : ''));
       }
       lm.setFade(P.fade);
       lm.render(renderer, dt);

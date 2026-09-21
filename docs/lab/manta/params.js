@@ -83,6 +83,13 @@ export const SPEC = [
      near 35 on the suites' 0-255 scale, where the old water body sat at 13.
      Capped at 2, and the cap is where conditions 1 and 2 still hold: the
      brightest seabed has to stay under a rival's median. */
+  { key: 'caustic',        label: 'caustic strength',     def: 0.55,  min: 0,    max: 1.5,   step: 0.01,  gpu: true  },
+  { key: 'causticSpeed',   label: 'caustic speed',        def: 1.00,  min: 0,    max: 3,     step: 0.05,  gpu: true  },
+  /* How deeply a cloud dims the moon. 1 takes it to about a third at the
+     darkest point of a pass, which comes round about once a minute and takes
+     several seconds each way — 7.2 says moonlight changes slowly, never a
+     flash. */
+  { key: 'cloud',          label: 'cloud amount',         def: 1.00,  min: 0,    max: 1.5,   step: 0.05,  gpu: true  },
   { key: 'moonlight',      label: 'moonlight strength',   def: 1.00,  min: 0,    max: 2,     step: 0.05,  gpu: true  },
   { key: 'snow',           label: 'marine snow density',  def: 1.70,  min: 0,    max: 2,     step: 0.05,  gpu: true  },
   /* The fading light painting 7.2 calls the signature effect. 0 by default,

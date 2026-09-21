@@ -132,6 +132,11 @@ export function useLightMemory (memory) { lm = memory; }
 /* The baked seabed, set before the ocean node is built. */
 let seabedTex = null;
 export function useSeabed (s) { seabedTex = s; }
+/* The baked caustic web and the shadow target. */
+let caustics = null;
+export function useCaustics (c) { caustics = c; }
+/* High crosses two caustic webs, medium one, low holds it still. */
+export const uCausticLayers = uniform(2);
 /* A second, slower light memory under the fast one: the fading light painting
    a match leaves behind. Off by default. */
 let lmSlow = null;
@@ -208,7 +213,41 @@ export function oceanNode () {
     /* 195 degrees lit, 207 in shadow, saturation 0.93, straight off the
        reference photo. */
     const bedHue = mix(SEABED_SHADOW, SEABED_LIT, clamp(litness.sub(0.6).div(0.6), 0, 1));
-    const seabed = bedHue.mul(bedV.mul(moon).mul(SEABED_LEVEL));
+    /* Caustics: the same tileable web sampled TWICE at different scales,
+       scrolling in different directions, with the smaller of the two kept.
+       One web alone slides across the floor like a projected slide; two
+       crossing webs interfere, so knots appear where both agree and dissolve
+       as they drift apart — the light flows and re-forms without anything
+       being animated. The coordinates are bent by the surface ripple, which
+       is the one thing that makes it read as refracted rather than painted,
+       and the whole thing is softened as if seen through several metres of
+       water.
+
+       It MULTIPLIES the moonlight, so it brightens lit sand and barely
+       touches dark reef, exactly as light through water does. */
+    const cT = t.mul(U.causticSpeed);
+    const wob = vec2(
+      sin(world.y.mul(0.020).add(cT.mul(0.12))).mul(3.2),
+      sin(world.x.mul(0.017).sub(cT.mul(0.10))).mul(3.2));
+    const bent = world.add(wob);
+    const causticAt = (span, dx, dz) => caustics === null ? float(0.5)
+      : texture(caustics.texture,
+          vec2(bent.x.div(span).add(cT.mul(dx)), bent.y.div(span).add(cT.mul(dz)))).r;
+    const webA = causticAt(float(150.0), 0.0035, 0.0021);
+    const webB = causticAt(float(95.0), -0.0026, 0.0032);
+    const web = mix(webA, min(webA, webB), clamp(uCausticLayers.sub(1.0), 0, 1));
+    /* Softened, and centred on 1 so the web lifts the lit floor rather than
+       darkening everything it is not on. */
+    const caustic = float(1.0).add(web.sub(0.25).mul(U.caustic));
+
+    /* Cloud passes. One very large, very soft mask drifting across the view:
+       at its darkest the moon is about a third. Slow on purpose — a pass comes
+       round about once a minute and each transition takes several seconds. */
+    const cloudP = vec2(world.x.mul(0.0016).add(t.mul(0.010)), world.y.mul(0.0013).sub(t.mul(0.007)));
+    const cloudF = sin(cloudP.x).mul(0.6).add(sin(cloudP.y.mul(1.7).add(1.1)).mul(0.4));
+    const cloud = float(1.0).sub(smoothstep(float(0.30), float(0.95), cloudF).mul(U.cloud).mul(0.67));
+
+    const seabed = bedHue.mul(bedV.mul(moon).mul(caustic).mul(cloud).mul(SEABED_LEVEL));
 
     /* 3. the surface ripple. Two crossing waves, and only the tops of their
           product are kept, which gives short broken highlights rather than
