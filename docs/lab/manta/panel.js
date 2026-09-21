@@ -11,7 +11,7 @@
 
 /* Bumped by hand every time this page is edited, so a stale deploy is obvious
    from the phone rather than something you have to take on trust. */
-export const BUILD = '2026-09-22 08:45 UTC';
+export const BUILD = '2026-09-22 11:30 UTC';
 
 const params = new URLSearchParams(location.search);
 export const FORCE_WEBGL = params.get('backend') === 'webgl2';
@@ -219,21 +219,34 @@ export function accountBytes () {
     if (e.name.indexOf('/vendor/three/') === -1) continue;
     for (const [name, key] of VENDOR_FILES) if (e.name.indexOf('/' + name) !== -1) found[key] = e;
   }
-  let wireKb = 0, decodedKb = 0, n = 0, cached = 0;
+  let wireKb = 0, decodedKb = 0, n = 0, cached = 0, sized = 0, unsized = 0;
   for (const [name, key] of VENDOR_FILES) {
     const e = found[key];
     if (!e) { set(key, 'not reported'); continue; }
     n++;
-    const t = e.transferSize || 0, d = e.decodedBodySize || 0, c = cameFromCache(e);
+    const t = e.transferSize || 0, d = e.decodedBodySize || 0;
+    /* Both zero means the browser declined to tell us, not that nothing was
+       fetched — and a zero that is read as "no bytes from cache" came out on
+       the phone as "0 KB over the wire, 0 KB decoded — cold ... network",
+       which is three claims from no evidence. Say so instead. */
+    if (t === 0 && d === 0) { unsized++; set(key, 'sizes not reported'); continue; }
+    const c = cameFromCache(e);
+    sized++;
     wireKb += kbNum(t); decodedKb += kbNum(d); if (c) cached++;
     set(key, kb(t) + ' wire  ·  ' + kb(d) + ' decoded  ·  ' + (c ? 'from cache' : 'network'));
   }
   set('bytes', n === 0 ? 'not reported'
-    : wireKb + ' KB over the wire, ' + decodedKb + ' KB decoded, ' + n +
-      ' file' + (n === 1 ? '' : 's') +
-      (cached === 0 ? '  —  cold' : '  —  from cache, ' + cached + ' of ' + n));
+    : sized === 0 ? 'sizes not reported for any of the ' + n + ' vendor files'
+    : wireKb + ' KB over the wire, ' + decodedKb + ' KB decoded, ' + sized +
+      ' file' + (sized === 1 ? '' : 's') +
+      (unsized ? ' (' + unsized + ' not reported)' : '') +
+      (cached === 0 ? '  —  cold' : '  —  from cache, ' + cached + ' of ' + sized));
   const stamp = params.get('cold');
-  set('load', (n === 0 ? 'unknown' : cached === 0 ? 'cold' : cached === n ? 'warm' : 'mixed') +
+  /* Without sizes there is nothing to judge cold or warm from. */
+  const verdict = n === 0 ? 'unknown'
+    : sized === 0 ? 'sizes not reported'
+    : cached === 0 ? 'cold' : cached === sized ? 'warm' : 'mixed';
+  set('load', verdict +
       (stamp ? '  —  cache-busting stamp ?cold=' + stamp : '  —  plain URL, no stamp'));
 }
 
