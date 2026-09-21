@@ -19,14 +19,15 @@
  * silhouette narrowing and widening. That is what you actually see from above.
  */
 import {
-  InstancedMesh, BufferGeometry, Float32BufferAttribute, InstancedBufferAttribute,
+  InstancedMesh, InstancedBufferAttribute,
   MeshBasicNodeMaterial, DoubleSide, DynamicDrawUsage, Matrix4
 } from 'three';
 import {
-  Fn, vec3, float, sin, cos, clamp, positionGeometry, varying,
+  Fn, vec3, float, sin, cos, clamp, mix, smoothstep, step, positionGeometry, varying,
   instancedBufferAttribute
 } from 'three/tsl';
 import { uTime } from './clock.js';
+import { mantaGeometry, STATIONS, HEAD_FRONT, BODY_BACK, TAIL_LEN, TAIL_Z0, TAIL_W0, TAIL_W1, TURN_REF } from './shape.js';
 
 export const COUNT = 10;
 
@@ -97,48 +98,28 @@ function tint (hex, level) {
 
 /* ------------------------------------------------------------- geometry */
 
-/* A manta seen from above, wingspan 1.0, nose towards -Z: a swept disc, two
-   cephalic fins at the front and a thin tail. Drawn as a fan from a point
-   just behind the nose, so the outline is the only thing that has to be
-   right. DoubleSide, so winding cannot make it invisible. */
-function mantaGeometry () {
-  const outline = [
-    [ 0.00, -0.46], [ 0.11, -0.40], [ 0.24, -0.30], [ 0.38, -0.13],
-    [ 0.50,  0.04], [ 0.30,  0.09], [ 0.13,  0.14], [ 0.045, 0.30],
-    [ 0.028, 0.50], [-0.028, 0.50], [-0.045, 0.30], [-0.13,  0.14],
-    [-0.30,  0.09], [-0.50,  0.04], [-0.38, -0.13], [-0.24, -0.30],
-    [-0.11, -0.40],
-  ];
-  const fins = [
-    [[ 0.055, -0.44], [ 0.150, -0.60], [ 0.115, -0.40]],
-    [[-0.055, -0.44], [-0.150, -0.60], [-0.115, -0.40]],
-  ];
-  const pos = [];
-  const hub = [0.00, -0.06];
-  for (let i = 0; i < outline.length - 1; i++) {
-    const a = outline[i], b = outline[i + 1];
-    pos.push(hub[0], 0, hub[1], a[0], 0, a[1], b[0], 0, b[1]);
-  }
-  for (const f of fins) for (const v of f) pos.push(v[0], 0, v[1]);
-
-  const g = new BufferGeometry();
-  g.setAttribute('position', new Float32BufferAttribute(pos, 3));
-  return g;
-}
-
 /* ------------------------------------------------------------- the mesh */
 
 export function createMantas (scene) {
   const aPos   = new InstancedBufferAttribute(new Float32Array(COUNT * 3), 3).setUsage(DynamicDrawUsage);
   const aHead  = new InstancedBufferAttribute(new Float32Array(COUNT), 1).setUsage(DynamicDrawUsage);
   const aSize  = new InstancedBufferAttribute(new Float32Array(COUNT), 1).setUsage(DynamicDrawUsage);
-  const aPhase = new InstancedBufferAttribute(new Float32Array(COUNT), 1).setUsage(DynamicDrawUsage);
+  /* Phase, bank and the lagged bank in ONE attribute, not three. WebGPU
+     guarantees only eight vertex buffers per pipeline and three allocates one
+     per attribute, so every separate attribute is a slot spent. */
+  const aMotion = new InstancedBufferAttribute(new Float32Array(COUNT * 3), 3).setUsage(DynamicDrawUsage);
   const aTint  = new InstancedBufferAttribute(new Float32Array(COUNT * 3), 3).setUsage(DynamicDrawUsage);
+
+
+  const instanced = [aPos, aHead, aSize, aTint, aMotion];
 
   const nPos   = instancedBufferAttribute(aPos,   'vec3');
   const nHead  = instancedBufferAttribute(aHead,  'float');
   const nSize  = instancedBufferAttribute(aSize,  'float');
-  const nPhase = instancedBufferAttribute(aPhase, 'float');
+  /* x: the wingbeat's phase. y: how hard this manta is turning, which drives
+     the bank. z: the same thing lagged, which drives the tail, still swinging
+     when the turn is over. */
+  const nMotion = instancedBufferAttribute(aMotion, 'vec3');
   const nTint  = instancedBufferAttribute(aTint,  'vec3');
 
   const material = new MeshBasicNodeMaterial({ side: DoubleSide });
@@ -154,12 +135,32 @@ export function createMantas (scene) {
     /* The scene's clock and not the renderer's, so the cut's slow motion
        slows the wingbeat along with the water. See clock.js. */
     const theta = sin(
-      uTime.mul(TAU * BEATS_PER_SECOND).add(nPhase).sub(span.mul(SPAN_LAG))
+      uTime.mul(TAU * BEATS_PER_SECOND).add(nMotion.x).sub(span.mul(SPAN_LAG))
     ).mul(FLAP_AMPLITUDE).mul(span);
 
     /* Rotate each wing element about the spine. x narrows by cos, y lifts by
        sin. Under a top-down camera the narrowing is the visible half. */
-    const flexed = vec3(g.x.mul(cos(theta)), r.mul(sin(theta)), g.z).mul(nSize);
+    /* The bank. In a turn the INNER wing foreshortens, up to 8 percent at the
+       tip and nothing at the spine, which is what a manta rolling into a
+       corner looks like from above. Heading increases to the left, so the
+       inner wing is the -x one; straight swimming has bank 0 and stays
+       exactly symmetric. */
+    const inner = clamp(g.x.negate().mul(2.0).mul(nMotion.y), 0, 1);
+    const banked = g.x.mul(cos(theta)).mul(float(1.0).sub(inner.mul(0.08)));
+
+    /* The tail trails. It is driven by the LAGGED turn, so it is still
+       swinging out when the turn has finished, and it swings to the outside:
+       a left turn throws it right.
+
+       How far along the tail a vertex sits comes from its z, not from a
+       per-vertex flag: the tail is the only geometry behind where the body
+       ends, so `run` is exactly 0 over the whole body and 0 to 1 down the
+       tail. That is one fewer vertex buffer, and on WebGPU the count is what
+       matters — see shape.js. */
+    const run = clamp(g.z.sub(TAIL_Z0).div(TAIL_LEN), 0, 1);
+    const sway = run.mul(nMotion.z).mul(0.06);
+
+    const flexed = vec3(banked.add(sway), r.mul(sin(theta)), g.z).mul(nSize);
 
     /* Heading, about Y. At heading 0 the nose points -Z, which is up the
        screen under scene.js's camera. */
@@ -177,10 +178,27 @@ export function createMantas (scene) {
      18% at most and cannot be mistaken for a tier. Wrapped in one varying:
      the tint is a per-instance vertex attribute and the fragment stage cannot
      read one directly on either backend. */
-  const shade = float(1.0).sub(clamp(positionGeometry.z.add(0.46).div(0.96), 0, 1).mul(0.18));
+  /* A slight fall-off from the head towards the tail so a manta is not a flat
+     cut-out, and on the tail itself a dark base running pale for its rear two
+     thirds. Both from the coordinates, so the geometry carries no per-vertex
+     attribute and the mesh stays inside WebGPU's eight vertex buffers. */
+  const zg = positionGeometry.z;
+  const zNorm = clamp(zg.sub(HEAD_FRONT).div(BODY_BACK), 0, 1);
+  const bodyShade = float(1.0).sub(zNorm.mul(0.18));
+  const tailRun = clamp(zg.sub(TAIL_Z0).div(TAIL_LEN), 0, 1);
+  const tailShade = mix(float(0.55), float(1.10), smoothstep(float(0.04), float(0.40), tailRun));
+  const shade = mix(bodyShade, tailShade, step(float(0.001), tailRun));
   material.colorNode = varying(nTint.mul(shade));
 
   const mesh = new InstancedMesh(mantaGeometry(), material, COUNT);
+
+  /* Every attribute this mesh needs is one WebGPU vertex buffer, and WebGPU
+     guarantees only eight. Counted from the objects rather than written down,
+     so it cannot drift from the truth, and reported on the panel because the
+     device that enforces the limit is Nathan's phone and not this container.
+     Going over does not throw: the device refuses the pipeline, the mesh is
+     not drawn, and nothing is said. That is how ten invisible mantas shipped. */
+  const vertexBuffers = Object.keys(mesh.geometry.attributes).length + instanced.length;
   mesh.frustumCulled = false;      // every instance is placed by the shader
   /* The instance matrix is identity and stays identity: placement, heading
      and size all come from the attributes above. InstancedMesh allocates it
@@ -220,6 +238,8 @@ export function createMantas (scene) {
      colour it is. 7.2 forbids relying on hue alone, and the inverse matters
      just as much — the hue has to survive the effect. */
   const baseTint = roles.map(r => r.tint.slice());
+  const prevHead = new Float32Array(COUNT);
+  const lagTurn  = new Float32Array(COUNT);
   const tintScale = new Float32Array(COUNT).fill(1);
 
   for (let i = 0; i < COUNT; i++) {
@@ -229,9 +249,9 @@ export function createMantas (scene) {
     /* Each follower's beat is about half a radian behind the one ahead, so
        the whole train ripples like a single ribbon rather than flapping in
        unison. Everything else gets a scattered phase. */
-    aPhase.setX(i, roles[i].kind === 'train' ? -0.5 * roles[i].idx : (i * 1.37) % TAU);
+    aMotion.setX(i, roles[i].kind === 'train' ? -0.5 * roles[i].idx : (i * 1.37) % TAU);
   }
-  aSize.needsUpdate = aTint.needsUpdate = aPhase.needsUpdate = true;
+  aSize.needsUpdate = aTint.needsUpdate = aMotion.needsUpdate = true;
 
   /* The figure eight, and an arc-length table over it.
   
@@ -386,13 +406,38 @@ export function createMantas (scene) {
             Math.atan2(-(-Math.sin(a) * dir), -(Math.cos(a) * dir)));
     }
 
+    /* How hard everyone is turning, worked out from the headings this frame
+       rather than from the paths, so it is right for the train, the singles
+       and anything scattered alike. The lagged copy is a first-order filter:
+       the tail is still swinging out when the turn has finished. */
+    if (dt > 0) {
+      const k = 1 - Math.exp(-dt / 0.25);
+      for (let i = 0; i < COUNT; i++) {
+        const h = aHead.getX(i);
+        let d = h - prevHead[i];
+        while (d >  Math.PI) d -= TAU;
+        while (d < -Math.PI) d += TAU;
+        prevHead[i] = h;
+        const rate = d / dt;
+        lagTurn[i] += (rate - lagTurn[i]) * k;
+        const c = v => Math.max(-1, Math.min(1, v / TURN_REF));
+        aMotion.setY(i, c(rate)); aMotion.setZ(i, c(lagTurn[i]));
+      }
+      aMotion.needsUpdate = true;
+    } else {
+      for (let i = 0; i < COUNT; i++) prevHead[i] = aHead.getX(i);
+    }
+
     aPos.needsUpdate = true;
     aHead.needsUpdate = true;
   }
 
   /* aPos is exposed so a test can drive update() across a whole cycle and
      measure the gaps, which is the only honest way to check the spacing. */
-  return { mesh, update, setBounds, count: COUNT, aPos, aHead, aSize, aTint,
+  return { mesh, update, setBounds, count: COUNT, aPos, aHead, aSize, aTint, aMotion, vertexBuffers,
            setFree, isFree, setTintScale, getTintScale,
-           pathLength: PATH_LENGTH, spacing: SPACING };
+           pathLength: PATH_LENGTH, spacing: SPACING,
+           /* The outline, so a test can measure what was built against the
+              table it was built from rather than against a picture of it. */
+           shape: { HEAD_FRONT, BODY_BACK, TAIL_LEN, TAIL_W0, TAIL_W1, STATIONS } };
 }

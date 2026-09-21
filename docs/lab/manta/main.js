@@ -56,6 +56,11 @@ if (lm) useLightMemory(lm);
 const { scene, camera, fit, view } = createScene();
 const mantas = createMantas(scene);
 panel.set('mantas', String(mantas.count) + ' in 1 instanced mesh');
+/* WebGPU guarantees eight vertex buffers per pipeline and three allocates one
+   per attribute. Over the limit the device refuses the pipeline in silence:
+   nothing throws, nothing is logged, the mesh simply is not drawn. */
+panel.set('vbuf', mantas.vertexBuffers + ' of 8 that WebGPU guarantees' +
+                  (mantas.vertexBuffers > 8 ? '  \u00b7  OVER THE LIMIT' : ''));
 panel.set('lm', lm ? (lm.size + '×' + lm.size + '  ·  ' + lm.note) : 'off (?fx=off)');
 
 window.__lab = { scene, camera, view, mantas, lm, FX };

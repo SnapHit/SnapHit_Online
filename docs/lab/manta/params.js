@@ -32,7 +32,7 @@ export const SPEC = [
      a smooth glow bright enough to see lifts every pixel around it and a dim
      manta swimming through the wake loses its contrast. */
   { key: 'sparkle',        label: 'sparkle strength',     def: 7.20,  min: 0,    max: 8,     step: 0.1,   gpu: true  },
-  { key: 'ribbon',         label: 'ribbon strength',      def: 0.40,  min: 0,    max: 1,     step: 0.01,  gpu: true  },
+  { key: 'ribbon',         label: 'ribbon strength',      def: 0.32,  min: 0,    max: 1,     step: 0.01,  gpu: true  },
   /* 0 is the committed look, and at 0 the shader mixes by exactly zero, so
      the render is unchanged rather than nearly unchanged. Above 0 the newest,
      brightest light in a wake burns towards white before cooling back to the
