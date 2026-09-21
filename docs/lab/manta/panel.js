@@ -11,7 +11,7 @@
 
 /* Bumped by hand every time this page is edited, so a stale deploy is obvious
    from the phone rather than something you have to take on trust. */
-export const BUILD = '2026-09-22 14:27 UTC';
+export const BUILD = '2026-09-22 22:03 UTC';
 
 const params = new URLSearchParams(location.search);
 export const FORCE_WEBGL = params.get('backend') === 'webgl2';
@@ -227,11 +227,20 @@ export function accountBytes () {
     if (!e) { set(key, 'not reported'); continue; }
     n++;
     const t = e.transferSize || 0, d = e.decodedBodySize || 0;
-    /* Both zero means the browser declined to tell us, not that nothing was
-       fetched — and a zero that is read as "no bytes from cache" came out on
-       the phone as "0 KB over the wire, 0 KB decoded — cold ... network",
-       which is three claims from no evidence. Say so instead. */
-    if (t === 0 && d === 0) { unsized++; set(key, 'sizes not reported'); continue; }
+    /* EITHER zero means the browser declined to tell us, not that nothing was
+       fetched. Both-zero was caught here already; a transfer size with a
+       DECODED size of zero was not, and on a cold stamped WebGPU load on the
+       Pixel that still printed "0 KB decoded ... network" — a decoded size
+       from no evidence and a cache verdict from no evidence. Whenever a
+       figure is missing, on any load type, say so instead of inventing one.
+
+       decodedBodySize is the one that goes missing: it is zero for a
+       cross-origin response without Timing-Allow-Origin and for some
+       service-worker and early-hints paths, none of which mean no bytes.
+       transferSize of zero is NOT missing — it is what a memory-cache hit
+       looks like, and cameFromCache() below reads it that way, so testing
+       both with an OR called every warm load unreported. */
+    if (d === 0) { unsized++; set(key, 'sizes not reported'); continue; }
     const c = cameFromCache(e);
     sized++;
     wireKb += kbNum(t); decodedKb += kbNum(d); if (c) cached++;

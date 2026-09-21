@@ -15,8 +15,8 @@ export const SPEC = [
   /* 0.993: a half life of about 1.9 seconds at 60 fps, where 0.985 gave 0.76.
      The design doc asks for "a fading light painting of itself", and at three
      quarters of a second there was barely a painting. */
-  { key: 'fade',           label: 'light memory fade',    def: 0.988, min: 0.90, max: 0.999, step: 0.001, gpu: false },
-  { key: 'stamp',          label: 'wake deposit',         def: 2.70,  min: 0,    max: 3,     step: 0.05,  gpu: false },
+  { key: 'fade',           label: 'light memory fade',    def: 0.987, min: 0.90, max: 0.999, step: 0.001, gpu: false },
+  { key: 'stamp',          label: 'wake deposit',         def: 3,  min: 0,    max: 3,     step: 0.05,  gpu: false },
   /* Nathan tuned these on the phone and they are his values, with one
      exception. At ribbon 0.79 the brightest wake read 54.6 against an
      unattached manta's 43.1 at high tier and 50.3 against 42.8 at medium, so
@@ -31,15 +31,19 @@ export const SPEC = [
      wake's energy goes into sparkle rather than into a smooth ribbon, because
      a smooth glow bright enough to see lifts every pixel around it and a dim
      manta swimming through the wake loses its contrast. */
-  { key: 'sparkle',        label: 'sparkle strength',     def: 6.60,  min: 0,    max: 8,     step: 0.1,   gpu: true  },
-  { key: 'ribbon',         label: 'ribbon strength',      def: 0.52,  min: 0,    max: 1,     step: 0.01,  gpu: true  },
+  { key: 'sparkle',        label: 'sparkle strength',     def: 8,  min: 0,    max: 8,     step: 0.1,   gpu: true  },
+  { key: 'ribbon',         label: 'ribbon strength',      def: 0.25,  min: 0,    max: 1,     step: 0.01,  gpu: true  },
   /* 0 is the committed look, and at 0 the shader mixes by exactly zero, so
      the render is unchanged rather than nearly unchanged. Above 0 the newest,
      brightest light in a wake burns towards white before cooling back to the
      blue-green the manta deposited. Section 7.2 keeps the wake blue-green, so
      this is a question for Nathan's eye, not a number to guess at. */
-  { key: 'whiteness',      label: 'fresh wake whiteness', def: 0.74,     min: 0,    max: 1,     step: 0.01,  gpu: true  },
-  { key: 'plankton',       label: 'plankton density',     def: 1.80,  min: 0,    max: 3,     step: 0.05,  gpu: true  },
+  { key: 'whiteness',      label: 'fresh wake whiteness', def: 0.86,     min: 0,    max: 1,     step: 0.01,  gpu: true  },
+  /* Nathan had this at its old cap of 3, so the cap moved. 5 is where the
+     conditions still hold and not a round number picked for comfort: at 5,
+     with marine snow at its own new cap, condition 3 reads 2.04 and 2.03 at
+     the two tiers that hold it tightest, against a bar of 2.0. */
+  { key: 'plankton',       label: 'plankton density',     def: 3,  min: 0,    max: 5,     step: 0.05,  gpu: true  },
   { key: 'bloomStrength',  label: 'bloom strength',       def: 0.15,  min: 0,    max: 2,     step: 0.05,  gpu: false },
   /* 0.40, not the brief's starting 0.25. At 0.25 bloom lifted a rival to 231.9
      against the train's 231.6: both clipped to the tone mapper's white point
@@ -55,14 +59,14 @@ export const SPEC = [
      which is what keeps a rival from clipping to the player's white. */
   { key: 'bloomRadius',    label: 'bloom radius',         def: 0.53,  min: 0,    max: 1,     step: 0.01,  gpu: false },
   { key: 'bloomThreshold', label: 'bloom threshold',      def: 0.35,  min: 0,    max: 1,     step: 0.01,  gpu: false },
-  { key: 'grain',          label: 'grain',                def: 0.002,  min: 0,    max: 0.10,  step: 0.002, gpu: true  },
+  { key: 'grain',          label: 'grain',                def: 0.012,  min: 0,    max: 0.10,  step: 0.002, gpu: true  },
   /* 0.45 radians at the tip, down from 0.75. The outline is right when the
      animal is still and the stroke was ruining it: cos(0.75) narrows the
      outer wing by 27 per cent, which steepens the leading edge from 29 to
      about 40 degrees and makes the crescent read as a kite for much of every
      beat. At 0.45 a straight-swimming manta never narrows by more than about
      10 per cent. What the stroke lost in shape it gets back in light. */
-  { key: 'flap',           label: 'wingbeat depth',       def: 0.65,  min: 0.2,  max: 0.9,   step: 0.01,  gpu: true  },
+  { key: 'flap',           label: 'wingbeat depth',       def: 0.9,  min: 0.2,  max: 0.9,   step: 0.01,  gpu: true  },
   /* 4x multisampling on the scene pass, high tier only. A switch rather than
      a number because it is a render target option, and here so Nathan can see
      what it costs on the phone. */
@@ -90,29 +94,33 @@ export const SPEC = [
      exactly 2.00 and 2.01, on the bar; at 4.00 both conditions fail, 1.76
      and 1.74 with crests at 88.7 against a dimmest manta of 84.5. So 2.75,
      which leaves margin rather than sitting on the line. */
-  { key: 'caustic',        label: 'caustic strength',     def: 1.50,  min: 0,    max: 1.5,   step: 0.01,  gpu: true  },
-  { key: 'causticSpeed',   label: 'caustic speed',        def: 2.80,  min: 0,    max: 3,     step: 0.05,  gpu: true  },
+  { key: 'caustic',        label: 'caustic strength',     def: 1.5,  min: 0,    max: 1.5,   step: 0.01,  gpu: true  },
+  { key: 'causticSpeed',   label: 'caustic speed',        def: 3,  min: 0,    max: 3,     step: 0.05,  gpu: true  },
   /* How deeply a cloud dims the moon. 1 takes it to about a third at the
      darkest point of a pass, which comes round about once a minute and takes
      several seconds each way — 7.2 says moonlight changes slowly, never a
      flash. */
-  { key: 'cloud',          label: 'cloud amount',         def: 0.80,  min: 0,    max: 1.5,   step: 0.05,  gpu: true  },
-  { key: 'moonlight',      label: 'moonlight strength',   def: 2.00,  min: 0,    max: 2.75,  step: 0.05,  gpu: true  },
+  { key: 'cloud',          label: 'cloud amount',         def: 0,  min: 0,    max: 1.5,   step: 0.05,  gpu: true  },
+  { key: 'moonlight',      label: 'moonlight strength',   def: 2.75,  min: 0,    max: 2.75,  step: 0.05,  gpu: true  },
   /* How dark a manta's shadow makes the sand under it. The shadow is on the
      FLOOR only, offset down and left about half a wingspan. */
-  { key: 'shadow',         label: 'shadow strength',      def: 0.55,  min: 0,    max: 1,     step: 0.05,  gpu: true  },
-  { key: 'snow',           label: 'marine snow density',  def: 1.70,  min: 0,    max: 2,     step: 0.05,  gpu: true  },
+  /* Also at its cap, and shadows only ever darken the floor, so nothing in
+     the conditions pushes back: widened to 2 for headroom. */
+  { key: 'shadow',         label: 'shadow strength',      def: 1,  min: 0,    max: 2,     step: 0.05,  gpu: true  },
+  /* Was capped at 2, which is where Nathan left it. 4 is the same story as
+     plankton: measured together at both caps, the conditions still hold. */
+  { key: 'snow',           label: 'marine snow density',  def: 2,  min: 0,    max: 4,     step: 0.05,  gpu: true  },
   /* The fading light painting 7.2 calls the signature effect. 0 by default,
      and at 0 the whole pass is skipped rather than merely multiplied out.
      Capped at 0.6: it is added to the same water the hierarchy measures. */
-  { key: 'longMemory',     label: 'long memory',          def: 0,     min: 0,    max: 0.6,   step: 0.01,  gpu: true  },
+  { key: 'longMemory',     label: 'long memory',          def: 0.05,     min: 0,    max: 0.6,   step: 0.01,  gpu: true  },
   /* 0 is the random roll that v1.8 asks for; 1 to 7 pin one of the palette's
      colours, in its order: lime, coral, orange, red, violet, purple, azure. */
   { key: 'player',         label: 'player colour 0=random 1-7', def: 0, min: 0, max: 7, step: 1, gpu: false },
   /* Which colours wild mantas may be dealt. 0 is warm and cool, 1 swaps the
      four warm hues for a turquoise so the comparison is like for like. */
   { key: 'coolWild',       label: 'wild palette 0=warm+cool 1=cool', def: 0, min: 0, max: 1, step: 1, gpu: false },
-  { key: 'marks',          label: 'marking strength',     def: 1.00,  min: 0,    max: 2,     step: 0.05,  gpu: true  },
+  { key: 'marks',          label: 'marking strength',     def: 2,  min: 0,    max: 2,     step: 0.05,  gpu: true  },
 ];
 
 /* Plain numbers, read from JS each frame. */
