@@ -354,5 +354,6 @@ export function createMantas (scene) {
 
   /* aPos is exposed so a test can drive update() across a whole cycle and
      measure the gaps, which is the only honest way to check the spacing. */
-  return { mesh, update, setBounds, count: COUNT, aPos, aHead, pathLength: PATH_LENGTH, spacing: SPACING };
+  return { mesh, update, setBounds, count: COUNT, aPos, aHead, aSize, aTint,
+           pathLength: PATH_LENGTH, spacing: SPACING };
 }

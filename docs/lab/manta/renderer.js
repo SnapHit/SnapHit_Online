@@ -90,6 +90,10 @@ export function createLab ({ scene, camera, forceWebGL, hooks }) {
       return false;
     }
     hooks.onNote('WebGPU failed here, so this is drawing on WebGL2 instead. ' + what, err);
+    /* Everything holding GPU resources belongs to the renderer that just
+       died. The light memory and the post stack are rebuilt against the new
+       one before the loop restarts. */
+    hooks.onRebuild(renderer);
     /* Measure the backend that is actually running, not the one that died. */
     goodFrames = 0; firstFrameClaimed = false;
     hooks.onReset();
@@ -99,12 +103,20 @@ export function createLab ({ scene, camera, forceWebGL, hooks }) {
     return true;
   }
 
+  let prevNow = null;
   function loop () {
     renderer.setAnimationLoop(() => {
       const now = performance.now();
+      /* Clamped: a hidden tab must not hand the light memory a one-second
+         step and wipe it, or the mantas a teleport. */
+      const dt = prevNow === null ? 1 / 60 : Math.min(Math.max((now - prevNow) / 1000, 1 / 240), 0.1);
+      prevNow = now;
       try {
-        hooks.onUpdate(now);
-        renderer.render(scene, camera);
+        hooks.onUpdate(now, dt);
+        /* Offscreen work first: the light memory has to be a finished frame
+           before the ocean shader samples it. */
+        hooks.onBeforeRender(renderer, dt);
+        hooks.onDraw(renderer, scene, camera);
       } catch (e) {
         renderer.setAnimationLoop(null);
         if (!forceWebGL && !fellBack && goodFrames < PROBATION) { fallBack('First draw threw.', e); return; }
@@ -149,5 +161,12 @@ export function createLab ({ scene, camera, forceWebGL, hooks }) {
   addEventListener('resize', resize);
   addEventListener('orientationchange', () => setTimeout(resize, 120));
 
-  return { start, resize, get renderer () { return renderer; } };
+  /* Stopping the loop on demand. A browser test that wants to compare where
+     a manta is with what the pixels show has to freeze both at the same
+     instant; without this the scene moves between reading the positions and
+     taking the screenshot, which is about twenty world units at cruise. */
+  function pause () { if (renderer) renderer.setAnimationLoop(null); }
+  function resume () { if (renderer) loop(); }
+
+  return { start, resize, pause, resume, get renderer () { return renderer; } };
 }

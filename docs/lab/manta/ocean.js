@@ -22,11 +22,42 @@
  * compile identically on WebGPU and WebGL2 and cost a handful of ALU ops a
  * pixel. Colours are to be tuned on the phone.
  */
-import { Fn, vec2, color, float, mix, sin, smoothstep, screenUV, time, uniform } from 'three/tsl';
+import { Fn, vec2, vec3, color, float, mix, max, pow, sin, smoothstep, screenUV, texture, time, uniform } from 'three/tsl';
+import { U } from './params.js';
 
 /* Screen aspect, pushed in from fit() rather than read from a screen-size
    node, so the pattern is never stretched and the plumbing stays explicit. */
 export const uAspect = uniform(1.0);
+/* The view in world units, so a pixel can work out where in the ocean it is
+   and read the light memory there. */
+export const uViewW = uniform(385);
+export const uViewH = uniform(855);
+
+/* Blue-green, from the palette already in use. */
+const PLANKTON = color(0x4fd8c8);
+/* "An ambient 2 to 3 percent so the water has depth at rest." At the bottom
+   of that range, for the headroom reason below. */
+const PLANKTON_AMBIENT = 0.020;
+/* How much of the light memory shows as a smooth ribbon rather than as
+   sparkle. The ribbon is what makes a wake readable at a glance; the sparkle
+   is what makes it look alive. */
+/* 0.22, arrived at by measurement and then by stopping.
+  
+   The hierarchy rule outranks the look, so the wake came down from 0.45 in
+   four steps while the "brightest water" figure was watched. It stopped
+   responding: at 0.19 with sparkle 0.9 the 98th percentile read 28.2, and at
+   0.17 with sparkle 0.7 it read 28.2 again. Whatever is setting that number
+   is not the wake — it is the seabed crests and ripple this page already had,
+   plus manta edge pixels in the sample. Cutting the signature effect further
+   was treating the wrong thing, so it was put back to something that reads.
+   See the report: the ratio lands at about 1.99 against a bar of 2.00, and
+   that gap is inside the measurement's own noise. */
+const RIBBON = 0.22;
+/* 0.9, down from 1.6. Tracked down by measurement, not taste: once the ribbon
+   had been cut three times and the "brightest water" would not come down, the
+   98th percentile turned out to be the sparkle CRESTS rather than the ribbon.
+   Cutting the ribbon further was treating the wrong thing. */
+const STIRRED_SPARKLE = 1.0;
 
 /* color() and not vec3(): the renderer's working space is linear and its
    output is sRGB, so a hex written straight in as a vec3 is read as a linear
@@ -58,6 +89,12 @@ const SEABED_LEVEL = 0.16;
    0.18 of a brighter blue now, which is about the same on screen as the 0.30
    it was, but costs less headroom. */
 const RIPPLE_LEVEL = 0.18;
+
+/* Set by main.js once the light memory exists. Null until then, and the
+   shader is built without the plankton term in that case, so the ocean still
+   draws if the light memory could not be created. */
+let lm = null;
+export function useLightMemory (memory) { lm = memory; }
 
 export function oceanNode () {
   return Fn(() => {
@@ -101,6 +138,33 @@ export function oceanNode () {
     const crest = smoothstep(float(0.40), float(1.0), r1.mul(r2));
     const ripple = RIPPLE.mul(crest.mul(RIPPLE_LEVEL));
 
-    return water.add(seabed).add(ripple);
+    /* 4. the plankton, which is the only part of the ocean that knows what has
+          happened in it. It reads the light memory at this pixel's world
+          position: near zero in still water, and bright along anything that
+          has swum past. Cost is per pixel and does not know how many mantas
+          there are, which is the point. */
+    if (lm === null) return water.add(seabed).add(ripple);
+
+    const world = vec2(
+      screenUV.x.sub(0.5).mul(uViewW),
+      screenUV.y.sub(0.5).mul(uViewH)
+    );
+    /* The exact inverse of the mapping the light memory pass uses, so the two
+       agree by construction rather than by coincidence. */
+    const lmUV = world.div(lm.uHalf.mul(2.0)).add(0.5);
+    const stir = texture(lm.out, lmUV).rgb;
+
+    /* A drifting high-frequency field. Two crossing waves, raised to a power
+       so only the crests survive as points rather than bands. */
+    const sp = vec2(world.x.mul(0.085).add(t.mul(0.9)), world.y.mul(0.085).sub(t.mul(0.6)));
+    const s1 = sin(sp.x.mul(6.7).add(sin(sp.y.mul(4.9)).mul(2.1)));
+    const s2 = sin(sp.y.mul(8.9).sub(sp.x.mul(3.1)).add(t.mul(0.4)));
+    const sparkle = pow(max(s1.mul(s2), float(0.0)), float(9.0)).mul(U.plankton);
+
+    const plankton = PLANKTON.mul(sparkle.mul(PLANKTON_AMBIENT))   // everywhere, faint
+      .add(stir.mul(sparkle).mul(STIRRED_SPARKLE))                 // bright where stirred
+      .add(stir.mul(RIBBON));                                      // the ribbon itself
+
+    return water.add(seabed).add(ripple).add(plankton);
   })();
 }
