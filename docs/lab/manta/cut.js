@@ -23,6 +23,20 @@
  */
 import { uShockC, uShockR, uShockA } from './ocean.js';
 
+/* THE SHORT PARTS OF THIS ARE INVISIBLE TO A HEADLESS BROWSER, and that, not
+   a wiring fault, is why the burst "never reached the screen" in 1G and 1H.
+   SwiftShader draws this page at 1.3 frames a second: measured, the first
+   frame after a trigger lands at 0.773 s, and 0 of the next 14 frames fell
+   inside the burst (0.30 s), the shockwave (0.45 s) or the slow beat
+   (0.25 s). All three were over before anything was drawn.
+
+   So the clock the set piece runs on is injectable. The page keeps
+   performance.now() — a beat specified in milliseconds still lasts that many
+   milliseconds on the phone — and only a test replaces it, so a check can
+   stand the cut still at 0.15 s and look at it. */
+let clock = () => performance.now();
+export function setCutClock (fn) { clock = typeof fn === 'function' ? fn : () => performance.now(); }
+
 /* Page-wide flash ledger. Every flash anywhere asks here first. */
 const flashes = [];
 export function flashAllowed (now) {
@@ -86,7 +100,7 @@ export function createCut ({ mantas, lm, burstSlot }) {
   function trigger () {
     if (t >= 0 && t < REFORM_TIME) return false;   // already running
     reduced = isReduced();
-    flashScale = (flashAllowed(performance.now()) ? 1 : 0.25) * (reduced ? 0.30 : 1);
+    flashScale = (flashAllowed(clock()) ? 1 : 0.25) * (reduced ? 0.30 : 1);
 
     /* Cut where the train actually is, between followers 2 and 3. */
     const a = CUT_FROM - 1, b = CUT_FROM;
@@ -110,14 +124,14 @@ export function createCut ({ mantas, lm, burstSlot }) {
       });
       mantas.setTintScale(i, 1 + (FLASH_PEAK - 1) * flashScale);
     }
-    t0 = performance.now();
+    t0 = clock();
     t = 0;
     return true;
   }
 
   function update (dt) {
     if (t < 0) return 1;
-    t = (performance.now() - t0) / 1000;
+    t = (clock() - t0) / 1000;
 
     /* The shockwave. Skipped outright under reduced motion: it moves every
        pixel on screen, which is exactly what that setting is asking not to

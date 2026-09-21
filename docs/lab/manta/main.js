@@ -25,7 +25,7 @@ import { createCaustics } from './caustics.js';
 import { createLab } from './renderer.js';
 import { createMantas, COUNT } from './mantas.js';
 import { createPost } from './post.js';
-import { createCut, flashAllowed } from './cut.js';
+import { createCut, flashAllowed, setCutClock } from './cut.js';
 import { createQuality, TIER_SETTINGS } from './tiers.js';
 import { setSceneTime } from './clock.js';
 import { watchConsole, watchDevice, onIssue, issueText, counts } from './watch.js';
@@ -94,6 +94,10 @@ const quality = createQuality({ forcedTier: FORCED_TIER, dpr: devicePixelRatio }
 window.__lab = window.__lab || {};
 const cut = createCut({ mantas, lm, burstSlot: BURST_SLOT });
 window.__lab.cut = cut;
+/* A test can stand the set piece still: the short parts of it are over
+   before a headless browser has drawn a frame (see cut.js). The page itself
+   never calls this, so the phone still runs on the real clock. */
+window.__lab.cutClock = setCutClock;
 panel.wireCut(cut);
 
 /* The tuning drawer. Built once, here, after the params registry exists and
