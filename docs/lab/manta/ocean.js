@@ -53,35 +53,35 @@ const PLANKTON = color(0x4fd8c8);
 /* "An ambient 2 to 3 percent so the water has depth at rest." At the bottom
    of that range, for the headroom reason below. */
 const PLANKTON_AMBIENT = 0.020;
-/* How much of the light memory shows as a smooth ribbon rather than as
-   sparkle. The ribbon is what makes a wake readable at a glance; the sparkle
-   is what makes it look alive. */
-/* 0.45. It went 0.45 to 0.17 chasing the hierarchy rule's "brightest water"
-   figure, and that was a mistake: the figure barely responded (28.2 at ribbon
+/* RIBBON and SPARKLE: how much of the light memory shows as a smooth ribbon
+   and how much as sparkle. The ribbon is what makes a wake readable at a
+   glance; the sparkle is what makes it look alive.
+
+   Both defaults (0.20 and 4.0) live in params.js now, so the tuning drawer can
+   move them without a shader rebuild. The reasoning stays here.
+
+   The split is the whole answer to a conflict the measurements turned up. A
+   smooth glow bright enough to see lifts every pixel around it, so a dim manta
+   swimming through a wake loses its contrast: measured at 1.43 times its
+   surroundings inside a wake against 3.39 in clear water, with the same code.
+   Sparkle carries the same sense of stirred, living water while leaving most
+   of the pixels between the crests dark, so a silhouette still reads against
+   it. Section 7.2 asks for both a glow and plankton; this is which of the two
+   does the work.
+
+   The ribbon went 0.45 to 0.17 once, chasing the hierarchy rule's "brightest
+   water" figure, and that was a mistake: the figure barely responded (28.2 at
    0.19, 28.2 again at 0.17), because what sets it is the seabed crests and
    ripple this page already had, not the wake. On the phone the result was a
    trail you could barely see.
-  
-   The rule's PURPOSE is that a dim manta stays findable, and that is measured
-   directly now, as the dim manta against the water immediately around it,
-   rather than against the brightest patch anywhere on screen. That local
-   figure is what predicts whether you can pick it out. */
-const RIBBON = 0.20;
-/* 0.9, down from 1.6. Tracked down by measurement, not taste: once the ribbon
-   had been cut three times and the "brightest water" would not come down, the
-   98th percentile turned out to be the sparkle CRESTS rather than the ribbon.
-   Cutting the ribbon further was treating the wrong thing. */
-/* The wake's energy goes here rather than into the smooth ribbon below, and
-   that split is the whole answer to a conflict the measurements turned up.
-  
-   A smooth glow bright enough to see lifts every pixel around it, so a dim
-   manta swimming through a wake loses its contrast: measured at 1.43 times
-   its surroundings inside a wake against 3.39 in clear water, with the same
-   code. Sparkle carries the same sense of stirred, living water while leaving
-   most of the pixels between the crests dark, so a silhouette still reads
-   against it. Section 7.2 asks for both a glow and plankton; this is which of
-   the two does the work. */
-const STIRRED_SPARKLE = 4.0;
+
+   The same thing was measured again, harder, under brief 1D: taking the ribbon
+   from 0.20 to 0.05 moved an unattached manta's contrast against the water
+   around it only from 2.25 to 2.37 times, and setting the DEPOSIT to zero
+   moved it not at all (2.20 to 2.34). What lifts the water in the failing case
+   is the bloom halo of a train manta a wingspan and a half away: with bloom
+   strength at 0 the same frame reads 3.11 times. Neither of these two numbers
+   is the lever for that, which is why neither was changed. */
 
 /* color() and not vec3(): the renderer's working space is linear and its
    output is sRGB, so a hex written straight in as a vec3 is read as a linear
@@ -199,9 +199,20 @@ export function oceanNode () {
     const s2 = sin(sp.y.mul(8.9).sub(sp.x.mul(3.1)).add(t.mul(0.4)));
     const sparkle = pow(max(s1.mul(s2), float(0.0)), float(9.0)).mul(U.plankton);
 
+    /* Fresh wake whiteness. The newest, brightest light a manta leaves burns
+       towards white before it cools back to the blue-green it deposited, which
+       is what makes a wake look hot at its head. At the committed 0 the mix
+       weight is exactly zero, so `hot` IS `stir` and the render is unchanged
+       rather than nearly unchanged. The window runs from 0.04 to 0.22 because
+       the light memory's own steady state near a manta sits around 0.25: below
+       0.04 is a cooled tail and should not burn at all. */
+    const peak = max(max(stir.x, stir.y), stir.z);
+    const hot = mix(stir, vec3(peak, peak, peak),
+                    smoothstep(float(0.04), float(0.22), peak).mul(U.whiteness));
+
     const plankton = PLANKTON.mul(sparkle.mul(PLANKTON_AMBIENT))   // everywhere, faint
-      .add(stir.mul(sparkle).mul(STIRRED_SPARKLE))                 // bright where stirred
-      .add(stir.mul(RIBBON));                                      // the ribbon itself
+      .add(hot.mul(sparkle).mul(U.sparkle))                        // bright where stirred
+      .add(hot.mul(U.ribbon));                                     // the ribbon itself
 
     return water.add(seabed).add(ripple).add(plankton);
   })();

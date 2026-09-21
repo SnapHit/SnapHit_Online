@@ -141,10 +141,59 @@
     box-shadow: inset 0 0 0 1px rgba(127,227,208,.45);
   }
 
+  /* ---- the tuning drawer ---- */
+  /* Full width at the top of the bar's flex row. Capped and scrollable so it
+     can never take more than four tenths of the screen: the train is what is
+     being judged, and a drawer over the train judges nothing. */
+  #drawer { flex: 1 1 100%; }
+  #drawerToggle { width: 100%; }
+  #drawerBody[hidden] { display: none; }
+  /* While the drawer is open the bar's other buttons and the diagnostics panel
+     both stand down. They are not what Nathan is doing, and between them they
+     are most of the screen that the ocean can have back — which is the
+     difference between the drawer covering the train and sitting under it.
+     The panel also has to go because the drawer sits over it: a translucent
+     drawer with twenty rows of diagnostics showing through was unreadable, and
+     it took looking at a screenshot to see it. The backend and the frame rate
+     stay on the chip, which is the part worth having while tuning. */
+  body.tuning #bar > button, body.tuning #panel { display: none; }
+  /* Opaque, and not nearly opaque. See above. */
+  #bar #drawerToggle { background: #0b1526; color: #bfeee3; }
+  #drawerBody {
+    margin-top: 10px; padding: 8px 12px;
+    max-height: 38vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    border-radius: 10px;
+    background: #040912;
+    box-shadow: inset 0 0 0 1px rgba(120,190,210,.28);
+  }
+  .srow { display: block; padding: 1px 0; }
+  .shead {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; font-size: 12px; line-height: 1.3; color: #9fb4c7;
+  }
+  .sval { color: #bfeee3; font-variant-numeric: tabular-nums; }
+  .srow input[type=range] {
+    display: block; width: 100%; height: 20px; margin: 0;
+    accent-color: #7fe3d0; background: transparent;
+  }
+  /* Nine sliders are taller than the drawer is allowed to be, so the list
+     scrolls — and Copy values and Reset were below the fold, which is where
+     buttons go to be missed. Stuck to the bottom of the scroller instead, on
+     the same opaque ground so nothing reads through them. */
+  #drawerActions {
+    position: sticky; bottom: -8px; z-index: 1;
+    display: flex; gap: 10px; margin-top: 8px;
+    padding: 8px 0; background: #040912;
+  }
+  #drawerActions button { flex: 1 1 0; min-height: 40px; font-size: 15px; }
+
   @media (orientation: landscape) and (max-height: 520px) {
     #panel { max-width: 56%; max-height: calc(100% - 74px - env(safe-area-inset-top, 0px)); }
     #bar { left: auto; width: 40%; }
     #bar button { min-height: 40px; font-size: 14px; }
+    /* The bar is off to the right here, so the ocean is never behind the
+       drawer and it can have more of the height. */
+    #drawerBody { max-height: 58vh; }
     #backend { font-size: 22px; }
   }
 
@@ -180,6 +229,20 @@
 </div>
 
 <div id="bar" hidden>
+  <!-- The drawer is the first thing in the bar, so it sits low on the screen,
+       appears and disappears with the rest of the expanded panel, and pushes
+       nothing around when it opens. It starts collapsed on purpose. -->
+  <div id="drawer">
+    <button id="drawerToggle" type="button" class="ghost"
+            aria-expanded="false" aria-controls="drawerBody">Tuning</button>
+    <div id="drawerBody" hidden>
+      <div id="drawerList"></div>
+      <div id="drawerActions">
+        <button id="copyValues" type="button" class="ghost">Copy values</button>
+        <button id="resetValues" type="button" class="ghost">Reset</button>
+      </div>
+    </div>
+  </div>
   <button id="cut" type="button" class="wide">Cut the train</button>
   <button id="swap" type="button">Switch backend</button>
   <button id="copy" type="button" class="ghost">Copy report</button>

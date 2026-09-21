@@ -25,6 +25,7 @@ import { createMantas, COUNT } from './mantas.js';
 import { createPost } from './post.js';
 import { createCut, flashAllowed } from './cut.js';
 import { createQuality, TIER_SETTINGS } from './tiers.js';
+import { createDrawer } from './drawer.js';
 
 const query = new URLSearchParams(location.search);
 /* ?fx=off builds the page without the light memory, the plankton or anything
@@ -64,9 +65,17 @@ const cut = createCut({ mantas, lm, burstSlot: BURST_SLOT });
 window.__lab.cut = cut;
 panel.wireCut(cut);
 
+/* The tuning drawer. Built once, here, after the params registry exists and
+   before the first frame, so a slider is live the moment the bar is open. */
+const drawer = createDrawer();
+window.__lab.drawer = drawer;
+
 /* Debug handles. This is a lab page and a browser test has to be able to see
    the shockwave's real uniforms and the scene's own clock, not infer them. */
 window.__lab.shock = () => ({ x: uShockC.value.x, z: uShockC.value.y, r: uShockR.value, a: uShockA.value });
+/* The live tunables, so a test can prove a slider reaches the uniform the
+   shader actually samples rather than infer it from a picture. */
+window.__lab.params = { P, U };
 window.__lab.simTime = () => simTime;
 window.__lab.flashAllowed = flashAllowed;
 window.__lab.quality = quality;
