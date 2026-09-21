@@ -260,6 +260,12 @@
     'three/addons/': BASE + 'addons/'
   };
   if (q) imports[BASE + 'three.core.js'] = BASE + 'three.core.js' + q;
+  /* The 'three/addons/' prefix mapping cannot carry a query, so a cold load
+     would quietly serve the two addons this page imports out of cache. Import
+     maps prefer the most specific key, so name them. */
+  if (q) for (const a of ['tsl/display/BloomNode.js', 'tsl/display/CRT.js']) {
+    imports['three/addons/' + a] = BASE + 'addons/' + a + q;
+  }
   var el = document.createElement('script');
   el.type = 'importmap';
   el.textContent = JSON.stringify({ imports: imports });

@@ -19,7 +19,12 @@ export const SPEC = [
   { key: 'stamp',          label: 'stamp strength',  def: 1.00,  min: 0,    max: 3,     step: 0.05,  gpu: false },
   { key: 'plankton',       label: 'plankton',        def: 1.00,  min: 0,    max: 3,     step: 0.05,  gpu: true  },
   { key: 'bloomStrength',  label: 'bloom strength',  def: 0.60,  min: 0,    max: 2,     step: 0.05,  gpu: false },
-  { key: 'bloomThreshold', label: 'bloom threshold', def: 0.25,  min: 0,    max: 1,     step: 0.01,  gpu: false },
+  /* 0.40, not the brief's starting 0.25. At 0.25 bloom lifted a rival to 231.9
+     against the train's 231.6: both clipped to the tone mapper's white point
+     and the top of the hierarchy collapsed, leaving hue as the only thing
+     telling your train from a rival's. Section 7.2 forbids exactly that.
+     The brief says to pull the threshold up rather than brighten anything. */
+  { key: 'bloomThreshold', label: 'bloom threshold', def: 0.40,  min: 0,    max: 1,     step: 0.01,  gpu: false },
   { key: 'grain',          label: 'grain',           def: 0.02,  min: 0,    max: 0.10,  step: 0.002, gpu: true  },
 ];
 

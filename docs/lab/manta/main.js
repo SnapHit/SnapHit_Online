@@ -7,6 +7,7 @@
  *   ocean.js        the ocean layers and the plankton, one shader
  *   lightmemory.js  the fading texture every moving thing stamps into
  *   mantas.js       one instanced mesh, ten mantas, wings flexed in TSL
+ *   post.js         bloom and the final grade, through a RenderPipeline
  *   renderer.js     the backend, the automatic WebGL2 fallback and the loop
  *
  * Imported by relative path from the same folder. No build step, no bundler,
@@ -20,12 +21,22 @@ import { useLightMemory, uViewW, uViewH } from './ocean.js';
 import { createLightMemory } from './lightmemory.js';
 import { createLab } from './renderer.js';
 import { createMantas, COUNT } from './mantas.js';
+import { createPost } from './post.js';
 
 const query = new URLSearchParams(location.search);
 /* ?fx=off builds the page without the light memory, the plankton or anything
    that reads them, so the cost of the look can be measured against the bare
    scene on a real phone rather than guessed at. */
 export const FX = query.get('fx') !== 'off';
+/* ?bloom=gold|teal|white and ?tone=off|aces|agx|neutral, so the two judgement
+   calls in the grade can be compared on the phone rather than argued about. */
+const BLOOM_TINT = query.get('bloom') || 'gold';
+const TONE = query.get('tone') || 'neutral';
+/* ?vig=0 turns the vignette off, which is the only way to measure what it is
+   actually doing: comparing the centre of the screen with its corners also
+   measures the ocean's own gradient and whatever the bloom is doing to the
+   wake near the middle. */
+const VIG = query.has('vig') ? Number(query.get('vig')) : null;
 
 panel.initRows(REVISION);
 panel.probeAdapter();
@@ -41,6 +52,7 @@ panel.set('mantas', String(mantas.count) + ' in 1 instanced mesh');
 panel.set('lm', lm ? (lm.size + '×' + lm.size + '  ·  ' + lm.note) : 'off (?fx=off)');
 
 window.__lab = { scene, camera, view, mantas, lm, FX };
+window.__lab.post = () => post;
 /* lab is assigned below, once createLab has run. */
 
 /* ------------------------------------------------------ stamping the wake */
@@ -50,6 +62,7 @@ window.__lab = { scene, camera, view, mantas, lm, FX };
 const prevX = new Float32Array(COUNT), prevZ = new Float32Array(COUNT);
 let havePrev = false;
 let lmAttached = false;
+let post = null;
 
 /* Tuned against the render, not guessed: with a fade of 0.985 a pixel under a
    passing manta accumulates about fifty frames of this before it clears, so
@@ -133,12 +146,26 @@ const lab = createLab({
       lm.setFade(P.fade);
       lm.render(renderer, dt);
     },
-    onDraw (renderer, sc, cam) { renderer.render(sc, cam); },
+    onDraw (renderer, sc, cam) {
+      /* The pipeline needs the renderer, which only exists once the backend
+         is up, so it is built on the first draw and rebuilt after a fallback.
+         Note that renderer.render() is NOT called when there is a pipeline:
+         the scene render happens inside the pass. */
+      if (FX && post === null) {
+        post = createPost({ renderer, scene: sc, camera: cam, tint: BLOOM_TINT, tone: TONE });
+        if (VIG !== null && isFinite(VIG)) post.setVignette(VIG);
+        panel.set('passes', String(post.passes) + '  ·  bloom ' + BLOOM_TINT + ', tone ' + TONE);
+      }
+      if (post) post.render(); else renderer.render(sc, cam);
+    },
     onRebuild (renderer) {
       /* The renderer that owned these has gone. Probe the new backend and let
          the targets reallocate against it. */
       lmAttached = false;
       havePrev = false;
+      /* The pipeline, its pass target and the bloom mips all belong to the
+         renderer that just died. */
+      if (post) { post.dispose(); post = null; }
     },
     onFrame (now, renderer) {
       panel.accountFrame(now);
