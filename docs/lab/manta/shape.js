@@ -179,22 +179,28 @@ export function markings (tint, shade, gx, gz) {
        part behind, so the ellipse's centre walks outwards down its length —
        that is the V. */
     const centre = float(0.045).add(clamp(v.sub(0.05).div(0.17), 0, 1).mul(0.055));
-    const shoulder = ellipse(u.sub(centre).div(0.062), v.sub(0.135).div(0.092))
+    /* A quarter larger than 1F's and lifted further towards white. At play
+       scale a manta is about 40 CSS pixels across, so a mark that is subtle
+       in a close-up is nothing at all: bolder and simpler beats finer. */
+    const shoulder = ellipse(u.sub(centre).div(0.078), v.sub(0.135).div(0.115))
       .mul(U.marks);
-    col.assign(mix(col, mix(tint, white, 0.35).mul(1.22).mul(shade), clamp(shoulder, 0, 1)));
+    col.assign(mix(col, mix(tint, white, 0.55).mul(1.30).mul(shade), clamp(shoulder, 0, 1)));
 
     /* Pale wingtips over the outer tenth of the span, fading inwards along
        the trailing side: the leading edge runs from 0.025 at the spine to
        0.29 at the tip, so this is measured from that line back. */
     const lead = float(0.025).add(u.mul(0.53));
-    const tipMark = smoothstep(float(0.425), float(0.50), u)
-      .mul(smoothstep(lead.sub(0.008), lead.add(0.05), v))
+    /* A clearer pale crescent: it starts further in and follows the trailing
+       side, so the tip reads as a curved band rather than a faint smudge. */
+    const tipMark = smoothstep(float(0.375), float(0.47), u)
+      .mul(smoothstep(lead.sub(0.004), lead.add(0.030), v))
       .mul(U.marks);
-    col.assign(mix(col, mix(tint, white, 0.30).mul(1.16).mul(shade), clamp(tipMark, 0, 1)));
+    col.assign(mix(col, mix(tint, white, 0.45).mul(1.26).mul(shade), clamp(tipMark, 0, 1)));
 
-    /* A faint lighter stripe along the spine, 0.20 to 0.40 back. */
-    const stripe = ellipse(u.div(0.055), v.sub(0.30).div(0.115)).mul(U.marks).mul(0.55);
-    col.assign(mix(col, mix(tint, white, 0.15).mul(1.10).mul(shade), clamp(stripe, 0, 1)));
+    /* The spine stripe is gone. At 40 CSS pixels across it was a smudge
+       between the two shoulder patches that read as neither, and dropping it
+       lets the patches be the pattern. It is in the history if a close-up
+       ever wants it back. */
 
     return col;
   })();

@@ -27,7 +27,7 @@ import {
   instancedBufferAttribute
 } from 'three/tsl';
 import { uTime } from './clock.js';
-import { U } from './params.js';
+import { P, U, onParam } from './params.js';
 import { mantaGeometry, markings, STATIONS, HEAD_FRONT, BODY_BACK, TAIL_LEN, TAIL_Z0, TAIL_W0, TAIL_W1, TURN_REF } from './shape.js';
 
 export const COUNT = 10;
@@ -50,7 +50,18 @@ const SPAN_LAG = 1.4;             // travelling wave: the tip trails the root
 /* The brightness hierarchy from section 7.2, and it is not negotiable: your
    train brightest, rivals bright, anything unattached dim, background darkest.
    No warm colours anywhere in this spike; warm is reserved for danger. */
-const YOURS  = 0xa8fff2;
+/* Electric lime, doc v1.6: "Slither's lesson is saturated colour on dark".
+   White was ruled out because it merges with the fresh wake and the moonlight,
+   and at whiteness 1.00 the freshest wake IS white. The presets are what the
+   drawer offers; PLAYERS[0] is the committed one. */
+const PLAYERS = [0xc8ff3c, 0xeaf6ff, 0xa8fff2];
+const YOURS  = PLAYERS[0];
+/* Lime is a slightly darker colour than the mint it replaces — 229 against
+   236 in sRGB luminance — and 7.2 says your train is the brightest thing on
+   screen, so the level carries it back rather than the hue being compromised.
+   Measured against the render, not computed: at 1.00 the train's median read
+   218 where mint read 225. */
+const PLAYER_LEVEL = 1.12;
 const RIVALS = [0x58d8c0, 0x64b4ff, 0x9a9bff, 0x58d8c0];
 const WILD   = 0x2b4a52;
 const RIVAL_LEVEL = 0.45;
@@ -264,7 +275,7 @@ export function createMantas (scene) {
   for (let i = 0; i < 5; i++) {
     roles.push({ kind: 'train', idx: i,
       size: i === 0 ? LEADER_SIZE : FOLLOWER_SIZE,
-      tint: tint(YOURS, 1.0) });
+      tint: tint(YOURS, PLAYER_LEVEL) });
   }
   for (let i = 0; i < 3; i++) {
     /* Two of the singles are rival leaders, one is unattached and dim. */
@@ -288,6 +299,23 @@ export function createMantas (scene) {
   const prevHead = new Float32Array(COUNT);
   const lagTurn  = new Float32Array(COUNT);
   const tintScale = new Float32Array(COUNT).fill(1);
+
+  /* The player's colour is a preset the drawer can change, so the train's
+     base tint is rewritten rather than baked. Everything downstream reads
+     baseTint, including the cut's fades, so a colour change cannot be undone
+     by the next flash. */
+  function setPlayer (which) {
+    const hex = PLAYERS[Math.max(0, Math.min(PLAYERS.length - 1, Math.round(which)))];
+    for (let i = 0; i < COUNT; i++) {
+      if (roles[i].kind !== 'train') continue;
+      const t = tint(hex, PLAYER_LEVEL);
+      baseTint[i] = t.slice();
+      const k = tintScale[i];
+      aTint.setXYZ(i, t[0] * k, t[1] * k, t[2] * k);
+    }
+    aTint.needsUpdate = true;
+  }
+  onParam((key, value) => { if (key === 'player') setPlayer(value); });
 
   for (let i = 0; i < COUNT; i++) {
     aSize.setX(i, roles[i].size);
@@ -481,7 +509,9 @@ export function createMantas (scene) {
 
   /* aPos is exposed so a test can drive update() across a whole cycle and
      measure the gaps, which is the only honest way to check the spacing. */
-  return { mesh, update, setBounds, count: COUNT, aPos, aHead, aSize, aTint, aMotion, vertexBuffers,
+  setPlayer(P.player);
+
+  return { mesh, update, setBounds, count: COUNT, aPos, aHead, aSize, aTint, aMotion, vertexBuffers, setPlayer, PLAYERS,
            setFree, isFree, setTintScale, getTintScale,
            pathLength: PATH_LENGTH, spacing: SPACING,
            /* The outline, so a test can measure what was built against the
