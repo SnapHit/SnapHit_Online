@@ -267,7 +267,7 @@ export function createMantas (scene) {
   }
 
   const colours = createColours({ COUNT, roles, aTint,
-                                 rivals: RIVAL_TRAINS, wilds: WILD_COUNT });
+                                 rivals: RIVAL_TRAINS, wilds: WILD_COUNT, train: 5 });
 
   for (let i = 0; i < COUNT; i++) {
     aSize.setX(i, roles[i].size);
@@ -294,6 +294,8 @@ export function createMantas (scene) {
            gainFor: colours.gainFor,
            setFree, isFree,
            setTintScale: colours.setTintScale, getTintScale: colours.getTintScale,
+           setCutMix: colours.setCutMix, getCutMix: colours.getCutMix,
+           ownColour: colours.ownColour,
            pathLength: movers.pathLength, spacing: movers.spacing,
            /* The outline, so a test can measure what was built against the
               table it was built from rather than against a picture of it. */

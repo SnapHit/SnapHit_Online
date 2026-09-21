@@ -54,6 +54,12 @@ const SLOW_SCALE = 0.35;
 const FADE_TIME = 4.0;        // flash down to dim
 const REFORM_TIME = 6.0;
 const FLASH_PEAK = 2.4;       // multiple of the manta's own brightness
+/* What the burst deposits into the light memory at its brightest. 7.2 wants
+   its first half second brighter than your train and then a fall back into
+   the wake, and the deposit accumulates over the frames it is stamped for, so
+   this is not the brightness you see — it is what gets there. Measured on
+   WebGL2: at 0.055 the burst peaked at half the train's brightness. */
+const BURST_DEPOSIT = 0.38;
 const DIM_LEVEL = 0.22;       // where a scattered manta ends up
 
 /* The cut is between the second and third follower, so indices 3 and 4 are
@@ -123,6 +129,9 @@ export function createCut ({ mantas, lm, burstSlot }) {
         turn: spread * 0.22,
       });
       mantas.setTintScale(i, 1 + (FLASH_PEAK - 1) * flashScale);
+      /* It comes away still wearing your colour: 7.2 says a severed follower
+         glows in its train's colour first and only then drifts to its own. */
+      if (mantas.setCutMix) mantas.setCutMix(i, 0);
     }
     t0 = clock();
     t = 0;
@@ -151,22 +160,42 @@ export function createCut ({ mantas, lm, burstSlot }) {
       if (t < 0.30) {
         const k = 1 - t / 0.30;
         lm.stamp(burstSlot, centre.x, centre.z, centre.x, centre.z,
-                 70 + t * 260, 0.55, 1.0, 0.92, 0.055 * k * k * flashScale);
+                 70 + t * 260, 0.55, 1.0, 0.92, BURST_DEPOSIT * k * k * flashScale);
       } else {
         lm.stamp(burstSlot, 0, 0, 0, 0, 1, 0, 0, 0, 0);
       }
     }
 
-    /* Flash down to dim. Brightness only: the hue never moves. */
+    /* Flash down to dim, and the colour with it. The brightness falls from
+       the flash to DIM_LEVEL over the same four seconds that the hue crosses
+       from the train's colour to the manta's own — 7.2: it "glows in that
+       colour while it's up for grabs, until its own colour returns". The two
+       are deliberately on one timeline: a manta that is fading out and
+       changing colour at different rates reads as two separate events. */
     if (t <= FADE_TIME) {
       const k = Math.min(t / FADE_TIME, 1);
       const peak = 1 + (FLASH_PEAK - 1) * flashScale;
       const level = peak + (DIM_LEVEL - peak) * easeInOut(k);
-      for (let i = CUT_FROM; i < 5; i++) mantas.setTintScale(i, level);
+      const mix = easeInOut(k);
+      for (let i = CUT_FROM; i < 5; i++) {
+        mantas.setTintScale(i, level);
+        if (mantas.setCutMix) mantas.setCutMix(i, mix);
+      }
+    } else if (t < REFORM_TIME) {
+      /* And back again as the train re-forms: the colour returns over the
+         two seconds between the fade ending and the manta rejoining, so the
+         train does not snap back into your colour in one frame. */
+      const k = (t - FADE_TIME) / Math.max(REFORM_TIME - FADE_TIME, 1e-6);
+      for (let i = CUT_FROM; i < 5; i++) {
+        if (mantas.setCutMix) mantas.setCutMix(i, 1 - easeInOut(Math.min(k, 1)));
+      }
     }
 
     if (t >= REFORM_TIME) {
-      for (let i = CUT_FROM; i < 5; i++) { mantas.setFree(i, null); mantas.setTintScale(i, 1); }
+      for (let i = CUT_FROM; i < 5; i++) {
+        mantas.setFree(i, null); mantas.setTintScale(i, 1);
+        if (mantas.setCutMix) mantas.setCutMix(i, 0);
+      }
       if (lm && burstSlot !== undefined) lm.stamp(burstSlot, 0, 0, 0, 0, 1, 0, 0, 0, 0);
       t = -1;
       return 1;

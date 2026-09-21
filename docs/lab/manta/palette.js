@@ -93,7 +93,7 @@ export function rng (seed) {
 
 /* The deal. Your colour first, then everyone else from what is left; wild
    mantas may repeat a colour once the deck runs out, rivals never do. */
-export function deal ({ seed, pinned, coolWild, rivals, wilds }) {
+export function deal ({ seed, pinned, coolWild, rivals, wilds, train = 0 }) {
   const next = rng(seed);
   const all = PALETTE.slice();
   let mine = null;
@@ -117,5 +117,14 @@ export function deal ({ seed, pinned, coolWild, rivals, wilds }) {
   const wildColours = [];
   for (let i = 0; i < wilds; i++) wildColours.push(pool[i % pool.length]);
 
-  return { mine, rivals: rivalColours, wilds: wildColours };
+  /* Every manta in YOUR train also owns a wild colour of its own, drawn from
+     the same pool. It is not worn while the manta is in the train — that
+     wears your colour — but 7.2 says a manta cut loose "glows in that colour
+     while it's up for grabs, until its own colour returns", so it has to
+     have one to return to. Never your colour, for the same reason nobody
+     else's is. */
+  const trainColours = [];
+  for (let i = 0; i < train; i++) trainColours.push(pool[(i + wilds) % pool.length]);
+
+  return { mine, rivals: rivalColours, wilds: wildColours, train: trainColours };
 }

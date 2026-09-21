@@ -67,7 +67,7 @@ export function gainFor (key) {
   return LUM(yoursTint(c.hex)) / LUM(tint(c.hex, levelFor(c.hex, BASE_LEVEL)));
 }
 
-export function createColours ({ COUNT, roles, aTint, rivals, wilds }) {
+export function createColours ({ COUNT, roles, aTint, rivals, wilds, train }) {
   /* The deal. A seed per load, ?seed= to reproduce one, ?player= to pin the
      roll for a test. */
   const query = new URLSearchParams(location.search);
@@ -82,34 +82,57 @@ export function createColours ({ COUNT, roles, aTint, rivals, wilds }) {
      colour it is. 7.2 forbids relying on hue alone, and the inverse matters
      just as much — the hue has to survive the effect. */
   const baseTint = roles.map(() => [0, 0, 0]);
+  /* And what each one goes back to when it is cut loose. For everybody
+     outside your train that is the colour it already wears; for a follower it
+     is the wild colour it owns but does not show while it is yours. 7.2: a
+     scattered manta "glows in that colour while it's up for grabs, until its
+     own colour returns". */
+  const ownTint = roles.map(() => [0, 0, 0]);
   const tintScale = new Float32Array(COUNT).fill(1);
+  /* 0 wears its train's colour, 1 wears its own. Only the cut moves it. */
+  const cutMix = new Float32Array(COUNT);
 
   function applyTint (i) {
-    const t = baseTint[i], k = tintScale[i];
-    aTint.setXYZ(i, t[0] * k, t[1] * k, t[2] * k);
+    const a = baseTint[i], b = ownTint[i], m = cutMix[i], k = tintScale[i];
+    aTint.setXYZ(i, (a[0] + (b[0] - a[0]) * m) * k,
+                    (a[1] + (b[1] - a[1]) * m) * k,
+                    (a[2] + (b[2] - a[2]) * m) * k);
     aTint.needsUpdate = true;
   }
 
   function rollColours (newSeed) {
     if (newSeed !== undefined) seed = newSeed >>> 0;
-    dealt = deal({ seed, pinned, coolWild: P.coolWild >= 0.5, rivals, wilds });
+    dealt = deal({ seed, pinned, coolWild: P.coolWild >= 0.5, rivals, wilds, train });
     for (let i = 0; i < COUNT; i++) {
       const r = roles[i];
-      let t;
-      if (r.kind === 'train') t = yoursTint(dealt.mine.hex);
-      else if (r.kind === 'rival') t = baseTintFor(dealt.rivals[r.rival].hex);
-      else t = baseTintFor(dealt.wilds[r.idx].hex);
+      let t, own;
+      if (r.kind === 'train') {
+        t = yoursTint(dealt.mine.hex);
+        own = baseTintFor((dealt.train[r.idx] || dealt.wilds[0]).hex);
+      } else if (r.kind === 'rival') {
+        t = baseTintFor(dealt.rivals[r.rival].hex);
+        own = t;
+      } else {
+        t = baseTintFor(dealt.wilds[r.idx].hex);
+        own = t;
+      }
       r.tint = t;
       baseTint[i] = t.slice();
+      ownTint[i] = own.slice();
       applyTint(i);
     }
   }
 
   function setTintScale (i, k) {
-    const t = baseTint[i];
     tintScale[i] = k;
-    aTint.setXYZ(i, t[0] * k, t[1] * k, t[2] * k);
-    aTint.needsUpdate = true;
+    applyTint(i);
+  }
+
+  /* How far a manta has drifted from its train's colour towards its own.
+     0 is the train's, 1 is its own; the cut walks it across and back. */
+  function setCutMix (i, m) {
+    cutMix[i] = Math.min(1, Math.max(0, m));
+    applyTint(i);
   }
 
   /* 0 is the random roll; 1 to 7 pin one of the palette's colours. */
@@ -126,6 +149,9 @@ export function createColours ({ COUNT, roles, aTint, rivals, wilds }) {
     reroll: () => rollColours((Math.random() * 0xffffffff) >>> 0),
     setTintScale,
     getTintScale: i => tintScale[i],
+    setCutMix,
+    getCutMix: i => cutMix[i],
+    ownColour: i => ownTint[i].slice(),
     gainFor,
     get colours () { return dealt; },
     get seed () { return seed; },
