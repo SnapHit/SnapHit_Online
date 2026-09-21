@@ -12,7 +12,10 @@
 import { uniform } from 'three/tsl';
 
 export const SPEC = [
-  { key: 'fade',           label: 'light fade',      def: 0.985, min: 0.90, max: 0.999, step: 0.001, gpu: false },
+  /* 0.993: a half life of about 1.9 seconds at 60 fps, where 0.985 gave 0.76.
+     The design doc asks for "a fading light painting of itself", and at three
+     quarters of a second there was barely a painting. */
+  { key: 'fade',           label: 'light fade',      def: 0.993, min: 0.90, max: 0.999, step: 0.001, gpu: false },
   { key: 'stamp',          label: 'stamp strength',  def: 1.00,  min: 0,    max: 3,     step: 0.05,  gpu: false },
   { key: 'plankton',       label: 'plankton',        def: 1.00,  min: 0,    max: 3,     step: 0.05,  gpu: true  },
   { key: 'bloomStrength',  label: 'bloom strength',  def: 0.60,  min: 0,    max: 2,     step: 0.05,  gpu: false },

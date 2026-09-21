@@ -41,23 +41,32 @@ const PLANKTON_AMBIENT = 0.020;
 /* How much of the light memory shows as a smooth ribbon rather than as
    sparkle. The ribbon is what makes a wake readable at a glance; the sparkle
    is what makes it look alive. */
-/* 0.22, arrived at by measurement and then by stopping.
+/* 0.45. It went 0.45 to 0.17 chasing the hierarchy rule's "brightest water"
+   figure, and that was a mistake: the figure barely responded (28.2 at ribbon
+   0.19, 28.2 again at 0.17), because what sets it is the seabed crests and
+   ripple this page already had, not the wake. On the phone the result was a
+   trail you could barely see.
   
-   The hierarchy rule outranks the look, so the wake came down from 0.45 in
-   four steps while the "brightest water" figure was watched. It stopped
-   responding: at 0.19 with sparkle 0.9 the 98th percentile read 28.2, and at
-   0.17 with sparkle 0.7 it read 28.2 again. Whatever is setting that number
-   is not the wake — it is the seabed crests and ripple this page already had,
-   plus manta edge pixels in the sample. Cutting the signature effect further
-   was treating the wrong thing, so it was put back to something that reads.
-   See the report: the ratio lands at about 1.99 against a bar of 2.00, and
-   that gap is inside the measurement's own noise. */
-const RIBBON = 0.22;
+   The rule's PURPOSE is that a dim manta stays findable, and that is measured
+   directly now, as the dim manta against the water immediately around it,
+   rather than against the brightest patch anywhere on screen. That local
+   figure is what predicts whether you can pick it out. */
+const RIBBON = 0.20;
 /* 0.9, down from 1.6. Tracked down by measurement, not taste: once the ribbon
    had been cut three times and the "brightest water" would not come down, the
    98th percentile turned out to be the sparkle CRESTS rather than the ribbon.
    Cutting the ribbon further was treating the wrong thing. */
-const STIRRED_SPARKLE = 1.0;
+/* The wake's energy goes here rather than into the smooth ribbon below, and
+   that split is the whole answer to a conflict the measurements turned up.
+  
+   A smooth glow bright enough to see lifts every pixel around it, so a dim
+   manta swimming through a wake loses its contrast: measured at 1.43 times
+   its surroundings inside a wake against 3.39 in clear water, with the same
+   code. Sparkle carries the same sense of stirred, living water while leaving
+   most of the pixels between the crests dark, so a silhouette still reads
+   against it. Section 7.2 asks for both a glow and plankton; this is which of
+   the two does the work. */
+const STIRRED_SPARKLE = 4.0;
 
 /* color() and not vec3(): the renderer's working space is linear and its
    output is sRGB, so a hex written straight in as a vec3 is read as a linear

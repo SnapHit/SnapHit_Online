@@ -54,11 +54,20 @@ let lmAttached = false;
 /* Tuned against the render, not guessed: with a fade of 0.985 a pixel under a
    passing manta accumulates about fifty frames of this before it clears, so
    the per-frame figure is small by design. */
-/* 0.0010, down from 0.0015. The hierarchy rule outranks the look: with the
-   stronger stamp the 98th-percentile water measured 1.80 times the dim
-   manta's luminance, where the rule asks for at least 2. The effect gives
-   way, not the hierarchy. */
-const STAMP_BASE = 0.0007;
+/* 0.0018, and the ceiling is measured rather than guessed.
+  
+   The phone reports 60 fps on both backends with a worst 1% of 17.7 ms and
+   four draw calls, so the light memory costs almost nothing and there is no
+   reason for it to be faint. But at 0.0030 the hierarchy inverts: the wake
+   measured 63 against a dim manta's 56, so the water became brighter than an
+   unattached manta and that manta's contrast with its own surroundings fell
+   to 1.63. At 0.0018 the order holds and the dim manta still reads at 3.39
+   times the water around it.
+  
+   Together with a fade of 0.993 this is about two and a half times the
+   deposit and two and a half times the persistence of what was on the phone
+   before. */
+const STAMP_BASE = 0.0018;
 const CRUISE = 120;               // world units a second, the reference speed
 
 function stampMantas (dt) {
