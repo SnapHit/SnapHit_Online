@@ -243,9 +243,20 @@ export function oceanNode () {
     /* Cloud passes. One very large, very soft mask drifting across the view:
        at its darkest the moon is about a third. Slow on purpose — a pass comes
        round about once a minute and each transition takes several seconds. */
-    const cloudP = vec2(world.x.mul(0.0016).add(t.mul(0.010)), world.y.mul(0.0013).sub(t.mul(0.007)));
-    const cloudF = sin(cloudP.x).mul(0.6).add(sin(cloudP.y.mul(1.7).add(1.1)).mul(0.4));
-    const cloud = float(1.0).sub(smoothstep(float(0.30), float(0.95), cloudF).mul(U.cloud).mul(0.67));
+    /* A SWEEP, not shapes. This was two sines added together, and the sum of
+       two sines is a regular lattice of humps — evenly sized soft round
+       patches drifting over the whole frame, which is what Nathan saw. A
+       cloud is now one travelling wave along one slowly turning direction,
+       with a wavelength longer than the view, so what crosses the screen is a
+       broad band of dimming with no edge and no shape to it.
+
+       The direction turns over minutes, so successive passes do not all come
+       from the same corner. */
+    const cAng = t.mul(0.013);
+    const cDir = vec2(sin(cAng), sin(cAng.add(1.571)));
+    const cloudPhase = world.x.mul(cDir.x).add(world.y.mul(cDir.y)).mul(0.0021).sub(t.mul(0.055));
+    const cloudF = sin(cloudPhase);
+    const cloud = float(1.0).sub(smoothstep(float(0.15), float(0.95), cloudF).mul(U.cloud).mul(0.67));
 
     const seabed = bedHue.mul(bedV.mul(moon).mul(caustic).mul(cloud).mul(SEABED_LEVEL));
 
