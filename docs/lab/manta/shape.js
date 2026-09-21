@@ -5,6 +5,8 @@
  * instances, tints, headings or the scene.
  */
 import { BufferGeometry, Float32BufferAttribute } from 'three';
+import { Fn, vec2, vec3, float, clamp, length, max, mix, smoothstep } from 'three/tsl';
+import { U } from './params.js';
 
 /* A manta seen from above, measured off Nathan's reference photo with both
    wings averaged. Wingspan 1.0, nose towards -Z.
@@ -140,3 +142,60 @@ export function mantaGeometry () {
    from the body without a per-vertex flag. */
 export const TAIL_Z0 = HEAD_FRONT + BODY_BACK;
 
+
+
+/* ------------------------------------------------------------ the markings */
+
+/* The photo's pattern, as maths on the outline coordinates: no texture, no
+   image file, and nothing per vertex, so the vertex buffer count is untouched.
+   `u` is the distance out from the midline, 0 to 0.5; `v` is the distance
+   behind the head's front.
+
+   Every patch is an ELLIPTICAL falloff, cubed smooth at its edge. An earlier
+   attempt bounded each patch in u and v separately, which is a rectangle in
+   outline space however soft its edges, and on screen the shoulder patches
+   came out as two crisp blocks. Rounded, or it is not the photo's animal.
+
+   In the photo the patches are about five times the back. That ratio belongs
+   to a daylight photograph of a dark animal in bright water; this is a night
+   ocean where the animals carry the light. So the pattern carries over and the
+   contrast does not: the back stays at the tier colour and the marks are
+   paler — mixed towards a white of the same peak component — and brighter. */
+const ellipse = (du, dv) => {
+  const e = clamp(float(1.0).sub(length(vec2(du, dv))), 0, 1);
+  return e.mul(e).mul(float(3.0).sub(e.mul(2.0)));
+};
+
+export function markings (tint, shade, gx, gz) {
+  return Fn(() => {
+    const u = gx.abs();
+    const v = gz.sub(HEAD_FRONT);
+    const peak = max(max(tint.x, tint.y), tint.z);
+    const white = vec3(peak, peak, peak);
+    const col = tint.mul(shade).toVar();
+
+    /* Two shoulder patches, one each side of the spine, from just behind the
+       head to about 0.22 back and about 0.14 out. They meet at the front and
+       part behind, so the ellipse's centre walks outwards down its length —
+       that is the V. */
+    const centre = float(0.045).add(clamp(v.sub(0.05).div(0.17), 0, 1).mul(0.055));
+    const shoulder = ellipse(u.sub(centre).div(0.062), v.sub(0.135).div(0.092))
+      .mul(U.marks);
+    col.assign(mix(col, mix(tint, white, 0.35).mul(1.22).mul(shade), clamp(shoulder, 0, 1)));
+
+    /* Pale wingtips over the outer tenth of the span, fading inwards along
+       the trailing side: the leading edge runs from 0.025 at the spine to
+       0.29 at the tip, so this is measured from that line back. */
+    const lead = float(0.025).add(u.mul(0.53));
+    const tipMark = smoothstep(float(0.425), float(0.50), u)
+      .mul(smoothstep(lead.sub(0.008), lead.add(0.05), v))
+      .mul(U.marks);
+    col.assign(mix(col, mix(tint, white, 0.30).mul(1.16).mul(shade), clamp(tipMark, 0, 1)));
+
+    /* A faint lighter stripe along the spine, 0.20 to 0.40 back. */
+    const stripe = ellipse(u.div(0.055), v.sub(0.30).div(0.115)).mul(U.marks).mul(0.55);
+    col.assign(mix(col, mix(tint, white, 0.15).mul(1.10).mul(shade), clamp(stripe, 0, 1)));
+
+    return col;
+  })();
+}

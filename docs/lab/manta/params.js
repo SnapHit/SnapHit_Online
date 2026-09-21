@@ -67,6 +67,13 @@ export const SPEC = [
      a number because it is a render target option, and here so Nathan can see
      what it costs on the phone. */
   { key: 'antialias',      label: 'antialias (4x)',       def: 1,     min: 0,    max: 1,     step: 1,     gpu: false },
+  /* How strongly the photo's pattern shows. The ruling is to BRIGHTEN the
+     markings rather than darken the back: in the photo the back is dark and
+     the patches pale, but in this game's light the back is the median the
+     hierarchy measures, so darkening it darkens the animal and condition 3
+     goes with it. The back therefore stays at its tier colour and the marks
+     go up from there. */
+  { key: 'marks',          label: 'marking strength',     def: 1.00,  min: 0,    max: 1.5,   step: 0.05,  gpu: true  },
 ];
 
 /* Plain numbers, read from JS each frame. */

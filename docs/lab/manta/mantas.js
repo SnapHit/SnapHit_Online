@@ -28,7 +28,7 @@ import {
 } from 'three/tsl';
 import { uTime } from './clock.js';
 import { U } from './params.js';
-import { mantaGeometry, STATIONS, HEAD_FRONT, BODY_BACK, TAIL_LEN, TAIL_Z0, TAIL_W0, TAIL_W1, TURN_REF } from './shape.js';
+import { mantaGeometry, markings, STATIONS, HEAD_FRONT, BODY_BACK, TAIL_LEN, TAIL_Z0, TAIL_W0, TAIL_W1, TURN_REF } from './shape.js';
 
 export const COUNT = 10;
 
@@ -234,7 +234,8 @@ export function createMantas (scene) {
   const lambert = nx.mul(ch).mul(LIGHT.x).add(ny.mul(LIGHT.y)).add(nx.mul(sh).negate().mul(LIGHT.z));
   const lit = float(1.0).add(lambert.sub(LIGHT.y).mul(0.55).mul(spanC));
 
-  material.colorNode = nTintV.mul(shade).mul(clamp(lit, 0.5, 1.5));
+  material.colorNode = markings(nTintV, shade, positionGeometry.x, positionGeometry.z)
+    .mul(clamp(lit, 0.5, 1.5));
 
   const mesh = new InstancedMesh(mantaGeometry(), material, COUNT);
 
