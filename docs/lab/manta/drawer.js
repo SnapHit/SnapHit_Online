@@ -22,6 +22,7 @@ const el = {
   list:   document.getElementById('drawerList'),
   copy:   document.getElementById('copyValues'),
   reset:  document.getElementById('resetValues'),
+  reroll: document.getElementById('rerollColour'),
   plain:  document.getElementById('plain'),
 };
 
@@ -92,6 +93,14 @@ export function createDrawer () {
        tuning, so the sliders sit in the space they were using instead of on
        top of the ocean — and so the panel is not showing through them. */
     document.body.classList.toggle('tuning', !open);
+  });
+
+  /* A new colour without a reload, so Nathan can flick through the palette on
+     the phone. It deals a fresh seed, so the rivals and the wild mantas are
+     re-dealt with it and your colour still cannot appear on anyone else. */
+  el.reroll.addEventListener('click', () => {
+    const got = window.__lab && window.__lab.reroll ? window.__lab.reroll() : null;
+    flash(el.reroll, got ? got : 'Reroll', 'Reroll', 1400);
   });
 
   el.reset.addEventListener('click', () => {

@@ -89,6 +89,17 @@ panel.set('vbuf', mantas.vertexBuffers + ' of 8 that WebGPU guarantees' +
 panel.set('lm', lm ? (lm.size + '×' + lm.size + '  ·  ' + lm.note) : 'off (?fx=off)');
 
 window.__lab = { scene, camera, view, mantas, lm, FX };
+
+/* After __lab exists, not before: this is the same ordering trap that put a
+   ReferenceError on the page in 1F. */
+function showRoll () {
+  const c = mantas.colours;
+  panel.set('roll', c ? (c.mine.key + '  \u00b7  seed ' + mantas.seed +
+    '  \u00b7  rivals ' + c.rivals.map(r => r.key).join(', ') +
+    '  \u00b7  wild ' + c.wilds.map(r => r.key).join(', ')) : 'not rolled');
+}
+showRoll();
+window.__lab.reroll = () => { mantas.reroll(); showRoll(); return mantas.colours.mine.key; };
 window.__lab.post = () => post;
 const quality = createQuality({ forcedTier: FORCED_TIER, dpr: devicePixelRatio });
 window.__lab = window.__lab || {};

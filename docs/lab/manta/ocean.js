@@ -235,7 +235,15 @@ export function oceanNode () {
           vec2(bent.x.div(span).add(cT.mul(dx)), bent.y.div(span).add(cT.mul(dz)))).r;
     const webA = causticAt(float(150.0), 0.0035, 0.0021);
     const webB = causticAt(float(95.0), -0.0026, 0.0032);
-    const web = mix(webA, min(webA, webB), clamp(uCausticLayers.sub(1.0), 0, 1));
+    /* One layer keeps webA's shape, but not its crest height. Crossing two
+       webs with min() cuts the peaks; one web on its own kept them, and its
+       brightest crests measured 72 above the background where high measured
+       24 — which put moonlight over the dimmest manta at medium and broke
+       condition 2. Compressing about 0.25, the value the caustic term is
+       centred on, steps the web DOWN for the cheaper tiers, which is the way
+       a quality tier is supposed to go. */
+    const webOne = mix(float(0.25), webA, float(0.38));
+    const web = mix(webOne, min(webA, webB), clamp(uCausticLayers.sub(1.0), 0, 1));
     /* Softened, and centred on 1 so the web lifts the lit floor rather than
        darkening everything it is not on. */
     const caustic = float(1.0).add(web.sub(0.25).mul(U.caustic));

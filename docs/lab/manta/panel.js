@@ -26,6 +26,7 @@ const ROWS = [
   ['viewport',       'viewport'],
   ['view',           'view'],
   ['mantas',         'mantas'],
+  ['your colour',    'roll'],
   ['draw calls',     'draws'],
   ['vertex buffers', 'vbuf'],
   ['errors',         'issues'],

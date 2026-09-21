@@ -96,7 +96,12 @@ export const SPEC = [
      and at 0 the whole pass is skipped rather than merely multiplied out.
      Capped at 0.6: it is added to the same water the hierarchy measures. */
   { key: 'longMemory',     label: 'long memory',          def: 0,     min: 0,    max: 0.6,   step: 0.01,  gpu: true  },
-  { key: 'player',         label: 'player colour 0lime 1ice 2mint', def: 0, min: 0, max: 2, step: 1, gpu: false },
+  /* 0 is the random roll that v1.8 asks for; 1 to 7 pin one of the palette's
+     colours, in its order: lime, coral, orange, red, violet, purple, azure. */
+  { key: 'player',         label: 'player colour 0=random 1-7', def: 0, min: 0, max: 7, step: 1, gpu: false },
+  /* Which colours wild mantas may be dealt. 0 is warm and cool, 1 swaps the
+     four warm hues for a turquoise so the comparison is like for like. */
+  { key: 'coolWild',       label: 'wild palette 0=warm+cool 1=cool', def: 0, min: 0, max: 1, step: 1, gpu: false },
   { key: 'marks',          label: 'marking strength',     def: 1.00,  min: 0,    max: 2,     step: 0.05,  gpu: true  },
 ];
 
