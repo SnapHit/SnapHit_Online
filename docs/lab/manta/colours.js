@@ -129,6 +129,15 @@ export function createColours ({ COUNT, roles, aTint, rivals, wilds, train }) {
     }
   }
 
+  /* A RECRUIT BRINGS ITS OWN COLOUR WITH IT. The deal gave each train slot a
+     wild colour to fall back to, but the animal that just joined already had
+     one of its own and that is the one it must return to when it is cut
+     loose. Copies the source instance's own tint into the destination's. */
+  function adoptOwn (dst, src) {
+    ownTint[dst] = ownTint[src].slice();
+    applyTint(dst);
+  }
+
   function setTintScale (i, k) {
     tintScale[i] = k;
     applyTint(i);
@@ -158,7 +167,7 @@ export function createColours ({ COUNT, roles, aTint, rivals, wilds, train }) {
     setCutMix,
     getCutMix: i => cutMix[i],
     ownColour: i => ownTint[i].slice(),
-    gainFor,
+    gainFor, adoptOwn,
     get colours () { return dealt; },
     get seed () { return seed; },
   };

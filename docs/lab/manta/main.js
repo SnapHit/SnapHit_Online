@@ -24,7 +24,7 @@ import { createSeabed } from './seabed.js';
 import { createCaustics } from './caustics.js';
 import { createShadows } from './shadow.js';
 import { createLab } from './renderer.js';
-import { createMantas, COUNT } from './mantas.js';
+import { createMantas, COUNT, TRAIN_MAX, RIVAL_BASE, WILD_BASE, PARKED } from './mantas.js';
 import { createSim, zoomFor, STEP } from './sim.js';
 import { createControls } from './controls.js';
 import { createPost } from './post.js';
@@ -64,8 +64,20 @@ panel.probeAdapter();
 /* Before the scene: the ocean shader is built once, and whether it carries a
    plankton term at all depends on whether there is a light memory to read. */
 /* One slot past the mantas, reserved for the cut's burst. */
-const BURST_SLOT = COUNT;
-const lm = FX ? createLightMemory(COUNT + 1) : null;
+/* THE LIGHT MEMORY HAS A FIXED NUMBER OF SLOTS, AND FEW OF THEM. Its fade
+   and all its stamps are ONE full-screen pass, so the shader carries an
+   unrolled expression per slot: at 18 slots that compiled everywhere, and at
+   610 SwiftShader's GLSL compiler answers "ERROR: Expression too complex" and
+   the page draws nothing on WebGL2. Measured on this build before the cap.
+
+   Which is also the right answer for the look. 7.2 gives the bright trailing
+   light to trains, and says a wild manta "stirs only the plankton's own faint
+   blue-green" — the plankton shader's job, not the wake's. So the wake is
+   stamped by your train and the rivals: your leader, a spread of your
+   followers along the length of the train, and the nine scripted rivals. */
+const STAMP_SLOTS = 24;
+const BURST_SLOT = STAMP_SLOTS;
+const lm = FX ? createLightMemory(STAMP_SLOTS + 1) : null;
 if (lm) useLightMemory(lm);
 /* The seabed, generated once into a texture on the first draw: the renderer
    has to exist before anything can be rendered into a target. */
@@ -82,17 +94,18 @@ if (shadows) useShadows(shadows);
    fade measured in tens of seconds. 0.9994 a frame at 60 is a half life of
    about nineteen seconds. Stamped by the same calls, rendered only when the
    slider asks for it. */
-const lmSlow = FX ? createLightMemory(COUNT + 1) : null;
+const lmSlow = FX ? createLightMemory(STAMP_SLOTS + 1) : null;
 if (lmSlow) { lmSlow.setFade(0.9994); useLongMemory(lmSlow); }
 let slowAttached = false;
 
-const { scene, camera, fit, view, setZoom, lookAtWorld } = createScene();
-const mantas = createMantas(scene);
-if (shadows) shadows.attach(mantas.shadowMesh);
-
 /* ?scene=spike puts the still spike scene back, for judging the look against
-   what Nathan signed off. Everything below is the moving world. */
+   what Nathan signed off: its scripted figure eight and its four wild singles
+   still run there, and nowhere else. Everything below is the moving world. */
 const SPIKE = new URLSearchParams(location.search).get('scene') === 'spike';
+
+const { scene, camera, fit, view, setZoom, lookAtWorld } = createScene();
+const mantas = createMantas(scene, { scripted: SPIKE });
+if (shadows) shadows.attach(mantas.shadowMesh);
 const sim = SPIKE ? null : createSim({ seed: (Math.random() * 0xffffffff) >>> 0 });
 let controls = null;
 /* A fixed 60 steps a second whatever the display does, with an accumulator,
@@ -182,11 +195,36 @@ let post = null;
 const STAMP_BASE = 0.0018;
 const CRUISE = 120;               // world units a second, the reference speed
 
+/* Which instances get one of the slots, rebuilt each frame because the train
+   grows. Your leader always, then followers spread evenly along the whole
+   length so the tail of a long train deposits as well as its head, then the
+   rivals. The spike scene keeps its scripted five and its four singles. */
+const stampList = [];
+function buildStampList () {
+  stampList.length = 0;
+  if (sim) {
+    stampList.push(0);
+    const n = Math.min(sim.you.followers.length, TRAIN_MAX - 1);
+    const take = Math.min(n, 14);
+    for (let k = 1; k <= take; k++) stampList.push(Math.round(k * n / take));
+  } else {
+    for (let i = 0; i < 5; i++) stampList.push(i);
+  }
+  for (let i = RIVAL_BASE; i < RIVAL_BASE + 9 && stampList.length < STAMP_SLOTS; i++) stampList.push(i);
+  if (!sim) for (let i = WILD_BASE; i < WILD_BASE + 4 && stampList.length < STAMP_SLOTS; i++) stampList.push(i);
+  while (stampList.length > STAMP_SLOTS) stampList.pop();
+}
+
 function stampMantas (dt) {
   if (!lm) return;
   if (!burstCleared) { lm.stamp(BURST_SLOT, 0, 0, 0, 0, 1, 0, 0, 0, 0); burstCleared = true; }
   const { aPos, aSize, aTint } = mantas;
-  for (let i = 0; i < COUNT; i++) {
+  buildStampList();
+  /* Slots nobody is using this frame deposit nothing, or the last manta to
+     hold the slot would keep stamping where it was left. */
+  for (let sl = stampList.length; sl < STAMP_SLOTS; sl++) lm.stamp(sl, 0, 0, 0, 0, 1, 0, 0, 0, 0);
+  for (let sl = 0; sl < stampList.length; sl++) {
+    const i = stampList[sl];
     const x = aPos.getX(i), z = aPos.getZ(i);
     const x0 = havePrev ? prevX[i] : x, z0 = havePrev ? prevZ[i] : z;
     const moved = Math.hypot(x - x0, z - z0);
@@ -204,11 +242,11 @@ function stampMantas (dt) {
     const wr = wild ? 0.10 : aTint.getX(i);
     const wg = wild ? 0.42 : aTint.getY(i);
     const wb = wild ? 0.36 : aTint.getZ(i);
-    lm.stamp(i,
+    lm.stamp(sl,
       jumped ? x : x0, jumped ? z : z0, x, z,
       aSize.getX(i) * 1.2,                       // about 1.2 wingspans
       wr, wg, wb, wild ? s * 0.35 : s);
-    if (lmSlow && P.longMemory > 0) lmSlow.stamp(i,
+    if (lmSlow && P.longMemory > 0) lmSlow.stamp(sl,
       jumped ? x : x0, jumped ? z : z0, x, z,
       aSize.getX(i) * 1.2,
       aTint.getX(i), aTint.getY(i), aTint.getZ(i), s);
@@ -254,7 +292,16 @@ function applyView (v) {
   panel.set('viewport', panel.describeViewport());
 }
 
-function followCamera () {
+/* A recruit does not snap to your colour: 7.2 calls for it to arrive over a
+   beat. It cannot be a gradient across the animal's body without a seventh
+   instance attribute, and WebGPU guarantees eight vertex buffers a pipeline
+   with six already spent, so this is a cross-fade in time from the colour it
+   wore as a wild manta to yours. */
+const RECRUIT_FADE = 0.5;                 // seconds
+const fading = new Map();                 // instance slot -> seconds left
+let drawnFollowers = 0, peakLength = 0;
+
+function followCamera (dt) {
   const you = sim.you;
   const z = zoomFor(you.followers.length, sim.params);
   if (setZoom(z)) applyView(view);
@@ -266,18 +313,43 @@ function followCamera () {
   if (lm) lm.setCentre(you.x, you.z);
   if (lmSlow) lmSlow.setCentre(you.x, you.z);
   if (shadows) shadows.setCentre(you.x, you.z);
-  /* Your leader is the sim's, not the spike's script. The other four of the
-     spike's train trail it along its recorded path until stage 2 fills them
-     with real recruits. */
-  const m = mantas, sp = sim.params.spacing;
+
+  const m = mantas, f = you.followers;
+  const n = Math.min(f.length, TRAIN_MAX - 1);
   m.aPos.setXYZ(0, you.x, 0, you.z); m.aHead.setX(0, you.head);
-  for (let i = 1; i < 5; i++) {
-    const want = you.s - i * sp;
-    let pt = you.trail[0] || you;
-    for (let q = you.trail.length - 1; q >= 0; q--) if (you.trail[q].s <= want) { pt = you.trail[q]; break; }
-    m.aPos.setXYZ(i, pt.x, 0, pt.z); m.aHead.setX(i, pt.h !== undefined ? pt.h : you.head);
+  /* Anyone who joined since the last frame arrives wearing their own colour
+     and fades into yours. The slot has to take their colour as its own too,
+     or a scatter in stage 3 would hand it the one the deal gave the slot. */
+  for (let i = drawnFollowers; i < n; i++) {
+    const src = f[i].from;
+    if (src >= 0) m.adoptOwn(i + 1, WILD_BASE + src);
+    m.setCutMix(i + 1, 1);
+    fading.set(i + 1, RECRUIT_FADE);
+  }
+  for (const [slot, left] of fading) {
+    const t = left - dt;
+    if (t <= 0) { m.setCutMix(slot, 0); fading.delete(slot); }
+    else { m.setCutMix(slot, t / RECRUIT_FADE); fading.set(slot, t); }
+  }
+  for (let i = 0; i < n; i++) { m.aPos.setXYZ(i + 1, f[i].x, 0, f[i].z); m.aHead.setX(i + 1, f[i].head); }
+  /* Park what the train no longer uses, rather than leaving a stale manta
+     sitting where the tail was. Only the slots that were drawn last frame. */
+  for (let i = n; i < drawnFollowers; i++) m.aPos.setXYZ(i + 1, PARKED, 0, PARKED);
+  drawnFollowers = n;
+
+  /* The 300. Their slot in the buffer is their slot in the simulation, so a
+     respawn keeps the colour that slot was dealt. */
+  const w = sim.wild;
+  for (let i = 0; i < w.length; i++) {
+    const q = w[i];
+    if (q.alive) { m.aPos.setXYZ(WILD_BASE + i, q.x, 0, q.z); m.aHead.setX(WILD_BASE + i, q.head); }
+    else m.aPos.setXYZ(WILD_BASE + i, PARKED, 0, PARKED);
   }
   m.aPos.needsUpdate = true; m.aHead.needsUpdate = true;
+
+  if (f.length > peakLength) peakLength = f.length;
+  const el = document.getElementById('len');
+  if (el) el.textContent = 'length ' + f.length + '   peak ' + peakLength;
 }
 
 /* Hoisted out of the hooks so the step hook below can drive it. The cut owns
@@ -295,6 +367,7 @@ function advance (now, dt) {
       if (controls) controls.apply(sim.you, STEP);
       sim.params.cruise = P.cruise; sim.params.burst = P.burstSpeed;
       sim.params.turnCruise = P.turnCruise; sim.params.turnBurst = P.turnBurst;
+      sim.params.recruitR = P.recruitR; sim.params.spacing = P.spacing;
       sim.step();
       simAcc -= STEP;
     }
@@ -313,7 +386,7 @@ function advance (now, dt) {
      units away. The three rival trains still come from the script; the five
      that are yours come from the simulation, and they have to be written
      last. */
-  if (sim) followCamera();
+  if (sim) followCamera(dt * scale);
   /* Scaled too: the stamp is a deposit per unit of distance travelled, so a
      slowed manta must not lay down a brighter trail. */
   stampMantas(dt * scale);

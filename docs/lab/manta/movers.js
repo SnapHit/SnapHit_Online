@@ -34,7 +34,8 @@ const FIG8_A = 175, FIG8_B = 145;
 const TRAIN_SPEED = 120;
 const SPACING = 31;           // design doc's 22, scaled with the sizes above
 
-export function createMovers ({ aPos, aHead, aMotion, COUNT, RIVAL_TRAINS, RIVAL_LEN, WILD_COUNT }) {
+export function createMovers ({ aPos, aHead, aMotion, COUNT, RIVAL_TRAINS, RIVAL_LEN, WILD_COUNT,
+                                TRAIN_SLOTS = 5, RIVAL_BASE = 5 }) {
   const prevHead = new Float32Array(COUNT);
   const lagTurn  = new Float32Array(COUNT);
 
@@ -151,18 +152,22 @@ export function createMovers ({ aPos, aHead, aMotion, COUNT, RIVAL_TRAINS, RIVAL
        parameter, and each follower is exactly SPACING units of path behind
        the one ahead. Heading comes from half a unit further along the same
        curve, so it is right even where the parameter is moving fastest. */
-    const sLead = secs * TRAIN_SPEED;
-    for (let i = 0; i < 5; i++) {
+    /* Anybody a cut has set loose, wherever they sit in the buffer. This used
+       to live inside the figure eight's loop and so only ever reached the
+       five slots that loop covered; the buffer is 610 slots now. Scattered,
+       and still swimming headfirst: heading first, then move along it. */
+    for (let i = 0; i < COUNT; i++) {
       const f = freed[i];
-      if (f !== null) {
-        /* Scattered, and still swimming headfirst: heading first, then move
-           along it, which is the rule the loose mantas already follow. */
-        f.head += (f.turn || 0) * dt;
-        f.x += -Math.sin(f.head) * f.speed * dt;
-        f.z += -Math.cos(f.head) * f.speed * dt;
-        place(i, wrapX(f.x, half.w + 34), wrapZ(f.z, half.h + 34), 0, f.head);
-        continue;
-      }
+      if (f === null || f === undefined) continue;
+      f.head += (f.turn || 0) * dt;
+      f.x += -Math.sin(f.head) * f.speed * dt;
+      f.z += -Math.cos(f.head) * f.speed * dt;
+      place(i, wrapX(f.x, half.w + 34), wrapZ(f.z, half.h + 34), 0, f.head);
+    }
+
+    const sLead = secs * TRAIN_SPEED;
+    for (let i = 0; i < TRAIN_SLOTS; i++) {
+      if (freed[i] !== null) continue;
       const s = sLead - i * SPACING;
       const [x, z] = fig8(tAtArc(s));
       const [x2, z2] = fig8(tAtArc(s + 0.5));
@@ -195,7 +200,7 @@ export function createMovers ({ aPos, aHead, aMotion, COUNT, RIVAL_TRAINS, RIVAL
       const wx = wrapX(nx, half.w + TRAIN_MARGIN), wz = wrapZ(nz, half.h + TRAIN_MARGIN);
       const jumped = Math.hypot(wx - lead.x, wz - lead.z) > 200;
       lead.x = wx; lead.z = wz;
-      const base = 5 + r * RIVAL_LEN;
+      const base = RIVAL_BASE + r * RIVAL_LEN;
       place(base, lead.x, lead.z, r * 6 - 6, lead.head);
 
       const trail = lead.trail;
@@ -264,7 +269,7 @@ export function createMovers ({ aPos, aHead, aMotion, COUNT, RIVAL_TRAINS, RIVAL
       m.head += Math.sin(secs * 0.13 + m.phase) * 0.12 * dt;
       m.x = wrapX(m.x - Math.sin(m.head) * m.speed * dt, half.w + MARGIN);
       m.z = wrapZ(m.z - Math.cos(m.head) * m.speed * dt, half.h + MARGIN);
-      place(5 + RIVAL_TRAINS * RIVAL_LEN + i, m.x, m.z, (i % 2) * 24 - 12, m.head);
+      place(RIVAL_BASE + RIVAL_TRAINS * RIVAL_LEN + i, m.x, m.z, (i % 2) * 24 - 12, m.head);
     }
 
     /* How hard everyone is turning, worked out from the headings this frame

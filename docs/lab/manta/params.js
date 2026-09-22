@@ -126,10 +126,12 @@ export const SPEC = [
      decide whether the four rules are fun, and that is judged on a phone
      rather than in a test. They are read by sim.js, which has no idea a
      drawer exists. */
-  { key: 'cruise',         label: 'cruise speed',         def: 170,   min: 80,   max: 320,   step: 5,     gpu: false },
-  { key: 'burstSpeed',     label: 'burst speed',          def: 300,   min: 120,  max: 520,   step: 5,     gpu: false },
-  { key: 'turnCruise',     label: 'turn rate cruising',   def: 3.5,   min: 1,    max: 6,     step: 0.1,   gpu: false },
-  { key: 'turnBurst',      label: 'turn rate bursting',   def: 2.6,   min: 1,    max: 6,     step: 0.1,   gpu: false },
+  { key: 'cruise',         label: 'cruise speed',         def: 160,   min: 80,   max: 320,   step: 5,     gpu: false },
+  { key: 'burstSpeed',     label: 'burst speed',          def: 340,   min: 120,  max: 520,   step: 5,     gpu: false },
+  { key: 'turnCruise',     label: 'turn rate cruising',   def: 3.1,   min: 1,    max: 6,     step: 0.1,   gpu: false },
+  { key: 'turnBurst',      label: 'turn rate bursting',   def: 4.1,   min: 1,    max: 6,     step: 0.1,   gpu: false },
+  { key: 'recruitR',       label: 'recruit radius',       def: 40,    min: 15,   max: 120,   step: 1,     gpu: false },
+  { key: 'spacing',        label: 'follower spacing',     def: 31,    min: 12,   max: 60,    step: 1,     gpu: false },
 ];
 
 /* Plain numbers, read from JS each frame. */

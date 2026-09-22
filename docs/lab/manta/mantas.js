@@ -36,13 +36,28 @@ import { createColours } from './colours.js';
 import { mantaGeometry, markings, STATIONS, HEAD_FRONT, BODY_BACK, TAIL_LEN, TAIL_Z0, TAIL_W0, TAIL_W1 } from './shape.js';
 import { createMovers } from './movers.js';
 
-/* Your train of five, three rival trains of three, four wild. Doc v1.8's
-   scene: the lab has to show rival TRAINS against wild mantas, not lone
-   rivals, because a train is what the game is about. */
-export const COUNT = 18;
+/* THE WHOLE POPULATION, in one instanced mesh. Greybox stage 2 replaces the
+   spike's four wild singles with the simulation's 300, and your train is no
+   longer five on a scripted figure eight but a leader and however many it
+   has recruited. The counts add up exactly: recruiting moves a manta out of
+   the wild block and respawning puts a fresh one back, so the world holds
+   1 + 300 + your followers, and a train can reach 300 before the zoom stops
+   pulling back. Slots nobody is using are parked far outside the arena.
+
+     0            your leader
+     1 - 300      your followers, in order from the head
+     301 - 309    three rival trains: a leader and two followers each
+     310 - 609    300 wild mantas
+*/
+export const TRAIN_MAX = 301;     // your leader plus 300 followers
 const RIVAL_TRAINS = 3;
 const RIVAL_LEN = 3;              // a leader and two followers
-const WILD_COUNT = 4;
+const WILD_COUNT = 300;
+export const RIVAL_BASE = TRAIN_MAX;
+export const WILD_BASE = TRAIN_MAX + RIVAL_TRAINS * RIVAL_LEN;
+export const COUNT = WILD_BASE + WILD_COUNT;
+/* Somewhere no camera goes: the arena is 2,000 units across. */
+export const PARKED = 1e5;
 
 const TAU = Math.PI * 2;
 /* 0.35: one full beat every 2.9 seconds. 1.4 read as fluttering, 0.65 was
@@ -92,7 +107,7 @@ const beat = (span, phase) => sin(
    screen-up at -z, so "top right and above" is this. */
 const LIGHT = { x: 0.55, y: 0.66, z: -0.51 };
 
-export function createMantas (scene) {
+export function createMantas (scene, { scripted = false } = {}) {
   const aPos   = new InstancedBufferAttribute(new Float32Array(COUNT * 3), 3).setUsage(DynamicDrawUsage);
   const aHead  = new InstancedBufferAttribute(new Float32Array(COUNT), 1).setUsage(DynamicDrawUsage);
   const aSize  = new InstancedBufferAttribute(new Float32Array(COUNT), 1).setUsage(DynamicDrawUsage);
@@ -248,11 +263,8 @@ export function createMantas (scene) {
 
   /* --------------------------------------------- who each instance is */
 
-  /* 0-4    your train, on the figure eight
-     5-13   three rival trains: a leader and two followers each
-     14-17  four wild mantas                                          */
   const roles = [];
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < TRAIN_MAX; i++) {
     roles.push({ kind: 'train', idx: i,
       size: i === 0 ? LEADER_SIZE : FOLLOWER_SIZE, group: 'you' });
   }
@@ -267,7 +279,7 @@ export function createMantas (scene) {
   }
 
   const colours = createColours({ COUNT, roles, aTint,
-                                 rivals: RIVAL_TRAINS, wilds: WILD_COUNT, train: 5 });
+                                 rivals: RIVAL_TRAINS, wilds: WILD_COUNT, train: TRAIN_MAX });
 
   for (let i = 0; i < COUNT; i++) {
     aSize.setX(i, roles[i].size);
@@ -276,11 +288,19 @@ export function createMantas (scene) {
        unison. Everything else gets a scattered phase. */
     aMotion.setX(i, roles[i].kind === 'train' ? -0.5 * roles[i].idx : (i * 1.37) % TAU);
   }
+  for (let i = 0; i < COUNT; i++) aPos.setXYZ(i, PARKED, 0, PARKED);
+  aPos.needsUpdate = true;
   aSize.needsUpdate = aTint.needsUpdate = aMotion.needsUpdate = true;
 
   /* Where everyone swims is movers.js; what they look like is here. */
+  /* The script drives the three rival trains and nothing else now. Its
+     figure eight is retired (TRAIN_SLOTS 0) because the simulation owns your
+     train, and its four wild singles are retired (WILD_COUNT 0) because the
+     simulation owns 300 of them. */
   const movers = createMovers({ aPos, aHead, aMotion, COUNT,
-                                RIVAL_TRAINS, RIVAL_LEN, WILD_COUNT });
+                                RIVAL_TRAINS, RIVAL_LEN,
+                                WILD_COUNT: scripted ? 4 : 0,
+                                TRAIN_SLOTS: scripted ? 5 : 0, RIVAL_BASE });
   const { update, setBounds, setCentre, setFree, isFree } = movers;
 
   const isWild = i => roles[i].wild === true;
@@ -288,10 +308,10 @@ export function createMantas (scene) {
   /* aPos and aHead are exposed so a test can drive update() across a whole
      cycle and measure the gaps, which is the only honest way to check the
      spacing. */
-  return { mesh, shadowMesh, update, setBounds, setCentre, count: COUNT, aPos, aHead, aSize, aTint, aMotion, vertexBuffers, isWild,
+  return { mesh, shadowMesh, update, setBounds, setCentre, count: COUNT, TRAIN_MAX, RIVAL_BASE, WILD_BASE, PARKED, aPos, aHead, aSize, aTint, aMotion, vertexBuffers, isWild,
            rollColours: colours.rollColours, reroll: colours.reroll,
            get colours () { return colours.colours; }, get seed () { return colours.seed; },
-           gainFor: colours.gainFor,
+           gainFor: colours.gainFor, adoptOwn: colours.adoptOwn,
            setFree, isFree,
            setTintScale: colours.setTintScale, getTintScale: colours.getTintScale,
            setCutMix: colours.setCutMix, getCutMix: colours.getCutMix,

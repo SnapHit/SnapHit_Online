@@ -70,11 +70,27 @@ export function luminance (hex) {
 export const BAND_LO = 0.248;
 export const BAND_HI = 0.280;
 
+/* CONDITION 3 AT THE LOW TIER, first standing lever. Violet and purple are
+   the two dimmest hues that sit on the band's floor, and at the low tier a
+   violet wild manta measured 1.92 times the water in a ring around it
+   against 7.2's bar of 2.0. The first lever is the colour's own level
+   inside the band, and there is room in it: the ceiling is 0.280 against
+   the floor's 0.248, a 13 percent lift.
+
+   IT HAS TO MOVE BOTH WAYS OR CONDITION 1 PAYS FOR IT. Your train's gain is
+   measured against exactly this level, so lifting the level everybody else
+   uses without lifting your train's floor would have dropped a violet
+   train's gain from 1.55 to 0.248 * 1.55 / 0.280 = 1.37, under the bar of
+   1.4. Both functions read the same floor, so the ratio is unchanged and
+   only the absolute brightness moves. */
+const LIFTED = new Set([0xa07bff, 0xc46bff]);        // violet, purple
+const bandFloor = hex => (LIFTED.has(hex) ? BAND_HI : BAND_LO);
+
 /* The level to render this colour at so it lands in the band. `flat` is the
    one level everything used before there was a band. */
 export function levelFor (hex, flat) {
   const L = luminance(hex);
-  return Math.min(BAND_HI, Math.max(BAND_LO, L * flat)) / L;
+  return Math.min(BAND_HI, Math.max(bandFloor(hex), L * flat)) / L;
 }
 
 /* Your train takes the floor but not the ceiling: it is the one thing that
@@ -82,7 +98,7 @@ export function levelFor (hex, flat) {
    train looking like the one Nathan tuned the bloom against. */
 export function levelForYours (hex, flat) {
   const L = luminance(hex);
-  return Math.max(BAND_LO, L * flat) / L;
+  return Math.max(bandFloor(hex), L * flat) / L;
 }
 
 /* mulberry32: small, fast, and good enough that a seed reproduces a run
