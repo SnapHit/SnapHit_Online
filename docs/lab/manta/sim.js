@@ -30,12 +30,16 @@ export const DEF = {
   leaderR: 14,
   followerR: 10,
   spacing: 31,
-  recruitR: 40,
+  recruitR: 30,        // contact with a 20-unit wild manta, plus a margin
   burstCost: 0.35,      // seconds a follower
   scatterGlow: 4,
   daze: 3,
   stun: 1,
-  wildCount: 300,
+  wildCount: 120,      // v1.10: 300 with instant respawn never ran dry
+  regrow: 2,           // seconds a manta, up to the count, and never faster
+  wildSize: 20,        // wingspan, against 28 for a follower and 40 for a leader
+  followerSize: 28,
+  leaderSize: 40,
   blooms: 4,
   zoomFar: 0.55,        // at length 300
   zoomLen: 300,
@@ -57,6 +61,20 @@ export function viewFor (area, aspect, zoom) {
   const a = area / (zoom * zoom);
   const w = Math.sqrt(a * aspect);
   return { w, h: a / w };
+}
+
+/* SIZE AND COLOUR ARE THE SAME NUMBER, and both live here so the renderer
+   and the tests cannot disagree about them. A recruit crosses from wild to
+   train over half a second — 20 units wide and its own colour at 0, 28 and
+   its train's at 1 — and a scattered manta crosses back as the last of its
+   glow runs out, so what is food and what is a train reads at a glance. */
+export const FADE = 0.5;
+export function joinMix (f, time) {
+  return Math.min(1, Math.max(0, (time - (f.born || 0)) / FADE));
+}
+export function looseMix (m) { return Math.min(1, Math.max(0, (m.glow || 0) / FADE)); }
+export function sizeFor (mix, p = DEF) {
+  return p.wildSize + (p.followerSize - p.wildSize) * mix;
 }
 
 const TAU = Math.PI * 2;
@@ -107,13 +125,19 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   /* 300 wild mantas in small groups. A group shares a wander target that
      drifts towards the nearest bloom, which is what makes them gather where
      the plankton is without any of them being told to path anywhere. */
-  const GROUPS = 30;
+  /* GROUPS OF 3 TO 5 (10.2), so the count decides how many groups there are
+     rather than the other way round. */
+  const groupCap = [];
+  let planned = 0;
+  while (planned < p.wildCount) { const k = 3 + Math.floor(next() * 3); groupCap.push(k); planned += k; }
+  const GROUPS = groupCap.length;
   const groups = [];
   for (let g = 0; g < GROUPS; g++) {
     const a = next() * TAU, r = next() * p.arenaR * 0.9;
     groups.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, t: next() * 6 });
   }
   const wild = [];
+  const groupUsed = new Array(GROUPS).fill(0);
   function spawnWild (i, awayFrom) {
     /* Away from every leader, so nothing pops into existence on top of the
        player and is recruited in the same step. */
@@ -125,7 +149,13 @@ export function createSim ({ seed = 1, params = {} } = {}) {
       for (const L of awayFrom) if (Math.hypot(x - L.x, z - L.z) < 400) { ok = false; break; }
       if (ok) break;
     }
-    const g = Math.floor(next() * GROUPS);
+    /* Into a group with room in it, so a group stays 3 to 5 strong. */
+    let g = Math.floor(next() * GROUPS);
+    for (let k = 0; k < GROUPS; k++) {
+      const q = (g + k) % GROUPS;
+      if (groupUsed[q] < groupCap[q]) { g = q; break; }
+    }
+    groupUsed[g]++;
     /* A FRESH OBJECT, never the recruited one reused. The one that joined
        your train is a follower now; this is a different animal that happens
        to keep the count at 300. Reusing it made "was it recruited from
@@ -287,8 +317,15 @@ export function createSim ({ seed = 1, params = {} } = {}) {
       joined++;
       /* A SCATTERED manta is not part of the ambient 300 and is not replaced;
          an ambient one is, so the ocean keeps its population. */
-      const at = wild.indexOf(m);
-      if (m.loose) wild.splice(at, 1); else spawnWild(at, trains);
+      /* NO INSTANT RESPAWN. v1.10: the ocean refills one manta every two
+         seconds and no faster, so a busy patch runs dry and a train can only
+         grow as fast as the water allows.
+
+         THE ARRAY NEVER SHIFTS. A manta's slot is its colour — the deal gives
+         each index a hue — so splicing a recruited manta out would recolour
+         every manta behind it. Slots go dead and are reused instead. */
+      m.alive = false;
+      if (!m.loose && m.group !== undefined) groupUsed[m.group] = Math.max(0, groupUsed[m.group] - 1);
     }
     return joined;
   }
@@ -355,6 +392,20 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     recordTrail(t, moved);
   }
 
+  /* One every regrow seconds, up to the count, into a slot that has gone
+     dead and away from every leader. Never two in one step. */
+  let regrowOwed = 0;
+  function regrowWild (dt) {
+    let live = 0;
+    for (let i = 0; i < p.wildCount; i++) if (wild[i] && wild[i].alive) live++;
+    if (live >= p.wildCount) { regrowOwed = 0; return 0; }
+    regrowOwed += dt;
+    if (regrowOwed < p.regrow) return 0;
+    regrowOwed -= p.regrow;
+    for (let i = 0; i < p.wildCount; i++) if (!wild[i] || !wild[i].alive) { spawnWild(i, trains); return 1; }
+    return 0;
+  }
+
   function step () {
     const dt = STEP;
     time += dt;
@@ -373,6 +424,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
       stepTrain(t, t.dazed > 0 || t.stunned > 0 ? null : t.want, dt);
     }
     stepWild(dt);
+    regrowWild(dt);
 
     /* The hash carries every leader and follower circle, which is what both
        recruiting and crashing ask about. Wild mantas go in too, because
@@ -403,6 +455,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   return {
     get time () { return time; },
     params: p, blooms, you, rivals, trains, input, step, wild, groups, hash, joinedAt,
+    liveWild: () => { let n = 0; for (let i = 0; i < p.wildCount; i++) if (wild[i] && wild[i].alive) n++; return n; },
     scatter, crash, cutAt, makeTrain, seedTrail,
     get length () { return you.followers.length; },
     zoom: () => zoomFor(you.followers.length, p),

@@ -27,7 +27,10 @@ export function createRules (ctx) {
   function scatter (t, from, immune = 0) {
     const dropped = t.followers.splice(from);
     for (const f of dropped) {
-      wild.push({ x: f.x, z: f.z, head: f.head, group: Math.floor(next() * GROUPS),
+      /* Into a loose slot that has gone dead if there is one, so a long run
+         of crashes does not grow this array without bound. Ambient slots —
+         everything below wildCount — belong to the regrowth timer. */
+      const m = { x: f.x, z: f.z, head: f.head, group: Math.floor(next() * GROUPS),
                   speed: 40 + next() * 30, glow: p.scatterGlow, wasColour: t.id,
                   colour: f.from >= 0 ? f.from : 0, alive: true, isWild: true, loose: true,
                   /* WHO JUST DROPPED IT, and for how long they may not have it
@@ -39,7 +42,10 @@ export function createRules (ctx) {
                      no such thing, because 6.3 dazes the crasher for exactly
                      this reason. Everybody ELSE may still take it at once,
                      which is what 6.3 asks for. */
-                  fromTrain: immune > 0 ? t : null, immune });
+                  fromTrain: immune > 0 ? t : null, immune };
+      let at = -1;
+      for (let i = p.wildCount; i < wild.length; i++) if (!wild[i] || !wild[i].alive) { at = i; break; }
+      if (at >= 0) wild[at] = m; else wild.push(m);
     }
     return dropped.length;
   }

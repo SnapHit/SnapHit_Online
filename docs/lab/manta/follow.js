@@ -7,6 +7,8 @@
  * Lifted out of main.js unchanged. It reads one context at call time, because
  * the light memory and the shadow pass are built after this is created.
  */
+import { joinMix, looseMix, sizeFor } from './sim.js';
+
 export function createFollow (ctx) {
   const { mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS, PARKED,
           camera, zoomFor, setZoom, applyView, uCam, cut } = ctx;
@@ -19,7 +21,7 @@ export function createFollow (ctx) {
   const RECRUIT_FADE = 0.5;                 // seconds
   const fading = new Map();                 // instance slot -> seconds left
   const wearing = [], wasScaled = [];       // which wild slots are borrowed colours
-  let drawnFollowers = 0, drawnWild = 0, peakLength = 0, shake = 0;
+  let drawnFollowers = 0, drawnWild = 0, peakLength = 0, shake = 0, sizeDirty = false;
 
   function followCamera (dt) {
     const you = ctx.sim.you;
@@ -51,7 +53,15 @@ export function createFollow (ctx) {
       if (t <= 0) { m.setCutMix(slot, 0); fading.delete(slot); }
       else { m.setCutMix(slot, t / RECRUIT_FADE); fading.set(slot, t); }
     }
-    for (let i = 0; i < n; i++) { m.aPos.setXYZ(i + 1, f[i].x, 0, f[i].z); m.aHead.setX(i + 1, f[i].head); }
+    /* SIZE FOLLOWS STATE, on the same number as the colour: a recruit is 20
+     units wide and its own colour as it joins, and 28 and yours half a
+     second later. v1.10 makes food read apart from a train at a glance. */
+  const now = ctx.sim.time;
+  for (let i = 0; i < n; i++) {
+    m.aPos.setXYZ(i + 1, f[i].x, 0, f[i].z); m.aHead.setX(i + 1, f[i].head);
+    const want = sizeFor(joinMix(f[i], now), ctx.sim.params);
+    if (m.aSize.getX(i + 1) !== want) { m.aSize.setX(i + 1, want); sizeDirty = true; }
+  }
     /* Park what the train no longer uses, rather than leaving a stale manta
        sitting where the tail was. Only the slots that were drawn last frame. */
     for (let i = n; i < drawnFollowers; i++) m.aPos.setXYZ(i + 1, PARKED, 0, PARKED);
@@ -82,13 +92,19 @@ export function createFollow (ctx) {
         wearing[slot] = glowing;
         m.wearTrain(slot, glowing ? (q.wasColour === 0 ? 0 : RIVAL_BASE + (q.wasColour - 1) * RIVAL_LEN) : -1);
       }
-      if (glowing) m.setTintScale(slot, 1 + 1.2 * (q.glow / ctx.sim.params.scatterGlow));
+      /* A scattered manta keeps its train's size while it glows and shrinks
+       back to a wild 20 exactly as its own colour returns. */
+    const mixL = q.loose ? looseMix(q) : 0;
+    const wantW = sizeFor(mixL, ctx.sim.params);
+    if (m.aSize.getX(slot) !== wantW) { m.aSize.setX(slot, wantW); sizeDirty = true; }
+    if (glowing) m.setTintScale(slot, 1 + 1.2 * (q.glow / ctx.sim.params.scatterGlow));
       else if (wasScaled[slot]) { m.setTintScale(slot, 1); wasScaled[slot] = 0; }
       if (glowing) wasScaled[slot] = 1;
     }
     for (let i = lim; i < drawnWild; i++) m.aPos.setXYZ(WILD_BASE + i, PARKED, 0, PARKED);
     drawnWild = lim;
     m.aPos.needsUpdate = true; m.aHead.needsUpdate = true;
+  if (sizeDirty) { m.aSize.needsUpdate = true; sizeDirty = false; }
 
     /* SET PIECES ON REAL EVENTS. The cut's shockwave, light burst and beat of
        slow motion fire where a cut actually happened, and a crash shakes the

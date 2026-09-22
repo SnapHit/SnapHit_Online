@@ -244,6 +244,8 @@ function advance (now, dt) {
       sim.params.cruise = P.cruise; sim.params.burst = P.burstSpeed;
       sim.params.turnCruise = P.turnCruise; sim.params.turnBurst = P.turnBurst;
       sim.params.recruitR = P.recruitR; sim.params.spacing = P.spacing;
+      sim.params.wildCount = P.wildCount; sim.params.regrow = P.regrow;
+      sim.params.wildSize = P.wildSize;
       sim.params.burstCost = P.burstCost; sim.params.scatterGlow = P.scatterGlow;
       sim.params.daze = P.daze; sim.params.stun = P.stun;
       sim.step();

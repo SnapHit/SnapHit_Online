@@ -92,6 +92,10 @@ const SPAN_LAG = 1.4;             // travelling wave: the tip trails the root
    the gap you see between them is unchanged. */
 const LEADER_SIZE   = 40;   // world units across the wings
 const FOLLOWER_SIZE = 28;
+/* v1.10's table: wild mantas are smaller still, so food reads apart from a
+   train at a glance. The live value comes from sim.js's parameters; this is
+   what a slot starts at. */
+const WILD_SIZE = 20;
 
 
 
@@ -281,7 +285,7 @@ export function createMantas (scene, { scripted = false } = {}) {
     }
   }
   for (let i = 0; i < WILD_SLOTS; i++) {
-    roles.push({ kind: 'wild', idx: i, size: FOLLOWER_SIZE, wild: true, group: 'wild' });
+    roles.push({ kind: 'wild', idx: i, size: WILD_SIZE, wild: true, group: 'wild' });
   }
 
   const colours = createColours({ COUNT, roles, aTint,
