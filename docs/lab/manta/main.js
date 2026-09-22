@@ -18,7 +18,7 @@ import { REVISION } from 'three';
 import * as panel from './panel.js';
 import { P, U } from './params.js';
 import { createScene, describeView } from './scene.js';
-import { useLightMemory, useLongMemory, useSeabed, useCaustics, useShadows, uCam, uCausticLayers, uViewW, uViewH, uShockC, uShockR, uShockA, uRippleOn } from './ocean.js';
+import { useLightMemory, useLongMemory, useSeabed, useCaustics, useShadows, uCam, uCausticLayers, uViewW, uViewH, uShockC, uShockR, uShockA, uRippleOn, uArenaR } from './ocean.js';
 import { createLightMemory } from './lightmemory.js';
 import { createSeabed } from './seabed.js';
 import { createCaustics } from './caustics.js';
@@ -246,6 +246,7 @@ function advance (now, dt) {
       sim.params.recruitR = P.recruitR; sim.params.spacing = P.spacing;
       sim.params.wildCount = P.wildCount; sim.params.regrow = P.regrow;
       sim.params.wildSize = P.wildSize;
+      uArenaR.value = sim.params.arenaR;
       sim.params.burstCost = P.burstCost; sim.params.scatterGlow = P.scatterGlow;
 
       sim.step();

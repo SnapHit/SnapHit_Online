@@ -31,6 +31,15 @@ import { lightTarget } from './lighten.js';
 
 /* Screen aspect, pushed in from fit() rather than read from a screen-size
    node, so the pattern is never stretched and the plumbing stays explicit. */
+/* The reef's warm, its dark floor beyond the line, and how much of each.
+   Levels are separate from the colours so the conditions can be re-measured
+   against one number rather than a hue. */
+const REEF_WARM = color(0xff7a2e);
+const REEF_DEEP = color(0x1b0c07);
+const REEF_RING_LEVEL = 0.115;
+const REEF_EDGE_LEVEL = 0.055;
+const REEF_WARN_LEVEL = 0.030;
+
 export const uAspect = uniform(1.0);
 /* The view in world units, so a pixel can work out where in the ocean it is
    and read the light memory there. */
@@ -52,6 +61,9 @@ export const uShockA = uniform(0);
    shader variant: compiling a new one the moment the device is already
    struggling is exactly the wrong time to pay for it. */
 export const uRippleOn = uniform(1);
+/* The arena's radius, so the water knows where the reef is. Fed from the
+   simulation's parameters, which own it. */
+export const uArenaR = uniform(2000);
 
 
 /* Blue-green, from the palette already in use. */
@@ -316,12 +328,62 @@ export function oceanNode () {
     const crest = smoothstep(float(0.40), float(1.0), r1.mul(r2));
     const ripple = RIPPLE.mul(crest.mul(RIPPLE_LEVEL)).mul(uRippleOn);
 
+    /* 5. THE REEF, and it has to be seen. A crash ends the run now, so an
+          invisible wall is a fairness problem rather than a look problem:
+          Nathan crashed into nothing on the phone. Three parts, all here
+          because the ocean already knows where every pixel is in the world.
+
+          Warm colour is free here and nowhere else: 7.2 takes warm off danger
+          duty for the mantas and gives the reef its own way of reading as
+          danger — by its place, its ring and its slow pulse, the way
+          slither's border does.
+
+          a. a ring that pulses, 120 units of it inside the line and 90 out,
+             so it is visible from half a screen away at every zoom;
+          b. beyond the line the water stops being ocean: much darker, with a
+             rough reef texture and the warm edge on top of it;
+          c. within about a screen of it, the side of the screen facing it
+             leans warm. Slow and small — a warning, never a flash. */
+    const reefD = length(w0);
+    /* 260 units of it inside the line, not 120. Half a screen is 427 units,
+       so a 120-unit ring is a strip a dozen pixels tall at the very edge of
+       the frame from that distance — present, but not a thing you read as
+       danger in time. At 260 it is a band you cannot miss while there is
+       still room to turn. */
+    const ringBand = smoothstep(uArenaR.sub(float(260)), uArenaR, reefD)
+      .mul(float(1.0).sub(smoothstep(uArenaR, uArenaR.add(float(90)), reefD)));
+    /* About four seconds a breath, which is a pulse and not a flicker. */
+    const reefPulse = sin(uTime.mul(1.6)).mul(0.5).add(0.5).mul(0.42).add(0.58);
+    const reefRing = REEF_WARM.mul(ringBand.mul(ringBand)).mul(reefPulse).mul(REEF_RING_LEVEL);
+    const outside = smoothstep(uArenaR.sub(float(4)), uArenaR.add(float(26)), reefD);
+    /* Rubble, in cells about two thirds of a wingspan across. */
+    const reefRough = rand(floor(w0.div(float(26)))).mul(0.55).add(0.45);
+    /* The warm goes ALONG THE EDGE and not across the whole outside: lit from
+       end to end it made the far side of the line brighter than the ocean,
+       which is the opposite of what it is for. A band 90 units deep, and past
+       that dark rubble. */
+    const edgeBand = outside.mul(float(1.0).sub(smoothstep(uArenaR.add(float(8)), uArenaR.add(float(95)), reefD)));
+    const reefBeyond = REEF_DEEP.mul(reefRough).mul(outside)
+      .add(REEF_WARM.mul(edgeBand).mul(REEF_EDGE_LEVEL).mul(reefPulse));
+    /* What is left of the ocean where the reef has taken over. */
+    const reefDim = float(1.0).sub(outside.mul(0.8));
+
+    const camD = length(uCam);
+    const toReef = uArenaR.sub(camD);                       // units still to go
+    const warnNear = float(1.0).sub(smoothstep(float(280), uViewH, toReef));
+    const radial = uCam.div(max(camD, float(1.0)));         // which way the reef lies
+    const fromMid = vec2(screenUV.x.sub(0.5), screenUV.y.sub(0.5));
+    const facing = clamp(fromMid.x.mul(radial.x).add(fromMid.y.mul(radial.y)).mul(2.4), 0, 1);
+    const reefWarn = REEF_WARM.mul(facing.mul(facing)).mul(warnNear).mul(REEF_WARN_LEVEL);
+
+    const reef = reefRing.add(reefBeyond).add(reefWarn);
+
     /* 4. the plankton, which is the only part of the ocean that knows what has
           happened in it. It reads the light memory at this pixel's world
           position: near zero in still water, and bright along anything that
           has swum past. Cost is per pixel and does not know how many mantas
           there are, which is the point. */
-    if (lm === null) return water.add(seabed).add(ripple);
+    if (lm === null) return water.mul(reefDim).add(seabed.mul(reefDim)).add(ripple).add(reef);
 
     /* The exact inverse of the mapping the light memory pass uses, so the two
        agree by construction rather than by coincidence. */
@@ -389,6 +451,6 @@ export function oceanNode () {
         : PLANKTON.mul(texture(lmSlow.out, world.div(lmSlow.uHalf.mul(2.0)).add(0.5)).rgb)
             .mul(U.longMemory).mul(0.8));                                     // the ribbon itself
 
-    return water.add(seabed).add(ripple).add(snow).add(plankton);
+    return water.mul(reefDim).add(seabed.mul(reefDim)).add(ripple).add(snow).add(plankton).add(reef);
   })();
 }

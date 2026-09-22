@@ -130,13 +130,13 @@ export const SPEC = [
   { key: 'burstSpeed',     label: 'burst speed',          def: 340,   min: 120,  max: 520,   step: 5,     gpu: false },
   { key: 'turnCruise',     label: 'turn rate cruising',   def: 3.1,   min: 1,    max: 6,     step: 0.1,   gpu: false },
   { key: 'turnBurst',      label: 'turn rate bursting',   def: 4.1,   min: 1,    max: 6,     step: 0.1,   gpu: false },
-  { key: 'recruitR',       label: 'recruit radius',       def: 30,    min: 15,   max: 120,   step: 1,     gpu: false },
-  { key: 'spacing',        label: 'follower spacing',     def: 31,    min: 12,   max: 60,    step: 1,     gpu: false },
-  { key: 'wildCount',      label: 'wild count',           def: 120,   min: 20,   max: 300,   step: 10,    gpu: false },
-  { key: 'regrow',         label: 'regrowth interval',    def: 2,     min: 0.2,  max: 8,     step: 0.1,   gpu: false },
-  { key: 'wildSize',       label: 'wild size',            def: 20,    min: 10,   max: 28,    step: 1,     gpu: false },
+  { key: 'recruitR',       label: 'recruit radius',       def: 21,    min: 15,   max: 120,   step: 1,     gpu: false },
+  { key: 'spacing',        label: 'follower spacing',     def: 19,    min: 12,   max: 60,    step: 1,     gpu: false },
+  { key: 'wildCount',      label: 'wild count',           def: 20,   min: 20,   max: 300,   step: 10,    gpu: false },
+  { key: 'regrow',         label: 'regrowth interval',    def: 0.5,     min: 0.2,  max: 8,     step: 0.1,   gpu: false },
+  { key: 'wildSize',       label: 'wild size',            def: 28,    min: 10,   max: 28,    step: 1,     gpu: false },
   { key: 'burstCost',      label: 'burst cost interval',  def: 0.35,  min: 0.1,  max: 1.5,   step: 0.05,  gpu: false },
-  { key: 'scatterGlow',    label: 'scatter glow',         def: 4,     min: 0.5,  max: 10,    step: 0.5,   gpu: false },
+  { key: 'scatterGlow',    label: 'scatter glow',         def: 5.5,     min: 0.5,  max: 10,    step: 0.5,   gpu: false },
 ];
 
 /* Plain numbers, read from JS each frame. */

@@ -119,9 +119,18 @@ export function createDrawer () {
     const L = window.__lab;
     if (!L || !L.mantas || !L.mantas.colours) return '';
     const c = L.mantas.colours;
+    /* WILD MANTAS ARE SUMMARISED, NEVER LISTED. The deal gives one colour to
+       every wild slot, and there are hundreds of them: printing them one by
+       one buried the values Nathan came for under a wall of colour words and
+       made Copy values useless on a phone. A count per colour says the same
+       thing in one line. */
+    const tally = new Map();
+    for (const r of c.wilds) tally.set(r.key, (tally.get(r.key) || 0) + 1);
+    const wild = [...tally.entries()].sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => k + ' \u00d7' + v).join(', ');
     return '\nyour colour: ' + c.mine.key + '  \u00b7  seed ' + L.mantas.seed +
            '  \u00b7  rivals ' + c.rivals.map(r => r.key).join(', ') +
-           '  \u00b7  wild ' + c.wilds.map(r => r.key).join(', ');
+           '\nwild: ' + c.wilds.length + ' in ' + tally.size + ' colours  \u00b7  ' + wild;
   }
 
   el.copy.addEventListener('click', async () => {
