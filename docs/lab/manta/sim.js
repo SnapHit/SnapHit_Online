@@ -39,6 +39,7 @@ export const DEF = {
   restartMin: 800,      // units from the crash, and clear of every train
   wildCount: 120,      // v1.10: 300 with instant respawn never ran dry
   regrow: 2,           // seconds a manta, up to the count, and never faster
+  drain: 3,            // seconds a surplus manta takes to fade out
   wildSize: 20,        // wingspan, against 28 for a follower and 40 for a leader
   /* AN EVEN OCEAN. Every group used to steer at the nearest bloom with most
      of the distance closed each time it chose, so all thirty of them ended
@@ -483,9 +484,54 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   /* One every regrow seconds, up to the count, into a slot that has gone
      dead and away from every leader. Never two in one step. */
   let regrowOwed = 0;
+  /* THE LIVING POPULATION, SCATTERED ONES INCLUDED. This counted only the
+     ambient slots, so a crash that put forty mantas in the water left the
+     ocean forty over its target and regrowth carried on regardless: the
+     count is what the target works against, however a manta got there. */
+  function livingWild () {
+    let n = 0;
+    for (const w of wild) if (w && w.alive) n++;
+    return n;
+  }
+
+  /* Over the target, nothing regrows and the surplus drains away: the
+     scattered ones furthest from the player fade out first, over a few
+     seconds each, so the ocean settles back without anything vanishing
+     under your nose. */
+  function drainSurplus (dt) {
+    let live = 0, going = 0;
+    for (const w of wild) {
+      if (!w || !w.alive) continue;
+      live++;
+      if (w.fading > 0) going++;
+    }
+    for (const w of wild) {
+      if (!w || !w.alive || !(w.fading > 0)) continue;
+      w.fading -= dt;
+      if (w.fading <= 0) w.alive = false;
+    }
+    let over = live - going - p.wildCount;
+    if (over <= 0) return 0;
+    /* Enough of them at once to cover the whole surplus, furthest from the
+       player first, so a train of forty crashing does not leave the ocean
+       over its target for two minutes. They still take their few seconds
+       each to fade. */
+    const spare = [];
+    for (const w of wild) {
+      if (!w || !w.alive || !w.loose || w.glow > 0 || w.fading > 0) continue;
+      spare.push(w);
+    }
+    spare.sort((a, b) => Math.hypot(b.x - you.x, b.z - you.z) - Math.hypot(a.x - you.x, a.z - you.z));
+    let started = 0;
+    for (const w of spare) {
+      if (over <= 0) break;
+      w.fading = p.drain; over--; started++;
+    }
+    return started;
+  }
+
   function regrowWild (dt) {
-    let live = 0;
-    for (let i = 0; i < p.wildCount; i++) if (wild[i] && wild[i].alive) live++;
+    const live = livingWild();
     if (live >= p.wildCount) { regrowOwed = 0; return 0; }
     regrowOwed += dt;
     if (regrowOwed < p.regrow) return 0;
@@ -523,6 +569,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
       if (t.followers.length > t.peak) t.peak = t.followers.length;
     }
     stepWild(dt);
+    drainSurplus(dt);
     regrowWild(dt);
 
     /* The hash carries every leader and follower circle, which is what both
@@ -555,7 +602,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   return {
     get time () { return time; },
     params: p, blooms, you, rivals, trains, input, step, wild, groups, hash, joinedAt,
-    liveWild: () => { let n = 0; for (let i = 0; i < p.wildCount; i++) if (wild[i] && wild[i].alive) n++; return n; },
+    liveWild: livingWild,
     scatter, crash, cutAt, makeTrain, seedTrail, restart,
     get length () { return you.followers.length; },
     zoom: () => zoomFor(you.followers.length, p),

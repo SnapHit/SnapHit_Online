@@ -128,9 +128,14 @@ export function createDrawer () {
     for (const r of c.wilds) tally.set(r.key, (tally.get(r.key) || 0) + 1);
     const wild = [...tally.entries()].sort((a, b) => b[1] - a[1])
       .map(([k, v]) => k + ' \u00d7' + v).join(', ');
+    /* THE LIVING COUNT, not the deal's. c.wilds is one entry per slot in the
+       instance buffer — 624 of them — which read as "wild: 624" next to a
+       wild count slider saying 20 in the same block. */
+    const living = window.__sim ? window.__sim.liveWild() : null;
     return '\nyour colour: ' + c.mine.key + '  \u00b7  seed ' + L.mantas.seed +
            '  \u00b7  rivals ' + c.rivals.map(r => r.key).join(', ') +
-           '\nwild: ' + c.wilds.length + ' in ' + tally.size + ' colours  \u00b7  ' + wild;
+           '\nwild alive: ' + (living === null ? '?' : living) +
+           '  \u00b7  palette ' + tally.size + ' colours  \u00b7  ' + wild;
   }
 
   el.copy.addEventListener('click', async () => {

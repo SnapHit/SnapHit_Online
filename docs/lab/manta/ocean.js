@@ -36,7 +36,8 @@ import { lightTarget } from './lighten.js';
    against one number rather than a hue. */
 const REEF_WARM = color(0xff7a2e);
 const REEF_DEEP = color(0x1b0c07);
-const REEF_RING_LEVEL = 0.115;
+const REEF_RING_LEVEL = 0.155;
+const REEF_HALO_LEVEL = 0.075;
 const REEF_EDGE_LEVEL = 0.055;
 const REEF_WARN_LEVEL = 0.030;
 
@@ -330,7 +331,14 @@ export function oceanNode () {
                                   float(-SHADOW_OFFSET).add(step2.mul(oz))));
         acc = acc.add(texture(shadows.out, sUV(at)).r);
       }
-      shade = float(1.0).sub(acc.div(9.0).mul(U.shadow));
+      /* A SHADOW CAN ONLY TAKE LIGHT AWAY. Unclamped this is 1 - mean*strength,
+         which at Nathan's strength of 2 reaches -1 under a manta: a NEGATIVE
+         seabed. The ceiling below then divides that by a luminance floored at
+         1e-5 and multiplies a negative colour by a vast negative number, which
+         comes out as the bright electric smear he saw a wingspan down and to
+         the left of every manta — exactly where SHADOW_OFFSET puts the shadow.
+         Clamped, strength 2 means as dark as it gets and never brighter. */
+      shade = clamp(float(1.0).sub(acc.div(9.0).mul(U.shadow)), 0.0, 1.0);
     }
 
     const seabed = bedHue.mul(bedV.mul(moon).mul(caustic).mul(cloud).mul(SEABED_LEVEL)).mul(shade);
@@ -369,10 +377,27 @@ export function oceanNode () {
        the frame from that distance — present, but not a thing you read as
        danger in time. At 260 it is a band you cannot miss while there is
        still room to turn. */
-    const ringBand = smoothstep(uArenaR.sub(float(260)), uArenaR, reefD)
+    /* A CORE AND A HALO. 260 units of ring is a strip a dozen pixels tall at
+       the top of the frame from half a screen away — measured, and it did not
+       read. The core still marks the line, and a halo 760 units deep falls
+       off into the water behind it, so from half a screen the warning covers
+       the upper part of the screen instead of hugging its edge. */
+    const ringCore = smoothstep(uArenaR.sub(float(260)), uArenaR, reefD)
       .mul(float(1.0).sub(smoothstep(uArenaR, uArenaR.add(float(90)), reefD)));
+    const ringHalo = smoothstep(uArenaR.sub(float(760)), uArenaR, reefD)
+      .mul(float(1.0).sub(smoothstep(uArenaR, uArenaR.add(float(160)), reefD)));
+    const ringBand = ringCore;
     /* About four seconds a breath, which is a pulse and not a flicker. */
     const reefPulse = sin(uTime.mul(1.6)).mul(0.5).add(0.5).mul(0.42).add(0.58);
+    /* THE HALO IS OUT, and this is the conflict to report rather than fudge.
+       A glow wide enough to read from half a screen is 760 units of warm
+       light reaching well inside the arena, and the conditions harness
+       counts every non-manta pixel as water: with it, condition 2 read 179.2
+       against a dimmest manta of 80.5 at medium. 7.2 frees warm colour for
+       the reef and calls the crests of the SEABED and the CAUSTICS what
+       condition 2 is about, so the two requirements as written cannot both
+       hold while the harness cannot tell reef from water. The core ring
+       stays; the halo waits for a ruling. */
     const reefRing = REEF_WARM.mul(ringBand.mul(ringBand)).mul(reefPulse).mul(REEF_RING_LEVEL);
     const outside = smoothstep(uArenaR.sub(float(4)), uArenaR.add(float(26)), reefD);
     /* Rubble, in cells about two thirds of a wingspan across. */
@@ -400,7 +425,12 @@ export function oceanNode () {
     /* The ceiling, applied to the moonlit water as one thing. Identity below
        the knee, asymptotic to the cap above it, and the colour is scaled so
        the hue survives. */
-    const capWater = (c) => {
+    const capWater = (c0) => {
+      /* Nothing negative reaches the ceiling. The clamp above is the real
+         fix; this is the belt to its braces, because the failure mode of a
+         negative going into a divide is a bright smear rather than a dark
+         patch, and that is not a thing to leave one mistake away. */
+      const c = max(c0, vec3(0.0, 0.0, 0.0));
       const lum = c.x.mul(0.2126).add(c.y.mul(0.7152)).add(c.z.mul(0.0722));
       const over = max(lum.sub(float(WATER_KNEE)), float(0.0));
       const room = float(WATER_CAP - WATER_KNEE);
