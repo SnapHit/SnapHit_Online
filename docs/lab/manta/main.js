@@ -33,6 +33,8 @@ import { createQuality, TIER_SETTINGS } from './tiers.js';
 import { setSceneTime } from './clock.js';
 import { watchConsole, watchDevice, onIssue, issueText, counts } from './watch.js';
 import { createDrawer } from './drawer.js';
+import { createStamper } from './stamp.js';
+import { createFollow } from './follow.js';
 
 const query = new URLSearchParams(location.search);
 /* ?fx=off builds the page without the light memory, the plankton or anything
@@ -165,95 +167,21 @@ window.__lab.quality = quality;
 window.__lab.applyQuality = () => applyQuality(lab.renderer);
 /* lab is assigned below, once createLab has run. */
 
-/* ------------------------------------------------------ stamping the wake */
-
-/* Where each manta was last frame, so it can be stamped along the segment it
-   swept rather than at a point. A fast manta must paint a line. */
-const prevX = new Float32Array(COUNT), prevZ = new Float32Array(COUNT);
-let havePrev = false;
-let burstCleared = false;
+/* The post chain and whether the light memory is attached: the render
+   hooks below own these too. */
 let lmAttached = false;
-let simTime = 0;
 let post = null;
 
-/* Tuned against the render, not guessed: with a fade of 0.985 a pixel under a
-   passing manta accumulates about fifty frames of this before it clears, so
-   the per-frame figure is small by design. */
-/* 0.0018, and the ceiling is measured rather than guessed.
-  
-   The phone reports 60 fps on both backends with a worst 1% of 17.7 ms and
-   four draw calls, so the light memory costs almost nothing and there is no
-   reason for it to be faint. But at 0.0030 the hierarchy inverts: the wake
-   measured 63 against a dim manta's 56, so the water became brighter than an
-   unattached manta and that manta's contrast with its own surroundings fell
-   to 1.63. At 0.0018 the order holds and the dim manta still reads at 3.39
-   times the water around it.
-  
-   Together with a fade of 0.993 this is about two and a half times the
-   deposit and two and a half times the persistence of what was on the phone
-   before. */
-const STAMP_BASE = 0.0018;
-const CRUISE = 120;               // world units a second, the reference speed
+/* The frame clock the scene reads, and the fixed-step accumulator. Both
+   belong to the loop below; they only sat next to the stamping code. */
+let simTime = 0;
 
-/* Which instances get one of the slots, rebuilt each frame because the train
-   grows. Your leader always, then followers spread evenly along the whole
-   length so the tail of a long train deposits as well as its head, then the
-   rivals. The spike scene keeps its scripted five and its four singles. */
-const stampList = [];
-function buildStampList () {
-  stampList.length = 0;
-  if (sim) {
-    stampList.push(0);
-    const n = Math.min(sim.you.followers.length, TRAIN_MAX - 1);
-    const take = Math.min(n, 14);
-    for (let k = 1; k <= take; k++) stampList.push(Math.round(k * n / take));
-  } else {
-    for (let i = 0; i < 5; i++) stampList.push(i);
-  }
-  for (let i = RIVAL_BASE; i < RIVAL_BASE + 9 && stampList.length < STAMP_SLOTS; i++) stampList.push(i);
-  if (!sim) for (let i = WILD_BASE; i < WILD_BASE + 4 && stampList.length < STAMP_SLOTS; i++) stampList.push(i);
-  while (stampList.length > STAMP_SLOTS) stampList.pop();
-}
-
-function stampMantas (dt) {
-  if (!lm) return;
-  if (!burstCleared) { lm.stamp(BURST_SLOT, 0, 0, 0, 0, 1, 0, 0, 0, 0); burstCleared = true; }
-  const { aPos, aSize, aTint } = mantas;
-  buildStampList();
-  /* Slots nobody is using this frame deposit nothing, or the last manta to
-     hold the slot would keep stamping where it was left. */
-  for (let sl = stampList.length; sl < STAMP_SLOTS; sl++) lm.stamp(sl, 0, 0, 0, 0, 1, 0, 0, 0, 0);
-  for (let sl = 0; sl < stampList.length; sl++) {
-    const i = stampList[sl];
-    const x = aPos.getX(i), z = aPos.getZ(i);
-    const x0 = havePrev ? prevX[i] : x, z0 = havePrev ? prevZ[i] : z;
-    const moved = Math.hypot(x - x0, z - z0);
-    /* A manta that has wrapped across the world did not swim that line, so it
-       stamps a point rather than a stripe across the whole ocean. */
-    const jumped = moved > 200;
-    const speed = dt > 0 ? moved / dt : 0;
-    const speedFactor = Math.min(Math.max(speed / CRUISE, 0.25), 1.5);
-    const s = STAMP_BASE * P.stamp * (dt * 60) * speedFactor;
-    /* A wake takes the colour of the train that made it (7.2), and a wild
-       manta is not in one: it stirs only the plankton's own faint blue-green,
-       at a fraction of the deposit, so a dark animal does not paint a dark
-       trail and does not glow by proxy either. */
-    const wild = mantas.isWild && mantas.isWild(i);
-    const wr = wild ? 0.10 : aTint.getX(i);
-    const wg = wild ? 0.42 : aTint.getY(i);
-    const wb = wild ? 0.36 : aTint.getZ(i);
-    lm.stamp(sl,
-      jumped ? x : x0, jumped ? z : z0, x, z,
-      aSize.getX(i) * 1.2,                       // about 1.2 wingspans
-      wr, wg, wb, wild ? s * 0.35 : s);
-    if (lmSlow && P.longMemory > 0) lmSlow.stamp(sl,
-      jumped ? x : x0, jumped ? z : z0, x, z,
-      aSize.getX(i) * 1.2,
-      aTint.getX(i), aTint.getY(i), aTint.getZ(i), s);
-    prevX[i] = x; prevZ[i] = z;
-  }
-  havePrev = true;
-}
+/* Stamping the wake lives in stamp.js. */
+const stamper = createStamper({ mantas, COUNT, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE,
+                                STAMP_SLOTS, BURST_SLOT, P,
+                                get lm () { return lm; }, get lmSlow () { return lmSlow; },
+                                get sim () { return sim; } });
+const stampMantas = dt => stamper.stampMantas(dt);
 
 /* ---------------------------------------------------------------- the lab */
 
@@ -292,104 +220,13 @@ function applyView (v) {
   panel.set('viewport', panel.describeViewport());
 }
 
-/* A recruit does not snap to your colour: 7.2 calls for it to arrive over a
-   beat. It cannot be a gradient across the animal's body without a seventh
-   instance attribute, and WebGPU guarantees eight vertex buffers a pipeline
-   with six already spent, so this is a cross-fade in time from the colour it
-   wore as a wild manta to yours. */
-const RECRUIT_FADE = 0.5;                 // seconds
-const fading = new Map();                 // instance slot -> seconds left
-const wearing = [], wasScaled = [];       // which wild slots are borrowed colours
-let drawnFollowers = 0, drawnWild = 0, peakLength = 0, shake = 0;
-
-function followCamera (dt) {
-  const you = sim.you;
-  const z = zoomFor(you.followers.length, sim.params);
-  if (setZoom(z)) applyView(view);
-  uCam.value.set(you.x, you.z);
-  camera.position.set(you.x, 1000, you.z);
-  camera.lookAt(you.x, 0, you.z);
-  camera.up.set(0, 0, -1);
-  camera.updateMatrixWorld();
-  if (lm) lm.setCentre(you.x, you.z);
-  if (lmSlow) lmSlow.setCentre(you.x, you.z);
-  if (shadows) shadows.setCentre(you.x, you.z);
-
-  const m = mantas, f = you.followers;
-  const n = Math.min(f.length, TRAIN_MAX - 1);
-  m.aPos.setXYZ(0, you.x, 0, you.z); m.aHead.setX(0, you.head);
-  /* Anyone who joined since the last frame arrives wearing their own colour
-     and fades into yours. The slot has to take their colour as its own too,
-     or a scatter in stage 3 would hand it the one the deal gave the slot. */
-  for (let i = drawnFollowers; i < n; i++) {
-    const src = f[i].from;
-    if (src >= 0) m.adoptOwn(i + 1, WILD_BASE + src);
-    m.setCutMix(i + 1, 1);
-    fading.set(i + 1, RECRUIT_FADE);
-  }
-  for (const [slot, left] of fading) {
-    const t = left - dt;
-    if (t <= 0) { m.setCutMix(slot, 0); fading.delete(slot); }
-    else { m.setCutMix(slot, t / RECRUIT_FADE); fading.set(slot, t); }
-  }
-  for (let i = 0; i < n; i++) { m.aPos.setXYZ(i + 1, f[i].x, 0, f[i].z); m.aHead.setX(i + 1, f[i].head); }
-  /* Park what the train no longer uses, rather than leaving a stale manta
-     sitting where the tail was. Only the slots that were drawn last frame. */
-  for (let i = n; i < drawnFollowers; i++) m.aPos.setXYZ(i + 1, PARKED, 0, PARKED);
-  drawnFollowers = n;
-
-  /* THE RIVALS ARE THE SIMULATION'S NOW, not the script's: stage 3 puts them
-     on the same rules, so they crash into you, get cut by you, and recruit
-     their own trains back. */
-  for (let r = 0; r < sim.rivals.length; r++) {
-    const t = sim.rivals[r], base = RIVAL_BASE + r * RIVAL_LEN;
-    m.aPos.setXYZ(base, t.x, 0, t.z); m.aHead.setX(base, t.head);
-    const k = Math.min(t.followers.length, RIVAL_LEN - 1);
-    for (let i = 0; i < k; i++) { const g = t.followers[i];
-      m.aPos.setXYZ(base + 1 + i, g.x, 0, g.z); m.aHead.setX(base + 1 + i, g.head); }
-    for (let i = k; i < RIVAL_LEN - 1; i++) m.aPos.setXYZ(base + 1 + i, PARKED, 0, PARKED);
-  }
-
-  /* The ambient 300 and everything loose. A scattered manta wears the colour
-     of the train it came out of while it glows, and goes back to its own when
-     the glow runs out (7.2). */
-  const w = sim.wild, lim = Math.min(w.length, WILD_SLOTS);
-  for (let i = 0; i < lim; i++) {
-    const q = w[i], slot = WILD_BASE + i;
-    if (q.alive) { m.aPos.setXYZ(slot, q.x, 0, q.z); m.aHead.setX(slot, q.head); }
-    else m.aPos.setXYZ(slot, PARKED, 0, PARKED);
-    const glowing = q.alive && q.loose && q.glow > 0;
-    if (glowing !== !!wearing[slot]) {
-      wearing[slot] = glowing;
-      m.wearTrain(slot, glowing ? (q.wasColour === 0 ? 0 : RIVAL_BASE + (q.wasColour - 1) * RIVAL_LEN) : -1);
-    }
-    if (glowing) m.setTintScale(slot, 1 + 1.2 * (q.glow / sim.params.scatterGlow));
-    else if (wasScaled[slot]) { m.setTintScale(slot, 1); wasScaled[slot] = 0; }
-    if (glowing) wasScaled[slot] = 1;
-  }
-  for (let i = lim; i < drawnWild; i++) m.aPos.setXYZ(WILD_BASE + i, PARKED, 0, PARKED);
-  drawnWild = lim;
-  m.aPos.needsUpdate = true; m.aHead.needsUpdate = true;
-
-  /* SET PIECES ON REAL EVENTS. The cut's shockwave, light burst and beat of
-     slow motion fire where a cut actually happened, and a crash shakes the
-     camera for a quarter of a second. */
-  let event = null;
-  for (const t of sim.trains) { if (t.cut > 0.24) event = 'cut'; if (t.crashed > 0.24) event = event || 'crash'; }
-  if (event === 'cut' && !cut.running) cut.trigger();
-  if (event === 'crash') shake = 0.25;
-  if (shake > 0) {
-    shake = Math.max(0, shake - dt);
-    const a = shake * 26;
-    camera.position.x += Math.sin(shake * 91) * a;
-    camera.position.z += Math.cos(shake * 73) * a;
-    camera.updateMatrixWorld();
-  }
-
-  if (f.length > peakLength) peakLength = f.length;
-  const el = document.getElementById('len');
-  if (el) el.textContent = 'length ' + f.length + '   peak ' + peakLength;
-}
+/* The camera and every instance live in follow.js. */
+const follower = createFollow({ mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS,
+                                PARKED, camera, zoomFor, setZoom, applyView, uCam, cut,
+                                get view () { return view; }, get sim () { return sim; },
+                                get lm () { return lm; }, get lmSlow () { return lmSlow; },
+                                get shadows () { return shadows; } });
+const followCamera = dt => follower.followCamera(dt);
 
 /* Hoisted out of the hooks so the step hook below can drive it. The cut owns
    the clock while it is running: its own timeline advances in REAL time — a
@@ -494,7 +331,7 @@ const lab = createLab({
          the targets reallocate against it. */
       lmAttached = false;
       slowAttached = false;
-      havePrev = false;
+      stamper.forgetPrevious();
       /* The pipeline, its pass target and the bloom mips all belong to the
          renderer that just died. */
       if (post) { post.dispose(); post = null; }
