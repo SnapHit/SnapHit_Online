@@ -33,8 +33,10 @@ export const DEF = {
   recruitR: 30,        // contact with a 20-unit wild manta, plus a margin
   burstCost: 0.35,      // seconds a follower
   scatterGlow: 4,
-  daze: 3,
-  stun: 1,
+  /* v1.10 rule 3: a crash ends the run. The daze and the lone-leader stun
+     are gone with it — there is no longer a you to daze. */
+  deathBeat: 1.5,       // seconds before you are swimming again
+  restartMin: 800,      // units from the crash, and clear of every train
   wildCount: 120,      // v1.10: 300 with instant respawn never ran dry
   regrow: 2,           // seconds a manta, up to the count, and never faster
   wildSize: 20,        // wingspan, against 28 for a follower and 40 for a leader
@@ -184,7 +186,12 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   function makeTrain (x, z, head) {
     return {
       id: nextId++, x, z, head, turn: 0,
-      bursting: false, dazed: 0, stunned: 0,
+      bursting: false, dazed: 0, stunned: 0,   // kept at 0: nothing sets them now
+      dead: 0,                // seconds of death beat left, 0 when swimming
+      peak: 0,                // the longest this run has been
+      lastPeak: 0,            // the score of the run that just ended
+      runs: 0,
+      crashX: 0, crashZ: 0,
       followers: [],
       trail: [],              // recent path, for the arc-length rule
       s: 0,                   // arc length travelled
@@ -213,14 +220,8 @@ export function createSim ({ seed = 1, params = {} } = {}) {
      and consumed here, so the simulation never reads a device. */
   const input = { want: null, burst: false };
 
-  function speedOf (m) {
-    if (m.stunned > 0) return p.cruise * 0.55;     // slowed, weak turning
-    return m.bursting ? p.burst : p.cruise;
-  }
-  function turnRateOf (m) {
-    if (m.stunned > 0) return p.turnCruise * 0.4;
-    return m.bursting ? p.turnBurst : p.turnCruise;
-  }
+  function speedOf (m) { return m.bursting ? p.burst : p.cruise; }
+  function turnRateOf (m) { return m.bursting ? p.turnBurst : p.turnCruise; }
 
   /* Steer, then move along the heading. Never the other way round: writing a
      position as a function of the clock is what made the spike's loose
@@ -300,7 +301,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
      radius is actually the radius. */
   const joinedAt = [];
   function recruit (t, cap) {
-    if (t.dazed > 0 || t.stunned > 0) return 0;
+    if (t.dead > 0) return 0;
     if (t.followers.length >= cap) return 0;
     let joined = 0;
     hash.near(t.x, t.z, scratch);
@@ -382,14 +383,40 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   const { scatter, crash, cutAt, resolveTouches, payForBurst, steerRival } = createRules(ruleCtx);
 
   function stepTrain (t, want, dt) {
-    if (t.dazed > 0) t.dazed = Math.max(0, t.dazed - dt);
-    if (t.stunned > 0) t.stunned = Math.max(0, t.stunned - dt);
     if (t.crashed > 0) t.crashed = Math.max(0, t.crashed - dt);
     if (t.cut > 0) t.cut = Math.max(0, t.cut - dt);
     const fromX = t.x, fromZ = t.z, sBefore = t.s;
     const moved = advance(t, want, dt);
     hold(t, fromX, fromZ, sBefore);
     recordTrail(t, moved);
+  }
+
+  /* WHERE YOU COME BACK. v1.10: at least 800 units from the crash and clear
+     of every train, so you are not dropped back into the wreck you just made
+     or on top of the rival that made it. Tries a ring of candidates and takes
+     the first that is clear; the last resort is the furthest one tried, which
+     cannot happen in an arena this size but must not be an infinite loop. */
+  function restart (t) {
+    let best = null, bestClear = -1;
+    for (let k = 0; k < 40; k++) {
+      const a = next() * TAU;
+      const r = p.restartMin + next() * (p.arenaR - p.restartMin - 120);
+      const x = t.crashX + Math.cos(a) * r, z = t.crashZ + Math.sin(a) * r;
+      if (Math.hypot(x, z) > p.arenaR - 120) continue;
+      let clear = Infinity;
+      for (const o of trains) {
+        if (o === t || o.dead > 0) continue;
+        for (const q of [o, ...o.followers]) clear = Math.min(clear, Math.hypot(q.x - x, q.z - z));
+      }
+      if (clear > bestClear) { bestClear = clear; best = { x, z }; }
+      if (clear > 300) break;
+    }
+    if (!best) best = { x: 0, z: 0 };
+    t.x = best.x; t.z = best.z; t.head = next() * TAU;
+    t.s = 0; t.followers.length = 0; t.bursting = false; t.burstOwed = 0;
+    t.lastPeak = t.peak; t.peak = 0; t.runs++;
+    t.dead = 0; t.crashed = 0; t.cut = 0; t.rebuild = 10;
+    seedTrail(t);
   }
 
   /* One every regrow seconds, up to the count, into a slot that has gone
@@ -412,16 +439,27 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     /* 6.3: bursting needs a follower to pay with. Stage 1 lifted this gate
        because there was nothing to spend; the spending is here now, so the
        gate comes back with it. */
-    you.bursting = input.burst && you.followers.length > 0;
+    /* THE DEATH BEAT. A crashed train is gone from the water while it runs:
+       it does not swim, recruit, touch anything or appear in the hash. When
+       it ends, it is a lone manta somewhere else. */
+    for (const t of trains) {
+      if (t.dead <= 0) continue;
+      t.dead -= dt;
+      if (t.dead <= 0) restart(t);
+    }
+    you.bursting = !you.dead && input.burst && you.followers.length > 0;
     payForBurst(you, dt);
-    stepTrain(you, you.dazed > 0 || you.stunned > 0 ? null : input.want, dt);
+    if (!you.dead) stepTrain(you, input.want, dt);
+    if (you.followers.length > you.peak) you.peak = you.followers.length;
     for (const t of rivals) {
+      if (t.dead > 0) continue;
       steerRival(t, dt);
       /* A rival bursts now and then, which is what makes it cut you. A test
          that is about the head-on rules pins it instead. */
       if (!t.pinBurst) t.bursting = t.followers.length > 0 && ((time * 0.37 + t.id) % 7) < 0.9;
       payForBurst(t, dt);
-      stepTrain(t, t.dazed > 0 || t.stunned > 0 ? null : t.want, dt);
+      stepTrain(t, t.want, dt);
+      if (t.followers.length > t.peak) t.peak = t.followers.length;
     }
     stepWild(dt);
     regrowWild(dt);
@@ -431,6 +469,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
        recruiting asks the other way round. */
     hash.clear();
     for (const t of trains) {
+      if (t.dead > 0) continue;
       t.isLeader = true; t.train = t; t.index = 0; t.isWild = false;
       hash.add(t.x, t.z, t);
       for (let k = 0; k < t.followers.length; k++) {
@@ -444,11 +483,11 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     resolveTouches();
     /* A rival that has been cut down to its leader gets its appetite back
        after about ten seconds, so there is always something to play against. */
-    for (const t of rivals) recruit(t, t.rebuild <= 0 ? 8 : t.followers.length);
-    recruit(you, 1e9);
+    for (const t of rivals) if (!t.dead) recruit(t, t.rebuild <= 0 ? 8 : t.followers.length);
+    if (!you.dead) recruit(you, 1e9);
     /* AFTER recruiting, so a manta that joined this step is already on the
        path rather than sitting wherever it was caught for a frame. */
-    for (const t of trains) placeFollowers(t);
+    for (const t of trains) if (!t.dead) placeFollowers(t);
     return time;
   }
 
@@ -456,7 +495,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     get time () { return time; },
     params: p, blooms, you, rivals, trains, input, step, wild, groups, hash, joinedAt,
     liveWild: () => { let n = 0; for (let i = 0; i < p.wildCount; i++) if (wild[i] && wild[i].alive) n++; return n; },
-    scatter, crash, cutAt, makeTrain, seedTrail,
+    scatter, crash, cutAt, makeTrain, seedTrail, restart,
     get length () { return you.followers.length; },
     zoom: () => zoomFor(you.followers.length, p),
     /* For tests and for the panel: the speed actually used this step. */

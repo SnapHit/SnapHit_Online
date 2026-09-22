@@ -247,7 +247,7 @@ function advance (now, dt) {
       sim.params.wildCount = P.wildCount; sim.params.regrow = P.regrow;
       sim.params.wildSize = P.wildSize;
       sim.params.burstCost = P.burstCost; sim.params.scatterGlow = P.scatterGlow;
-      sim.params.daze = P.daze; sim.params.stun = P.stun;
+
       sim.step();
       simAcc -= STEP;
     }

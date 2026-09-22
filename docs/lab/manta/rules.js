@@ -24,6 +24,18 @@ export function createRules (ctx) {
   /* 6.3: a scattered manta glows in its old train's colour for a few seconds
      and joins the first leader to touch it; after that it is an ordinary wild
      manta again. It keeps the colour it owned before it ever joined. */
+  /* One way into the water, so the leader glows exactly like its train. */
+  function scatterOne (t, f, owner, immune = 0) {
+    const m = { x: f.x, z: f.z, head: f.head, group: Math.floor(next() * GROUPS),
+                speed: 40 + next() * 30, glow: p.scatterGlow, wasColour: t.id,
+                colour: f.from >= 0 ? f.from : 0, alive: true, isWild: true, loose: true,
+                fromTrain: immune > 0 ? owner : null, immune };
+    let at = -1;
+    for (let i = p.wildCount; i < wild.length; i++) if (!wild[i] || !wild[i].alive) { at = i; break; }
+    if (at >= 0) wild[at] = m; else wild.push(m);
+    return m;
+  }
+
   function scatter (t, from, immune = 0) {
     const dropped = t.followers.splice(from);
     for (const f of dropped) {
@@ -52,13 +64,23 @@ export function createRules (ctx) {
 
   /* 6.1 rule 3 and 6.3. The train you hit is unharmed; you scatter and are
      dazed, or stunned if you had nobody to lose. */
+  /* v1.10 rule 3: "your WHOLE train, you included, scatters into glowing
+     wild mantas for anyone to recruit, and you start again as a lone manta
+     somewhere else in the ocean." So the leader is scattered too, the run
+     ends here and its peak is its score, and the death beat runs before
+     sim.js puts the train back somewhere clear. A lone leader crashes the
+     same way: there is no stun any more, because there is no you to stun. */
   function crash (t) {
     const had = t.followers.length;
+    t.crashX = t.x; t.crashZ = t.z;
     scatter(t, 0);
-    if (had > 0) t.dazed = p.daze; else t.stunned = p.stun;
+    /* The leader itself, at the point of the crash, glowing like the rest. */
+    scatterOne(t, { x: t.x, z: t.z, head: t.head, from: 0 }, t);
+    t.dead = p.deathBeat;
     t.crashed = 0.25;
     t.bursting = false;
-    return had;
+    t.burstOwed = 0;
+    return had + 1;
   }
 
   /* 6.3: a cut happens where a BURSTING leader touches another train. Every
@@ -94,7 +116,7 @@ export function createRules (ctx) {
        order let the first leader crash on its own and the second then read
        the pair as mutual, so one head-on was scored twice and the other side
        not at all. */
-    const hits = ctx.trains.map(t => (t.dazed > 0 || t.stunned > 0) ? null : contacts(t));
+    const hits = ctx.trains.map(t => t.dead > 0 ? null : contacts(t));
     const done = new Set();
     for (let i = 0; i < ctx.trains.length; i++) {
       const t = ctx.trains[i], h = hits[i];
@@ -119,7 +141,7 @@ export function createRules (ctx) {
     }
     /* The reef is a wall and hitting it is a crash like any other. */
     for (const t of ctx.trains) {
-      if (t.dazed > 0 || t.stunned > 0) continue;
+      if (t.dead > 0) continue;
       if (Math.hypot(t.x, t.z) >= p.arenaR - p.leaderR - 0.5) crash(t);
     }
   }
@@ -157,5 +179,5 @@ export function createRules (ctx) {
     if (t.followers.length === 0) { t.rebuild -= dt; } else t.rebuild = 10;
   }
 
-  return { partsOf, scatter, crash, cutAt, contacts, resolveTouches, payForBurst, steerRival };
+  return { partsOf, scatter, scatterOne, crash, cutAt, contacts, resolveTouches, payForBurst, steerRival };
 }

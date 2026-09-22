@@ -22,23 +22,36 @@ export function createFollow (ctx) {
   const fading = new Map();                 // instance slot -> seconds left
   const wearing = [], wasScaled = [];       // which wild slots are borrowed colours
   let drawnFollowers = 0, drawnWild = 0, peakLength = 0, shake = 0, sizeDirty = false;
+  let bestPeak = 0, beatShown = false;
 
   function followCamera (dt) {
     const you = ctx.sim.you;
-    const z = zoomFor(you.followers.length, ctx.sim.params);
+    /* THE DEATH BEAT. Rule 3 ends the run at the crash, so for the second and
+       a half that follows there is no train to follow: the camera holds the
+       wreck and pulls back off it while the scatter burns, and the run's peak
+       stands in the middle of the screen. Then a clean cut to wherever the
+       simulation has put you. */
+    const dying = you.dead > 0;
+    const beat = dying ? 1 - you.dead / ctx.sim.params.deathBeat : 0;
+    const at = dying ? { x: you.crashX, z: you.crashZ } : you;
+    const z = dying ? Math.max(0.55, zoomFor(peakLength, ctx.sim.params) * (1 - 0.35 * beat))
+                    : zoomFor(you.followers.length, ctx.sim.params);
     if (setZoom(z)) applyView(ctx.view);
-    uCam.value.set(you.x, you.z);
-    camera.position.set(you.x, 1000, you.z);
-    camera.lookAt(you.x, 0, you.z);
+    uCam.value.set(at.x, at.z);
+    camera.position.set(at.x, 1000, at.z);
+    camera.lookAt(at.x, 0, at.z);
     camera.up.set(0, 0, -1);
     camera.updateMatrixWorld();
-    if (ctx.lm) ctx.lm.setCentre(you.x, you.z);
-    if (ctx.lmSlow) ctx.lmSlow.setCentre(you.x, you.z);
-    if (ctx.shadows) ctx.shadows.setCentre(you.x, you.z);
+    if (ctx.lm) ctx.lm.setCentre(at.x, at.z);
+    if (ctx.lmSlow) ctx.lmSlow.setCentre(at.x, at.z);
+    if (ctx.shadows) ctx.shadows.setCentre(at.x, at.z);
 
     const m = mantas, f = you.followers;
-    const n = Math.min(f.length, TRAIN_MAX - 1);
-    m.aPos.setXYZ(0, you.x, 0, you.z); m.aHead.setX(0, you.head);
+    const n = dying ? 0 : Math.min(f.length, TRAIN_MAX - 1);
+    /* Nothing of yours is in the water during the beat: the leader scattered
+       with the rest of the train. */
+    if (dying) m.aPos.setXYZ(0, PARKED, 0, PARKED);
+    else { m.aPos.setXYZ(0, you.x, 0, you.z); m.aHead.setX(0, you.head); }
     /* Anyone who joined since the last frame arrives wearing their own colour
        and fades into yours. The slot has to take their colour as its own too,
        or a scatter in stage 3 would hand it the one the deal gave the slot. */
@@ -111,7 +124,10 @@ export function createFollow (ctx) {
        camera for a quarter of a second. */
     let event = null;
     for (const t of ctx.sim.trains) { if (t.cut > 0.24) event = 'cut'; if (t.crashed > 0.24) event = event || 'crash'; }
-    if (event === 'cut' && !cut.running) cut.trigger();
+    /* A crash is a set piece too now: the train bursting into light. The cut's
+       own timeline already respects the page-wide flash cap and the reduced
+       flash setting, and the peak card is information, so it shows either way. */
+    if (event && !cut.running) cut.trigger();
     if (event === 'crash') shake = 0.25;
     if (shake > 0) {
       shake = Math.max(0, shake - dt);
@@ -121,9 +137,20 @@ export function createFollow (ctx) {
       camera.updateMatrixWorld();
     }
 
-    if (f.length > peakLength) peakLength = f.length;
+    /* The score is the run's peak, and the run ends at a crash. */
+    peakLength = you.peak;
+    if (you.lastPeak > bestPeak) bestPeak = you.lastPeak;
+    if (peakLength > bestPeak) bestPeak = peakLength;
     const el = document.getElementById('len');
-    if (el) el.textContent = 'length ' + f.length + '   peak ' + peakLength;
+    if (el) el.textContent = 'length ' + f.length + '   peak ' + peakLength + '   best ' + bestPeak;
+    const card = document.getElementById('beat');
+    if (card) {
+      if (dying && !beatShown) {
+        beatShown = true;
+        card.textContent = String(Math.max(you.peak, you.lastPeak));
+        card.className = 'on';
+      } else if (!dying && beatShown) { beatShown = false; card.className = ''; }
+    }
   }
 
 

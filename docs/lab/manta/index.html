@@ -210,6 +210,17 @@
   /* The score, small and out of the way: bottom left, clear of the chip at
      the top and the bar at the bottom right. It never takes a touch, so a
      finger that lands on it still steers. */
+  /* The death beat's card: the run's peak, in the middle of the screen for
+     a second and a half. Information, not decoration, so reduced flash keeps
+     it. It never takes a touch. */
+  #beat {
+    position: fixed; inset: 0; z-index: 4; pointer-events: none;
+    display: none; align-items: center; justify-content: center;
+    font: 600 84px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #eaf4ff; text-shadow: 0 2px 20px #000c, 0 0 46px #7fe3d0aa;
+    letter-spacing: 0.02em;
+  }
+  #beat.on { display: flex; }
   #len {
     position: fixed; left: 10px; bottom: 10px; z-index: 3; pointer-events: none;
     font: 400 12px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -222,7 +233,8 @@
 
 <canvas id="gl"></canvas>
 
-<div id="len" aria-live="off">length 0   peak 0</div>
+<div id="len" aria-live="off">length 0   peak 0   best 0</div>
+<div id="beat" aria-live="polite"></div>
 
 <button id="chip" type="button" aria-expanded="false" aria-controls="panel">
   <span class="dot" aria-hidden="true"></span>
