@@ -165,6 +165,15 @@ export function createMovers ({ aPos, aHead, aMotion, COUNT, RIVAL_TRAINS, RIVAL
        eight. A follower steers to the heading of the path there and moves
        along it, so nothing ever crabs sideways. */
     const MARGIN = 34;
+    /* A TRAIN WRAPS AS A UNIT, so its boundary has to clear the view by the
+       whole train and not just by one manta. At MARGIN the leader crossed 34
+       units outside the view and re-seeded its trail behind its new position,
+       which put its two followers 62 units the other side of the edge, in
+       plain sight: 4 of 6 wraps landed inside the picture, the nearest 31
+       units in. Measured by stepping the page at a true 1/60 and asking of
+       every jump whether the animal was on screen at either end of it. The
+       wild mantas are single and keep MARGIN. */
+    const TRAIN_MARGIN = MARGIN + (RIVAL_LEN - 1) * SPACING + 30;
     for (let r = 0; r < RIVAL_TRAINS; r++) {
       const lead = rivalLeads[r];
       lead.head += Math.sin(secs * 0.17 + lead.phase) * 0.10 * dt;
@@ -172,7 +181,7 @@ export function createMovers ({ aPos, aHead, aMotion, COUNT, RIVAL_TRAINS, RIVAL
       const nz = lead.z - Math.cos(lead.head) * lead.speed * dt;
       /* Wrapping would put a kink in the recorded path, so the trail is reset
          when the leader crosses the edge and the followers close up again. */
-      const wx = wrap(nx, half.w + MARGIN), wz = wrap(nz, half.h + MARGIN);
+      const wx = wrap(nx, half.w + TRAIN_MARGIN), wz = wrap(nz, half.h + TRAIN_MARGIN);
       const jumped = Math.hypot(wx - lead.x, wz - lead.z) > 200;
       lead.x = wx; lead.z = wz;
       const base = 5 + r * RIVAL_LEN;
