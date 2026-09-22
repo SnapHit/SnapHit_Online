@@ -40,6 +40,25 @@ const REEF_RING_LEVEL = 0.115;
 const REEF_EDGE_LEVEL = 0.055;
 const REEF_WARN_LEVEL = 0.030;
 
+/* CONDITION 2 BY CONSTRUCTION. 7.2 asks that the seabed's and the caustics'
+   brightest crests stay below the dimmest manta's median, and for four
+   sessions that passed or failed by where the camera happened to be: some
+   patches of moonlit floor are far brighter than others, so the same build
+   measured 61 in one place and 197 in another. A bar you can walk across is
+   not a bar.
+
+   So the moonlit water — the body, the floor, the caustics and the surface
+   ripple, everything that is not life — is given a soft ceiling on its
+   LUMINANCE before anything alive is added. Below the knee it is untouched,
+   which is where ordinary ocean sits; above it, it approaches the ceiling
+   and never reaches it. Hue is preserved because the cap scales the colour
+   rather than clamping its channels, which 7.2 forbids.
+
+   0.10 in linear luminance, against a manta's band floor of 0.248: no patch
+   of water anywhere can come near an animal, wherever you are. */
+const WATER_CAP = 0.10;
+const WATER_KNEE = 0.055;
+
 export const uAspect = uniform(1.0);
 /* The view in world units, so a pixel can work out where in the ocean it is
    and read the light memory there. */
@@ -378,12 +397,24 @@ export function oceanNode () {
 
     const reef = reefRing.add(reefBeyond).add(reefWarn);
 
+    /* The ceiling, applied to the moonlit water as one thing. Identity below
+       the knee, asymptotic to the cap above it, and the colour is scaled so
+       the hue survives. */
+    const capWater = (c) => {
+      const lum = c.x.mul(0.2126).add(c.y.mul(0.7152)).add(c.z.mul(0.0722));
+      const over = max(lum.sub(float(WATER_KNEE)), float(0.0));
+      const room = float(WATER_CAP - WATER_KNEE);
+      const held = float(WATER_KNEE).add(room.mul(float(1.0).sub(exp(over.div(room).negate()))));
+      const want = min(lum, held);
+      return c.mul(want.div(max(lum, float(1e-5))));
+    };
+
     /* 4. the plankton, which is the only part of the ocean that knows what has
           happened in it. It reads the light memory at this pixel's world
           position: near zero in still water, and bright along anything that
           has swum past. Cost is per pixel and does not know how many mantas
           there are, which is the point. */
-    if (lm === null) return water.mul(reefDim).add(seabed.mul(reefDim)).add(ripple).add(reef);
+    if (lm === null) return capWater(water.mul(reefDim).add(seabed.mul(reefDim)).add(ripple)).add(reef);
 
     /* The exact inverse of the mapping the light memory pass uses, so the two
        agree by construction rather than by coincidence. */
@@ -451,6 +482,9 @@ export function oceanNode () {
         : PLANKTON.mul(texture(lmSlow.out, world.div(lmSlow.uHalf.mul(2.0)).add(0.5)).rgb)
             .mul(U.longMemory).mul(0.8));                                     // the ribbon itself
 
-    return water.mul(reefDim).add(seabed.mul(reefDim)).add(ripple).add(snow).add(plankton).add(reef);
+    /* Life goes on top of the ceiling, never under it: 7.2 caps moonlight,
+       not the plankton a manta stirs. */
+    return capWater(water.mul(reefDim).add(seabed.mul(reefDim)).add(ripple))
+      .add(snow).add(plankton).add(reef);
   })();
 }
