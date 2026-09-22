@@ -139,7 +139,13 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   function step () {
     const dt = STEP;
     time += dt;
-    you.bursting = input.burst && you.followers.length > 0;
+    /* NO FOLLOWER GATE YET, and that is deliberate. Bursting SPENDS
+       followers (6.3), and the spending arrives in stage 3 with the cost
+       interval; gating on a train you cannot recruit yet only made the
+       drawer's two burst sliders untestable. Nathan held a double tap on the
+       phone and nothing happened, because stage 1 has nothing to pay with.
+       The gate comes back in stage 3, beside the thing it is paying for. */
+    you.bursting = input.burst;
     if (you.dazed > 0) you.dazed = Math.max(0, you.dazed - dt);
     if (you.stunned > 0) you.stunned = Math.max(0, you.stunned - dt);
     const moved = advance(you, input.want, dt);
