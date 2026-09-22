@@ -1,8 +1,8 @@
 # Manta trains: design decisions
 
-Working title. Version 1.9, 23 September 2026 (1.9: the look spike built and tuned, with its final values; a palette that keeps pink for the pink manta; the greybox plan updated for everything the spike learned; 1.8: every manta bright, as in slither, with warm colours freed from danger duty; your colour rolled at random each run, as in slither; the hierarchy measured for that; no round blobs in the ocean; 1.7: a seabed you can see, lit by moonlight that moves; wild mantas dark like the real animal, lighting up when they join a train; the hierarchy measured the new way round; and Nathan's final tuning; 1.6: a moonlit ocean where life makes the brightest light, the manta measured from a reference photo, electric lime for the player's train, a tighter bloom, and the WebGPU limits learned the hard way; 1.5: the look spike's tuned values, how the brightness hierarchy is measured, untinted bloom and no gold, a page-wide flash cap, three lessons for the greybox, and names for the wake, the sparkle and the bloom; 1.4: the Pixel 9 result and the 60 Hz budget, the repo's paths, automatic fallback, the camera's fixed view area and the decision not to minify; 1.3: the lab page, portrait-first layout, Three.js pinned at r186, Brief 0's scope and how this doc stays in sync; 1.2: WebGPU renderer, the look direction, the identity system and the build approach; 1.1: the prototype gets a cheap procedural look instead of grey shapes). Studio: SnapHit Studios (snap-hit.online). Owner: Nathan.
+Working title. Version 1.10, 23 September 2026 (1.10: a crash ends your run, as in slither; wild mantas fewer, smaller and slower to regrow; Nathan's steering values; 1.9: the look spike built and tuned, with its final values; a palette that keeps pink for the pink manta; the greybox plan updated for everything the spike learned; 1.8: every manta bright, as in slither, with warm colours freed from danger duty; your colour rolled at random each run, as in slither; the hierarchy measured for that; no round blobs in the ocean; 1.7: a seabed you can see, lit by moonlight that moves; wild mantas dark like the real animal, lighting up when they join a train; the hierarchy measured the new way round; and Nathan's final tuning; 1.6: a moonlit ocean where life makes the brightest light, the manta measured from a reference photo, electric lime for the player's train, a tighter bloom, and the WebGPU limits learned the hard way; 1.5: the look spike's tuned values, how the brightness hierarchy is measured, untinted bloom and no gold, a page-wide flash cap, three lessons for the greybox, and names for the wake, the sparkle and the bloom; 1.4: the Pixel 9 result and the 60 Hz budget, the repo's paths, automatic fallback, the camera's fixed view area and the decision not to minify; 1.3: the lab page, portrait-first layout, Three.js pinned at r186, Brief 0's scope and how this doc stays in sync; 1.2: WebGPU renderer, the look direction, the identity system and the build approach; 1.1: the prototype gets a cheap procedural look instead of grey shapes). Studio: SnapHit Studios (snap-hit.online). Owner: Nathan.
 
-**Status:** concept locked. The look spike is built and tuned (Briefs 0 to 1J): snap-hit.online/lab/manta/ runs it at 60 fps on WebGPU and WebGL2 on the Pixel 9, and its last two pass tests (a cheap Android, and three people) run alongside the greybox. The next step is Brief 2A, the greybox's world, recruiting and rules (section 10.2).
+**Status:** concept locked. The look spike is built and tuned (Briefs 0 to 1J), and the greybox's world, recruiting and rules are live (Brief 2A). The look spike's last two pass tests (a cheap Android, and three people) run alongside. The next step is Brief 2A part three: a crash that ends your run, and wild mantas that are fewer, smaller and slower to regrow (sections 6 and 10.2).
 
 **How to use this file:** sections 1 to 9 record what was decided and why, section 10 is the build plan, and sections 11 to 15 cover risks, open decisions, parked ideas, terms and sources. Anything marked (P) is a proposed default to confirm in the greybox; everything else is decided.
 
@@ -124,7 +124,7 @@ Supporting principles:
 
 1. Swim near wild mantas and they fall in behind you; your train's length is your score.
 2. You never stop and only swim forwards (true to life: mantas must keep swimming to breathe).
-3. If your leader touches another train or the reef, you crash: your train scatters into glowing wild mantas for anyone to recruit, and you keep swimming alone.
+3. If your leader touches another train or the reef, you crash: your whole train, you included, scatters into glowing wild mantas for anyone to recruit, and you start again as a lone manta somewhere else in the ocean.
 4. Hold burst to speed up, paid for by your last follower, who drops off behind you (the exact touch input is chosen in the greybox). Burst through another train and you cut it instead of crashing; everything behind the cut goes wild.
 
 ### 6.2 How they pass the test
@@ -154,8 +154,9 @@ Crashing
 
 - (D) A crash only affects the crasher; the train you hit is unharmed.
 - (P) Touching means your leader overlaps any part of another train, and a leader counts as the front of its own train.
-- (P) After a crash your leader is dazed for a few seconds and can't recruit, so it can't simply collect its own scattered train.
-- (P) A lone leader with no followers who touches a train is stunned briefly instead, so kamikaze runs aren't free.
+- (D) A crash ends your run: your whole train scatters, and you start again as a lone manta somewhere else, so you can never swim back and collect it.
+- (P) The restart comes after a death beat of about 1.5 seconds (your train bursts into light, the camera pulls back and your run's peak shows), at least 800 units from the crash and clear of every train.
+- (P) A lone leader who touches a train crashes the same way; it has nothing to lose but its place.
 - (P) Two leaders meeting head on both crash, unless exactly one is bursting (see below).
 
 Bursting and cutting
@@ -187,7 +188,7 @@ Scoring
 - A rare pink manta flees and can only be caught with a burst. The real one off Lady Elliot Island has a black back and a pink belly, so from above it looks ordinary until it rolls and flashes pink. It gets an original name (the real one's nickname comes from the Pink Panther films). (P) It's worth more than one follower; the exact value is open.
 - Identity: every manta is a catalogued individual, with crews, secret names and friends' mantas swimming in your ocean; no skin menu and nothing before the first swim (full system in 7.3).
 - Look: a moonlit night ocean where life makes the brightest light (full direction in 7.2). Followers keep individual wingbeats and break formation the moment they're cut or scattered, so a train reads as a line of creatures rather than a snake.
-- No death screen: a crash pops a small card with your run's peak length, your best, a clip button, a challenge link and a way to your manta card, while you keep swimming.
+- No death screen: a crash ends the run with a death beat of about a second and a half and a small card with your run's peak length, your best, a clip button, a challenge link and a way to your manta card, and you're swimming again somewhere new, as in slither but without a menu.
 - Top-ten leaderboard.
 - Daily seeded ocean plus events: a plankton bloom that drags every train together, a whale shark that ploughs through lines, the pink manta's appearances. (P) The whale shark cuts any train it crosses, and touching its body counts as a crash.
 - Challenge links: every run ends with a link that replays the same seed with your score attached and carries your manta into the friend's ocean (7.3); no server needed.
@@ -202,7 +203,7 @@ Scoring
 - **Colour discipline:** slither's lesson is saturated colour that contrasts with its background, which reads at a glance, in thumbnails and through video compression. Against a teal-blue seabed the colours that pop are warm and violet, so every manta other than yours wears one of a small set of bright hues: orange, scarlet, violet, purple, azure and green. Your own train's colour is rolled at random each run, as in slither, from electric lime and the same set except scarlet, which can't burn hotter and stay red. It is yours alone for that run: no rival or wild manta wears it, and a wild manta takes it only by joining you. Bots may share colours with each other, never with you. Pink stays reserved for the pink manta, so nothing may read as a bright pink: warm colours lighten towards their own hue and stop at about 0.65 saturation on screen (0.90 in linear light), because a light red is pink by definition, while cool colours lighten towards white. A dim plum tint in the tail of a red wake over blue water is colour mixing, not pink, and is allowed. Coral was dropped and the rose red became scarlet for the same reason. Warm colours are no longer reserved for danger: the reef reads as danger by its place, its ring and its slow pulse, the way slither's border does. Bloom is untinted, so it amplifies each source's own colour. A wake takes the colour of the train that made it, so a trail shows whose it is, with its freshest light burning towards white, or for a warm colour towards a lighter version of itself. The moonlight is a cool blue-white, and the seabed it lights is cyan-teal where the moon reaches and bluer in shadow. White was ruled out for your train because it merges with the fresh wake and the moonlight, and a gold tint on the bloom was ruled out because it turned your train yellow-green.
 - **Depth:** three layers: the seabed, a real floor of sand, rubble and dark reef seen through moonlit water, where the caustics and the mantas' shadows play in slow parallax; the swimming layer; and a subtle surface ripple over everything, which also bends the light beneath it. Marine snow at three depths and wild mantas at varying depths give the ocean volume.
 - **The mantas:** silhouettes whose wings flex in the shader, with each follower's wingbeat slightly behind the one ahead, so a whole train ripples like a single ribbon. Name-generated patterns, rim-lit from the glow beneath. The outline is measured from a reference photo (10.2). At play scale a manta is about 40 CSS pixels across, so identity reads through colour, brightness and silhouette; patterns and marks read in close-ups (the manta card and the victory roll), and at play scale they only need to register as texture. Every manta wears the real animal's markings, a pale V and pale wingtips, over its colour.
-- **Set pieces:** the recruit (a wild manta taking its new train's colour, from the head out), the cut (a shockwave ripple through the water, a light burst, a beat of slow motion), the crash (a train unravelling into scattered lights), the coil (the ring brightening as it closes), the whale shark (a vast dark shape visible only by the plankton it disturbs) and the pink manta's flash.
+- **Set pieces:** the recruit (a wild manta taking its new train's colour, from the head out), the cut (a shockwave ripple through the water, a light burst, a beat of slow motion), the crash (your whole train unravelling into scattered lights as the camera pulls back, before you start again elsewhere), the coil (the ring brightening as it closes), the whale shark (a vast dark shape visible only by the plankton it disturbs) and the pink manta's flash.
 - **Rendering:** an ocean and plankton shader; a caustic pattern generated once in code and sampled twice per pixel as it flows; a low-resolution pass that casts the mantas' shadows onto the seabed; a light memory texture around the camera that fades each frame and is stamped by every moving manta; all mantas as one instanced mesh; particles; a low-resolution bloom chain; and a final grade with vignette, grain and shockwave distortion. On WebGPU devices, compute can later add living water (hundreds of thousands of plankton particles, fish schools and currents), with a lesser version on the fallback.
 - **Phone budget:** resolution scales with frame time, and quality tiers step down visuals, never gameplay. The plankton lives in a shader, so cost scales with pixels rather than object counts. Few shaders keep it opening instantly. Target: 60 fps on Nathan's phone and a cheap Android. Measured budget: 16.7 ms a frame, since the Pixel 9 reports 60 Hz; whether 120 Hz is reachable is a separate question. Resolution follows the adaptive ladder already proven in the repo's NOTES.md.
 - **Accessibility:** cap flashes at three a second across the whole page rather than per effect, offer a reduced-flash setting that also follows the system's reduced motion preference, and never rely on hue alone to tell you from rivals. Reduced flash keeps the information (the scatter after a cut) and drops the flash to 30 percent, the slow motion and the distortion. Moonlight changes slowly: a cloud pass takes seconds, never a flash.
@@ -358,7 +359,7 @@ Purpose: prove the four rules are fun and readable on a phone before anything el
 In scope:
 
 - A circular arena with a reef ring, and four static plankton blooms that draw wild mantas.
-- Wild mantas that wander in small groups, drift towards plankton blooms, and respawn away from leaders to hold the target count.
+- Wild mantas that wander in small groups, drift towards plankton blooms, and regrow slowly away from leaders, so a busy patch of ocean runs dry and trains compete for what's left.
 - Your leader and train, with recruiting, crashing, bursting, cutting and scattering, using the (P) defaults in 6.3.
 - Rival leader bots using the simple brain below.
 - A camera that follows your leader and zooms out as your train grows.
@@ -366,12 +367,12 @@ In scope:
 - Touch and keyboard controls, with a switch between the touch schemes under test.
 - A debug panel: live parameter sliders, frames per second, counts, slow motion, pause and the current seed.
 
-Out of scope: final art, audio, identity features, the pink manta, events, the crash card, the daily ocean, challenge links, clips, saved bests and site integration.
+Out of scope: final art, audio, identity features, the pink manta, events, the full crash card (the greybox shows only the death beat and your run's peak), the daily ocean, challenge links, clips, saved bests and site integration.
 
 Prototype look (all drawn in code, no image files):
 
 - The look spike's ocean: the moonlit seabed and its moving light, marine snow at three depths and ambient plankton.
-- The spike's mantas: the measured outline, bright colours, markings and wingbeat, as one instanced mesh with each follower's phase behind the one ahead, so trains ripple. Leaders are larger.
+- The spike's mantas: the measured outline, bright colours, markings and wingbeat, as one instanced mesh with each follower's phase behind the one ahead, so trains ripple. Leaders are larger. Wild mantas are smaller still (wingspan 20 against a follower's 28): a recruit grows to train size as it takes its train's colour, and a scattered manta shrinks back as its glow fades, so food reads apart from trains at a glance.
 - Glow from the look spike's light memory and bloom pass, not per-object effects.
 - Colour and brightness tell the story: your train brightest, each rival its own hue, wild mantas in their own bright colours, scattered mantas glowing in their old train's colour until their own returns.
 - The spike's wake behind every moving manta, in its train's colour and brighter while bursting.
@@ -384,18 +385,19 @@ Starting parameters. These are guesses to tune on the phone. Units are world uni
 | Parameter | Start | Notes |
 |---|---|---|
 | Arena radius | 2,000 | Reef ring |
-| Cruise speed | 170 per second | Never zero |
-| Burst speed | 300 per second | |
-| Turn rate | 3.5 rad/s cruising, 2.6 rad/s bursting | Bursts turn wider |
+| Cruise speed | 160 per second | Never zero; tuned on the Pixel 9 |
+| Burst speed | 340 per second | Tuned on the Pixel 9 |
+| Turn rate | 3.1 rad/s cruising, 4.1 rad/s bursting | A burst still carves a wider circle, about 83 units against 52 |
 | Leader radius | 14 | |
 | Follower radius | 10 | |
 | Follower spacing | 31 | Along the leader's path, by arc length; the spike's value for 28-unit followers |
-| Recruit radius | 40 | Measured from the leader |
+| Recruit radius | 30 | Measured from the leader: contact with a 20-unit wild manta, plus a margin |
 | Burst cost | 1 follower every 0.35 seconds | Taken from the tail |
 | Scatter glow | 4 seconds | Then ordinary wild |
-| Daze after a crash | 3 seconds | Can't recruit |
-| Lone-leader stun | 1 second | Slowed, weak turning |
-| Wild mantas | 300 | Respawned to hold the count |
+| Death beat | 1.5 seconds | Then you start again |
+| Restart distance | At least 800 | From the crash, clear of every train |
+| Wild mantas | 120 | In groups of 3 to 5, regrowing one every 2 seconds up to the count, away from leaders |
+| Wild wingspan | 20 | Against 28 for followers and 40 for leaders |
 | Bot leaders | 10 | |
 | Plankton blooms | 4 | Static in the greybox |
 | Camera zoom | 1.0 at length 0, easing to 0.55 at length 300 | |
@@ -470,8 +472,8 @@ If tests 1 to 3 still fail after tuning, rethink the rules before any art.
 - **Bots feel lifeless.** Distinct personalities, real manta behaviours, events that reshape the ocean, and honest bot tags.
 - **The burst-cut unbalances play.** Burst cost and speeds are tunable, and the greybox tests for a dominant strategy.
 - **Touch steering is too imprecise for deliberate cuts.** Compare control schemes in the greybox before committing.
-- **Crash self-recovery.** The post-crash daze stops you re-collecting your own scattered train.
-- **Snowballing.** Only leaders recruit, big trains are big targets, and blooms and events redistribute mantas.
+- **Crash self-recovery.** You start again at least 800 units away, so you can never swim back and collect your own scattered train.
+- **Snowballing.** Only leaders recruit, big trains are big targets, plankton blooms and events redistribute mantas, and wild mantas regrow slowly, so a train can only grow as fast as the ocean refills. The first greybox build held 300 wild mantas by respawning each one instantly, and trains grew to ridiculous lengths within minutes.
 - **Performance on mid-range phones.** Spatial hashing, object pooling and capped counts.
 - **No real humans online.** Challenge links, the daily ocean and clips now; live rooms later.
 - **Canvas recording bugs on Apple devices.** Feature-detect, hide the clip button where it fails, and build it last.
@@ -552,9 +554,8 @@ Parked, for later modes or future games:
 - **Wild manta:** a manta in no train. It wears its own bright colour until it joins a train and takes the train's.
 - **Scattered manta:** a wild manta just released by a crash or cut; it glows and joins the first leader to touch it.
 - **Recruit:** a wild manta joining your train.
-- **Crash:** your leader touches another train or the reef, and your whole train scatters.
-- **Daze (P):** the short period after a crash when you can't recruit.
-- **Stun (P):** the brief penalty when a lone leader touches a train.
+- **Crash:** your leader touches another train or the reef; your whole train scatters, your run ends, and you start again elsewhere.
+- **Death beat:** the second and a half after a crash when your train bursts into light, the camera pulls back and your run's peak shows, before you start again.
 - **Burst:** holding to speed up, paid for with followers.
 - **Cut:** bursting through another train, which sends everything behind the contact point wild.
 - **Run (P):** from starting alone to your next crash.
