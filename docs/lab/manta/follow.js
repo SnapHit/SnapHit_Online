@@ -22,7 +22,32 @@ export function createFollow (ctx) {
   const fading = new Map();                 // instance slot -> seconds left
   const wearing = [], wasScaled = [];       // which wild slots are borrowed colours
   let drawnFollowers = 0, drawnWild = 0, peakLength = 0, shake = 0, sizeDirty = false;
-  let bestPeak = 0, beatShown = false;
+  let bestPeak = 0, beatShown = false, boardAt = 0;
+
+  /* THE BOARD. Top ten by current length, and every bot says it is a bot:
+     nobody should ever wonder whether they were beaten by a person. Twice a
+     second, because it is text and reading it is not a per-frame job — and
+     because sorting eleven trains sixty times a second to move nothing is
+     work for its own sake. */
+  function drawBoard (now) {
+    const el = document.getElementById('board');
+    if (!el) return;
+    if (now - boardAt < 0.5) return;
+    boardAt = now;
+    const rows = [];
+    for (const t of ctx.sim.trains) {
+      const mine = t === ctx.sim.you;
+      rows.push({
+        mine,
+        name: mine ? 'you' : 'bot ' + t.id + ' \u00b7 ' + (t.kind || 'bot'),
+        len: t.dead > 0 ? 0 : t.followers.length,
+      });
+    }
+    rows.sort((a, b) => b.len - a.len || (a.mine ? -1 : b.mine ? 1 : 0));
+    el.innerHTML = rows.slice(0, 10).map((r, i) =>
+      (r.mine ? '<b>' : '') + (i + 1) + '. ' + r.name + '  ' + r.len + (r.mine ? '</b>' : '')
+    ).join('<br>');
+  }
 
   function followCamera (dt) {
     const you = ctx.sim.you;
@@ -149,7 +174,8 @@ export function createFollow (ctx) {
     if (peakLength > bestPeak) bestPeak = peakLength;
     const el = document.getElementById('len');
     if (el) el.textContent = 'length ' + f.length + '   peak ' + peakLength + '   best ' + bestPeak;
-    const card = document.getElementById('beat');
+    drawBoard(ctx.sim.time);
+  const card = document.getElementById('beat');
     if (card) {
       if (dying && !beatShown) {
         beatShown = true;
