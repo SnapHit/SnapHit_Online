@@ -125,7 +125,11 @@ export function createFollow (ctx) {
        slow motion fire where a cut actually happened, and a crash shakes the
        camera for a quarter of a second. */
     let event = null;
-    for (const t of ctx.sim.trains) { if (t.cut > 0.24) event = 'cut'; if (t.crashed > 0.24) event = event || 'crash'; }
+    /* A CUT ANYWHERE IS A SET PIECE; A CRASH SHAKES ONLY IF IT IS YOURS.
+       Ten bots crash all over the arena and the screen was jolting for every
+       one of them, including ones nowhere near the frame. */
+    for (const t of ctx.sim.trains) if (t.cut > 0.24) event = 'cut';
+    if (you.crashed > 0.24) event = 'crash';
     /* A crash is a set piece too now: the train bursting into light. The cut's
        own timeline already respects the page-wide flash cap and the reduced
        flash setting, and the peak card is information, so it shows either way. */

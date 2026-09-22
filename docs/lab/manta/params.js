@@ -138,6 +138,7 @@ export const SPEC = [
   { key: 'burstCost',      label: 'burst cost interval',  def: 0.35,  min: 0.1,  max: 1.5,   step: 0.05,  gpu: false },
   { key: 'arenaR',         label: 'arena radius',         def: 4000,  min: 800,  max: 4000,  step: 100,   gpu: false },
   { key: 'bloomPull',      label: 'bloom pull',           def: 0.36,  min: 0,    max: 1,     step: 0.02,  gpu: false },
+  { key: 'bots',           label: 'bot count',            def: 10,    min: 0,    max: 20,    step: 1,     gpu: false },
   { key: 'trainScale',     label: 'train size',           def: 1,     min: 0.6,  max: 2,     step: 0.05,  gpu: false },
   { key: 'scatterGlow',    label: 'scatter glow',         def: 10,     min: 0.5,  max: 10,    step: 0.5,   gpu: false },
 ];

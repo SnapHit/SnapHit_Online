@@ -50,7 +50,8 @@ import { createMovers } from './movers.js';
      310 - 609    300 wild mantas
 */
 export const TRAIN_MAX = 301;     // your leader plus 300 followers
-const RIVAL_TRAINS = 3;
+/* Ten bot leaders (10.2's table), each with room for eight followers. */
+const RIVAL_TRAINS = 10;
 export const RIVAL_LEN = 9;       // a leader and up to eight, since they recruit too
 const RIVAL_SCRIPT_LEN = 3;       // what the spike's script drives, unchanged
 /* THE WILD BLOCK HOLDS THE AMBIENT 300 AND EVERYTHING SCATTERED. Population
@@ -310,6 +311,7 @@ export function createMantas (scene, { scripted = false } = {}) {
   const movers = createMovers({ aPos, aHead, aMotion, COUNT,
                                 RIVAL_TRAINS, RIVAL_LEN,
                                 WILD_COUNT: scripted ? 4 : 0, RIVAL_LEN: RIVAL_SCRIPT_LEN,
+                                RIVAL_TRAINS: scripted ? 3 : 0,
                                 TRAIN_SLOTS: scripted ? 5 : 0, RIVAL_BASE });
   const { update, setBounds, setCentre, setFree, isFree } = movers;
 

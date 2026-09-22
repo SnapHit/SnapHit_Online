@@ -114,8 +114,16 @@ let controls = null;
    so the rules behave the same on a 120 Hz phone and in a headless browser
    at two frames a second — and so a test in Node sees the same steps. */
 let simAcc = 0;
+let stepCost = 0, stepCount = 0;
 window.__sim = sim;
 panel.set('mantas', String(mantas.count) + ' in 1 instanced mesh');
+/* WHICH PERSONALITIES THE SEED DEALT, and how long a step of the whole
+   simulation costs, measured over the last second rather than guessed. */
+if (sim) {
+  const mix = sim.botMix();
+  panel.set('bots', sim.rivals.length + ' bots  \u00b7  ' +
+    Object.keys(mix).sort().map(k => k + ' ' + mix[k]).join(', '));
+}
 /* WebGPU guarantees eight vertex buffers per pipeline and three allocates one
    per attribute. Over the limit the device refuses the pipeline in silence:
    nothing throws, nothing is logged, the mesh simply is not drawn. */
@@ -251,10 +259,21 @@ function advance (now, dt) {
          wall while a run is in progress can put your leader outside it, and
          outside the wall is a crash you did not make. */
       sim.params.arenaRWanted = P.arenaR;
+      if (sim.rivals.length !== P.bots) sim.setBotCount(P.bots);
       uArenaR.value = sim.params.arenaR;
       sim.params.burstCost = P.burstCost; sim.params.scatterGlow = P.scatterGlow;
 
+      /* Timed, because ten bots each looking at every train and every wild
+         manta is the first thing in this build that could cost real time on
+         the phone, and a number beats a guess. */
+      const t0 = performance.now();
       sim.step();
+      stepCost += performance.now() - t0; stepCount++;
+      if (stepCount >= 60) {
+        panel.set('sim step', (stepCost / stepCount).toFixed(3) + ' ms  \u00b7  ' +
+          sim.rivals.length + ' bots, ' + sim.liveWild() + ' wild');
+        stepCost = 0; stepCount = 0;
+      }
       simAcc -= STEP;
     }
   }

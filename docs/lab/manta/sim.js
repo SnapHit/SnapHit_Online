@@ -13,6 +13,7 @@
  */
 import { rng } from './palette.js';
 import { createRules } from './rules.js';
+import { createBrain } from './bots.js';
 
 export const STEP = 1 / 60;
 
@@ -40,6 +41,7 @@ export const DEF = {
   wildCount: 120,      // v1.10: 300 with instant respawn never ran dry
   regrow: 2,           // seconds a manta, up to the count, and never faster
   drain: 3,            // seconds a surplus manta takes to fade out
+  bots: 10,            // bot leaders, each on the one brain of 10.2
   wildSize: 20,        // wingspan, against 28 for a follower and 40 for a leader
   /* AN EVEN OCEAN. Every group used to steer at the nearest bloom with most
      of the distance closed each time it chose, so all thirty of them ended
@@ -425,17 +427,49 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     }
   }
 
-  /* Three rival trains, on the same rules as yours. They wander towards a
-     point that drifts, which is enough to bring them across your path. */
+  /* TEN BOT LEADERS, on the one brain of 10.2, replacing the three scripted
+     trains. They are trains like yours in every respect — the rules do not
+     know which of them is a person. */
+  const brainCtx = { p, blooms, wild: null, trains: null, next };
+  const brain = createBrain(brainCtx);
   const rivals = [];
-  for (let r = 0; r < 3; r++) {
-    const a = next() * TAU, d = 500 + next() * 700;
+  for (let r = 0; r < p.bots; r++) {
+    const a = next() * TAU, d = 500 + next() * (p.arenaR - 900);
     const t = makeTrain(Math.cos(a) * d, Math.sin(a) * d, next() * TAU);
-    t.aim = { x: next() * 800 - 400, z: next() * 800 - 400, t: 2 + next() * 5 };
+    /* Kept for the harnesses that park a bot by its aim; the brain ignores it. */
+    t.aim = { x: t.x, z: t.z, t: 1e9 };
+    t.think = next() * 0.5;
+    brain.dealDials(t, next());
     seedTrail(t);
     rivals.push(t);
   }
+  const bots = rivals;
   const trains = [you, ...rivals];
+  brainCtx.trains = trains;
+  brainCtx.wild = wild;
+  /* The slider, applied as it moves: a new bot is dealt its personality from
+     the same generator, so the ocean stays a function of the seed. */
+  function setBotCount (n) {
+    n = Math.max(0, Math.round(n));
+    while (rivals.length > n) { const gone = rivals.pop(); trains.splice(trains.indexOf(gone), 1); }
+    while (rivals.length < n) {
+      const a = next() * TAU, d = 500 + next() * (p.arenaR - 900);
+      const t = makeTrain(Math.cos(a) * d, Math.sin(a) * d, next() * TAU);
+      t.aim = { x: t.x, z: t.z, t: 1e9 };
+      t.think = next() * 0.5;
+      brain.dealDials(t, next());
+      seedTrail(t);
+      rivals.push(t); trains.push(t);
+    }
+    p.bots = n;
+  }
+
+  /* What the seed rolled, for the panel. */
+  const botMix = () => {
+    const m = {};
+    for (const t of rivals) m[t.kind] = (m[t.kind] || 0) + 1;
+    return m;
+  };
 
   /* The rules live in rules.js. They read this context at call time, so the
      trains array can be finished after they are created. */
@@ -560,10 +594,11 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     if (you.followers.length > you.peak) you.peak = you.followers.length;
     for (const t of rivals) {
       if (t.dead > 0) continue;
-      steerRival(t, dt);
-      /* A rival bursts now and then, which is what makes it cut you. A test
-         that is about the head-on rules pins it instead. */
-      if (!t.pinBurst) t.bursting = t.followers.length > 0 && ((time * 0.37 + t.id) % 7) < 0.9;
+      const pinned = t.pinBurst ? t.bursting : null;
+      brain.think(t, dt);
+      /* A test about the head-on rules pins the burst instead of letting the
+         brain choose it. */
+      if (pinned !== null) t.bursting = pinned;
       payForBurst(t, dt);
       stepTrain(t, t.want, dt);
       if (t.followers.length > t.peak) t.peak = t.followers.length;
@@ -601,7 +636,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
 
   return {
     get time () { return time; },
-    params: p, blooms, you, rivals, trains, input, step, wild, groups, hash, joinedAt,
+    params: p, blooms, you, rivals, bots, botMix, brain, setBotCount, trains, input, step, wild, groups, hash, joinedAt,
     liveWild: livingWild,
     scatter, crash, cutAt, makeTrain, seedTrail, restart,
     get length () { return you.followers.length; },
