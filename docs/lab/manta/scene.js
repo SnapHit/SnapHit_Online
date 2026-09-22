@@ -41,10 +41,24 @@ export function createScene () {
 
   const view = { w: 0, h: 0, pxPerUnit: 0 };
 
+  /* Zoom multiplies what you see, and the same-area rule holds at every one
+     of them: the area is VIEW_AREA / zoom^2 and the shape still follows the
+     screen, so a laptop at zoom 0.55 sees exactly what a phone does. */
+  let zoom = 1, lastW = 0, lastH = 0;
+  function setZoom (z) {
+    const next = Math.max(0.2, Math.min(4, z));
+    if (Math.abs(next - zoom) < 1e-4) return false;
+    zoom = next;
+    if (lastW) fit(lastW, lastH);
+    return true;
+  }
+
   function fit (cssW, cssH) {
+    lastW = cssW; lastH = cssH;
     const aspect = cssW / cssH;
-    const w = Math.sqrt(VIEW_AREA * aspect);
-    const h = VIEW_AREA / w;
+    const area = VIEW_AREA / (zoom * zoom);
+    const w = Math.sqrt(area * aspect);
+    const h = area / w;
     camera.left = -w / 2; camera.right = w / 2;
     camera.top = h / 2;   camera.bottom = -h / 2;
     camera.updateProjectionMatrix();
@@ -53,7 +67,16 @@ export function createScene () {
     return view;
   }
 
-  return { scene, camera, fit, view };
+  /* The camera follows your leader. Its height and its looking-down are
+     unchanged; only where it sits over the water moves. */
+  function lookAtWorld (x, z) {
+    camera.position.set(x, 1000, z);
+    camera.lookAt(x, 0, z);
+    camera.up.set(0, 0, -1);
+    camera.updateMatrixWorld();
+  }
+
+  return { scene, camera, fit, view, setZoom, lookAtWorld, get zoom () { return zoom; } };
 }
 
 export const describeView = v =>

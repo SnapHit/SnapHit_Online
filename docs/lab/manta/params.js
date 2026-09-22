@@ -31,19 +31,19 @@ export const SPEC = [
      wake's energy goes into sparkle rather than into a smooth ribbon, because
      a smooth glow bright enough to see lifts every pixel around it and a dim
      manta swimming through the wake loses its contrast. */
-  { key: 'sparkle',        label: 'sparkle strength',     def: 8,  min: 0,    max: 8,     step: 0.1,   gpu: true  },
+  { key: 'sparkle',        label: 'sparkle strength',     def: 7.9,  min: 0,    max: 8,     step: 0.1,   gpu: true  },
   { key: 'ribbon',         label: 'ribbon strength',      def: 0.25,  min: 0,    max: 1,     step: 0.01,  gpu: true  },
   /* 0 is the committed look, and at 0 the shader mixes by exactly zero, so
      the render is unchanged rather than nearly unchanged. Above 0 the newest,
      brightest light in a wake burns towards white before cooling back to the
      blue-green the manta deposited. Section 7.2 keeps the wake blue-green, so
      this is a question for Nathan's eye, not a number to guess at. */
-  { key: 'whiteness',      label: 'fresh wake whiteness', def: 0.86,     min: 0,    max: 1,     step: 0.01,  gpu: true  },
+  { key: 'whiteness',      label: 'fresh wake whiteness', def: 1,     min: 0,    max: 1,     step: 0.01,  gpu: true  },
   /* Nathan had this at its old cap of 3, so the cap moved. 5 is where the
      conditions still hold and not a round number picked for comfort: at 5,
      with marine snow at its own new cap, condition 3 reads 2.04 and 2.03 at
      the two tiers that hold it tightest, against a bar of 2.0. */
-  { key: 'plankton',       label: 'plankton density',     def: 3,  min: 0,    max: 5,     step: 0.05,  gpu: true  },
+  { key: 'plankton',       label: 'plankton density',     def: 5,  min: 0,    max: 6,     step: 0.05,  gpu: true  },
   { key: 'bloomStrength',  label: 'bloom strength',       def: 0.15,  min: 0,    max: 2,     step: 0.05,  gpu: false },
   /* 0.40, not the brief's starting 0.25. At 0.25 bloom lifted a rival to 231.9
      against the train's 231.6: both clipped to the tone mapper's white point
@@ -106,10 +106,10 @@ export const SPEC = [
      FLOOR only, offset down and left about half a wingspan. */
   /* Also at its cap, and shadows only ever darken the floor, so nothing in
      the conditions pushes back: widened to 2 for headroom. */
-  { key: 'shadow',         label: 'shadow strength',      def: 1,  min: 0,    max: 2,     step: 0.05,  gpu: true  },
+  { key: 'shadow',         label: 'shadow strength',      def: 2,  min: 0,    max: 2,     step: 0.05,  gpu: true  },
   /* Was capped at 2, which is where Nathan left it. 4 is the same story as
      plankton: measured together at both caps, the conditions still hold. */
-  { key: 'snow',           label: 'marine snow density',  def: 2,  min: 0,    max: 4,     step: 0.05,  gpu: true  },
+  { key: 'snow',           label: 'marine snow density',  def: 2.75,  min: 0,    max: 4,     step: 0.05,  gpu: true  },
   /* The fading light painting 7.2 calls the signature effect. 0 by default,
      and at 0 the whole pass is skipped rather than merely multiplied out.
      Capped at 0.6: it is added to the same water the hierarchy measures. */
@@ -121,6 +121,15 @@ export const SPEC = [
      four warm hues for a turquoise so the comparison is like for like. */
   { key: 'coolWild',       label: 'wild palette 0=warm+cool 1=cool', def: 0, min: 0, max: 1, step: 1, gpu: false },
   { key: 'marks',          label: 'marking strength',     def: 2,  min: 0,    max: 2,     step: 0.05,  gpu: true  },
+  /* ------------------------------------------------------------- game.
+     Section 10.2's table, on sliders because these are the numbers that
+     decide whether the four rules are fun, and that is judged on a phone
+     rather than in a test. They are read by sim.js, which has no idea a
+     drawer exists. */
+  { key: 'cruise',         label: 'cruise speed',         def: 170,   min: 80,   max: 320,   step: 5,     gpu: false },
+  { key: 'burstSpeed',     label: 'burst speed',          def: 300,   min: 120,  max: 520,   step: 5,     gpu: false },
+  { key: 'turnCruise',     label: 'turn rate cruising',   def: 3.5,   min: 1,    max: 6,     step: 0.1,   gpu: false },
+  { key: 'turnBurst',      label: 'turn rate bursting',   def: 2.6,   min: 1,    max: 6,     step: 0.1,   gpu: false },
 ];
 
 /* Plain numbers, read from JS each frame. */

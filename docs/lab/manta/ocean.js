@@ -34,6 +34,8 @@ import { lightTarget } from './lighten.js';
 export const uAspect = uniform(1.0);
 /* The view in world units, so a pixel can work out where in the ocean it is
    and read the light memory there. */
+/* Where the camera is looking, in world units. */
+export const uCam = uniform(new Vector2(0, 0));
 export const uViewW = uniform(385);
 export const uViewH = uniform(855);
 
@@ -169,7 +171,11 @@ export function oceanNode () {
     const t = uTime;
 
     /* Where this pixel is in the ocean, before anything bends it. */
-    const w0 = vec2(screenUV.x.sub(0.5).mul(uViewW), screenUV.y.sub(0.5).mul(uViewH));
+    /* Plus where the camera is. EVERY world layer is computed from this one
+       vector — the seabed, the caustics, the marine snow, the light memory
+       and the shadows — so the whole ocean scrolls from a single uniform
+       instead of five parallax hacks that can disagree with each other. */
+    const w0 = vec2(screenUV.x.sub(0.5).mul(uViewW), screenUV.y.sub(0.5).mul(uViewH)).add(uCam);
     /* The shockwave, as a displacement in world units: a narrow ring at
        uShockR, pushing directly away from the centre. Everything below reads
        the displaced position, so the water, the seabed, the ripple and the
@@ -285,7 +291,7 @@ export function oceanNode () {
        second pipeline. */
     let shade = float(1.0);
     if (shadows !== null) {
-      const sUV = w => w.div(shadows.uHalf.mul(2.0)).add(0.5);
+      const sUV = w => w.sub(shadows.uCentre).div(shadows.uHalf.mul(2.0)).add(0.5);
       const step2 = shadows.uHalf.mul(2.0).div(float(256.0)).mul(1.5);
       let acc = float(0.0);
       for (const [ox, oz] of [[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]) {
@@ -319,7 +325,9 @@ export function oceanNode () {
 
     /* The exact inverse of the mapping the light memory pass uses, so the two
        agree by construction rather than by coincidence. */
-    const lmUV = world.div(lm.uHalf.mul(2.0)).add(0.5);
+    /* The exact inverse of the light memory pass's own mapping, centre and
+       all, so the two agree by construction rather than by coincidence. */
+    const lmUV = world.sub(lm.uCentre).div(lm.uHalf.mul(2.0)).add(0.5);
     const stir = texture(lm.out, lmUV).rgb;
 
     /* POINTS, not dashes. This was two crossing sine waves raised to a power,

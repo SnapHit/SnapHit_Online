@@ -18,13 +18,15 @@ import { REVISION } from 'three';
 import * as panel from './panel.js';
 import { P, U } from './params.js';
 import { createScene, describeView } from './scene.js';
-import { useLightMemory, useLongMemory, useSeabed, useCaustics, useShadows, uCausticLayers, uViewW, uViewH, uShockC, uShockR, uShockA, uRippleOn } from './ocean.js';
+import { useLightMemory, useLongMemory, useSeabed, useCaustics, useShadows, uCam, uCausticLayers, uViewW, uViewH, uShockC, uShockR, uShockA, uRippleOn } from './ocean.js';
 import { createLightMemory } from './lightmemory.js';
 import { createSeabed } from './seabed.js';
 import { createCaustics } from './caustics.js';
 import { createShadows } from './shadow.js';
 import { createLab } from './renderer.js';
 import { createMantas, COUNT } from './mantas.js';
+import { createSim, zoomFor, STEP } from './sim.js';
+import { createControls } from './controls.js';
 import { createPost } from './post.js';
 import { createCut, flashAllowed, setCutClock } from './cut.js';
 import { createQuality, TIER_SETTINGS } from './tiers.js';
@@ -84,9 +86,20 @@ const lmSlow = FX ? createLightMemory(COUNT + 1) : null;
 if (lmSlow) { lmSlow.setFade(0.9994); useLongMemory(lmSlow); }
 let slowAttached = false;
 
-const { scene, camera, fit, view } = createScene();
+const { scene, camera, fit, view, setZoom, lookAtWorld } = createScene();
 const mantas = createMantas(scene);
 if (shadows) shadows.attach(mantas.shadowMesh);
+
+/* ?scene=spike puts the still spike scene back, for judging the look against
+   what Nathan signed off. Everything below is the moving world. */
+const SPIKE = new URLSearchParams(location.search).get('scene') === 'spike';
+const sim = SPIKE ? null : createSim({ seed: (Math.random() * 0xffffffff) >>> 0 });
+let controls = null;
+/* A fixed 60 steps a second whatever the display does, with an accumulator,
+   so the rules behave the same on a 120 Hz phone and in a headless browser
+   at two frames a second — and so a test in Node sees the same steps. */
+let simAcc = 0;
+window.__sim = sim;
 panel.set('mantas', String(mantas.count) + ' in 1 instanced mesh');
 /* WebGPU guarantees eight vertex buffers per pipeline and three allocates one
    per attribute. Over the limit the device refuses the pipeline in silence:
@@ -223,6 +236,50 @@ function applyQuality (renderer) {
   if (lm) panel.set('lm', lm.size + '×' + lm.size + '  ·  ' + lm.note);
 }
 
+/* THE WHOLE WORLD MOVES FROM ONE VECTOR. uCam is what every layer of the
+   ocean is drawn from, the light memory re-centres on it in whole texels so
+   a wake stays over the water it was laid on, the shadow target follows it,
+   and the camera itself sits over it. Five things that could disagree, told
+   once. */
+/* Everything that has to be told the view changed, in one place, because a
+   zoom change is a view change and a resize is a view change and they used
+   to be told in different ways. */
+function applyView (v) {
+  mantas.setBounds(v);
+  uViewW.value = v.w; uViewH.value = v.h;
+  if (lm) lm.setView(v);
+  if (shadows) shadows.setView(v);
+  if (lmSlow) lmSlow.setView(v);
+  panel.set('view', describeView(v));
+  panel.set('viewport', panel.describeViewport());
+}
+
+function followCamera () {
+  const you = sim.you;
+  const z = zoomFor(you.followers.length, sim.params);
+  if (setZoom(z)) applyView(view);
+  uCam.value.set(you.x, you.z);
+  camera.position.set(you.x, 1000, you.z);
+  camera.lookAt(you.x, 0, you.z);
+  camera.up.set(0, 0, -1);
+  camera.updateMatrixWorld();
+  if (lm) lm.setCentre(you.x, you.z);
+  if (lmSlow) lmSlow.setCentre(you.x, you.z);
+  if (shadows) shadows.setCentre(you.x, you.z);
+  /* Your leader is the sim's, not the spike's script. The other four of the
+     spike's train trail it along its recorded path until stage 2 fills them
+     with real recruits. */
+  const m = mantas, sp = sim.params.spacing;
+  m.aPos.setXYZ(0, you.x, 0, you.z); m.aHead.setX(0, you.head);
+  for (let i = 1; i < 5; i++) {
+    const want = you.s - i * sp;
+    let pt = you.trail[0] || you;
+    for (let q = you.trail.length - 1; q >= 0; q--) if (you.trail[q].s <= want) { pt = you.trail[q]; break; }
+    m.aPos.setXYZ(i, pt.x, 0, pt.z); m.aHead.setX(i, pt.h !== undefined ? pt.h : you.head);
+  }
+  m.aPos.needsUpdate = true; m.aHead.needsUpdate = true;
+}
+
 /* Hoisted out of the hooks so the step hook below can drive it. The cut owns
    the clock while it is running: its own timeline advances in REAL time — a
    250 ms beat of slow motion is 250 ms of the player's life — while the scene
@@ -230,9 +287,29 @@ function applyQuality (renderer) {
    scaled total is the one clock every shader reads; see clock.js. */
 function advance (now, dt) {
   const scale = cut.update(dt);
+  if (sim) {
+    /* Steps of exactly 1/60, capped so a long pause does not fast-forward
+       the whole world when the tab comes back. */
+    simAcc = Math.min(simAcc + dt * scale, 0.5);
+    while (simAcc >= STEP) {
+      if (controls) controls.apply(sim.you, STEP);
+      sim.params.cruise = P.cruise; sim.params.burst = P.burstSpeed;
+      sim.params.turnCruise = P.turnCruise; sim.params.turnBurst = P.turnBurst;
+      sim.step();
+      simAcc -= STEP;
+    }
+  }
   simTime += dt * scale;
   setSceneTime(simTime);
   mantas.update(simTime);
+  /* AFTER the spike's script, not before. mantas.update() writes every
+     instance from the figure eight, so putting your leader in first meant
+     the script painted straight over it: the camera sat on the simulation's
+     leader while the train on screen was the old scripted one, a few hundred
+     units away. The three rival trains still come from the script; the five
+     that are yours come from the simulation, and they have to be written
+     last. */
+  if (sim) followCamera();
   /* Scaled too: the stamp is a deposit per unit of distance travelled, so a
      slowed manta must not lay down a brighter trail. */
   stampMantas(dt * scale);
@@ -243,16 +320,7 @@ const lab = createLab({
   camera,
   forceWebGL: panel.FORCE_WEBGL,
   hooks: {
-    onFit (w, h) {
-      const v = fit(w, h);
-      mantas.setBounds(v);
-      uViewW.value = v.w; uViewH.value = v.h;
-      if (lm) lm.setView(v);
-      if (shadows) shadows.setView(v);
-      if (lmSlow) lmSlow.setView(v);
-      panel.set('view', describeView(v));
-      panel.set('viewport', panel.describeViewport());
-    },
+    onFit (w, h) { applyView(fit(w, h)); },
     onBackend ({ webgpu, forced, fellBack, glString }) {
       panel.announce(
         webgpu ? 'WebGPU' : 'WebGL2',
@@ -348,4 +416,21 @@ window.__lab.step = (seconds = 1 / 60) => {
   return simTime;
 };
 
-lab.start().then(ok => { if (ok) window.__labReady = true; });
+lab.start().then(ok => {
+  if (!ok) { window.__labReady = true; return; }
+  if (sim) {
+    const canvas = lab.renderer && lab.renderer.domElement;
+    if (canvas) controls = createControls(canvas, sim.input, (u, v) => ({
+      /* Screen fraction to world, through the same view the ocean uses. */
+      x: sim.you.x + (u - 0.5) * view.w,
+      z: sim.you.z + (v - 0.5) * view.h,
+    }));
+  }
+  window.__labReady = true;
+});
+
+/* A hidden tab is not played. The loop already stops on blur; this also
+   stops the simulation, so coming back does not fast-forward the world. */
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { simAcc = 0; lab.pause(); } else lab.resume();
+});

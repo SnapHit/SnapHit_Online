@@ -17,7 +17,7 @@
  * memory's is. The mapping from world to uv is the exact inverse of the one
  * the ocean samples with, so the two agree by construction.
  */
-import { RenderTarget, Scene, OrthographicCamera, RendererUtils, UnsignedByteType } from 'three';
+import { RenderTarget, Scene, OrthographicCamera, RendererUtils, UnsignedByteType, Vector2 } from 'three';
 import { texture, uniform } from 'three/tsl';
 
 /* Wider than the view so a shadow does not clip at the edge as its manta
@@ -45,6 +45,14 @@ export function createShadows () {
   camera.lookAt(0, 0, 0);
 
   const uHalf = uniform(500);                    // half extent, world units
+  const uCentre = uniform(new Vector2(0, 0));
+  /* The target follows the camera, so a manta's shadow is drawn wherever it
+     is rather than only near the world's origin. */
+  function setCentre (x, z) {
+    camera.position.set(x, 1000, z); camera.lookAt(x, 0, z);
+    camera.up.set(0, 0, -1); camera.updateMatrixWorld();
+    uCentre.value.set(x, z);
+  }
   function setView (view) {
     const half = Math.max(view.w, view.h) * COVER * 0.5;
     uHalf.value = half;
@@ -77,7 +85,7 @@ export function createShadows () {
   }
 
   return {
-    render, attach, setView, uHalf,
+    render, attach, setView, setCentre, uHalf, uCentre,
     out: texture(rt.texture),
     target: rt,
     get drawn () { return drawn; },

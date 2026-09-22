@@ -772,3 +772,39 @@ THE MARK above. Until they
   has been called on it, getContext('webgl2') returns null for the rest of its
   life, so rebuilding on WebGL2 after WebGPU fails needs a fresh canvas
   element. Reusing the old one draws nothing, and draws nothing silently.
+
+## 2026-09-22 — what the look spike taught us
+
+Six things worth carrying into the greybox, each of which cost a session to
+learn:
+
+- **WebGPU guarantees eight vertex buffers, and three.js spends one per
+  attribute.** Go over and the device refuses the pipeline in silence:
+  nothing throws, nothing is logged, the mesh simply is not drawn. That is
+  how ten invisible mantas shipped. The mesh is pinned at six and the panel
+  reports the count.
+- **A canvas keeps the first context type it is given.** There is no going
+  back to WebGPU from a WebGL2 context on the same canvas, so the fallback
+  has to be decided before anything draws.
+- **r186's `readRenderTargetPixelsAsync` RETURNS the pixels**, and its sixth
+  argument is the texture index, not a buffer to fill. Passing a buffer there
+  throws inside the backend AFTER the render has succeeded — which made a
+  working shadow pass look like one that drew nothing, for a whole session.
+- **Set a saturation floor in the space it is measured in.** 0.90 in the
+  renderer's linear space is 0.65 on screen; a floor of 0.62 linear came out
+  at 0.35 and let red lighten into pink.
+- **Headless SwiftShader draws at one to two frames a second**, so anything
+  shorter than a second is never sampled: a 300 ms burst had zero frames
+  inside it. Set pieces run on an injectable clock a test can hold still.
+- **The follower rule is arc length along the leader's recorded path**, and
+  two bugs hid in it: a leader crossing the world edge emptied its path and
+  the train collapsed onto it, and spacing measured from the last recorded
+  point rather than the leader's live position ran a gap 1.5 units long.
+- **`Instance dropped in popErrorScope` is the headless environment, not the
+  page.** It fires a dozen times in the first frames under Chrome 153 and
+  SwiftShader, on the unchanged build as much as on a changed one, and the
+  page's own counter correctly ignores it. A greybox build was once read as
+  "WebGPU FAILED" with a device loss behind it; the device loss was the
+  renderer being disposed at teardown, no fallback had fired, and the same
+  harness on the same build passed on the next run. Check the panel's own
+  headline and error count before believing a console.

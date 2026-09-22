@@ -26,7 +26,7 @@
  */
 import {
   RenderTarget, HalfFloatType, UnsignedByteType, QuadMesh, NodeMaterial,
-  RendererUtils, Vector4,
+  RendererUtils, Vector4, Vector2,
 } from 'three';
 import {
   Fn, uv, vec3, vec4, float, texture, uniform, uniformArray,
@@ -50,6 +50,8 @@ export function createLightMemory (count) {
 
   const uFade = uniform(1.0);
   const uHalf = uniform(500);                        // half extent, world units
+  const uCentre = uniform(new Vector2(0, 0));        // where the square sits
+  const uShift = uniform(new Vector2(0, 0));         // last re-centre, in uv
   const segs = Array.from({ length: count }, () => new Vector4());
   const tints = Array.from({ length: count }, () => new Vector4());
   const uSeg = uniformArray(segs, 'vec4');           // x0, z0, x1, z1
@@ -65,7 +67,7 @@ export function createLightMemory (count) {
     const q = uv();
     /* Quad uv to world xz. The same mapping runs in reverse in the ocean
        shader, so the two agree by construction. */
-    const p = q.sub(0.5).mul(uHalf.mul(2.0));
+    const p = q.sub(0.5).mul(uHalf.mul(2.0)).add(uCentre);
 
     let acc = vec3(0.0);
     for (let i = 0; i < count; i++) {
@@ -81,7 +83,13 @@ export function createLightMemory (count) {
       acc = acc.add(t.xyz.mul(f.mul(f)));
     }
 
-    const prev = texture(uPrev, q).rgb.mul(uFade);
+    /* WHOLE TEXELS, NEVER FRACTIONS. When the covered square re-centres, the
+       previous frame is read back at an offset so a wake stays over the water
+       it was laid on. The offset is a whole number of texels, so the read
+       lands exactly on the texel centres it came from: shift by a fraction
+       and every frame resamples its own resampling, and a wake smears into a
+       grey cloud within a second or two. */
+    const prev = texture(uPrev, q.add(uShift)).rgb.mul(uFade);
     return vec4(prev.add(acc), 1.0);
   })();
 
@@ -146,6 +154,25 @@ export function createLightMemory (count) {
      covered whichever way the phone is held. */
   function setView (view) { uHalf.value = Math.max(view.w, view.h) * COVER * 0.5; }
 
+  /* Re-centre on the camera, but only ever by a whole texel, and tell the
+     pass how far it moved so it can read the previous frame back at the same
+     patch of water. The remainder is carried, not thrown away, so following
+     the camera for a minute does not drift the square off it. */
+  let carryX = 0, carryZ = 0;
+  function setCentre (x, z) {
+    const texel = (uHalf.value * 2) / size;
+    const dx = x - uCentre.value.x + carryX;
+    const dz = z - uCentre.value.y + carryZ;
+    const nx = Math.round(dx / texel), nz = Math.round(dz / texel);
+    carryX = dx - nx * texel; carryZ = dz - nz * texel;
+    if (nx === 0 && nz === 0) { uShift.value.set(0, 0); return; }
+    uCentre.value.x += nx * texel;
+    uCentre.value.y += nz * texel;
+    /* The pass reads uPrev at q + uShift, so moving the square RIGHT means
+       reading further right in the old frame. */
+    uShift.value.set(nx / size, nz / size);
+  }
+
   /* Called once a frame with where every manta was and is. */
   function stamp (i, x0, z0, x1, z1, radius, r, g, b, strength) {
     segs[i].set(x0, z0, x1, z1);
@@ -181,7 +208,7 @@ export function createLightMemory (count) {
 
   return {
     attach, setSize, setView, stamp, clearStamps, render, setFade, dispose,
-    out, uHalf,
+    out, uHalf, uCentre, setCentre,
     get size () { return size; },
     get note () { return note; },
     get enabled () { return enabled; },
