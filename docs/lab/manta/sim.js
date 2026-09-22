@@ -146,23 +146,36 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   const hash = createHash(Math.max(p.recruitR, p.spacing) * 2);
   const scratch = [];
 
-  /* Your leader. It never stops: speed is cruise or burst, never zero. */
-  const you = {
-    x: 0, z: 0, head: 0, turn: 0,
-    bursting: false, dazed: 0, stunned: 0,
-    followers: [],          // arc lengths behind the head, filled in stage 2
-    trail: [],              // recent path, for the arc-length rule
-    s: 0,                   // arc length travelled
-  };
+  /* A TRAIN. Yours and every rival's are the same object, because 6.1's
+     rules are written about trains and not about the player: a rival crashes
+     into you exactly the way you crash into it, and is cut the same way. */
+  let nextId = 0;
+  function makeTrain (x, z, head) {
+    return {
+      id: nextId++, x, z, head, turn: 0,
+      bursting: false, dazed: 0, stunned: 0,
+      followers: [],
+      trail: [],              // recent path, for the arc-length rule
+      s: 0,                   // arc length travelled
+      burstOwed: 0,           // seconds of burst not yet paid for
+      rebuild: 0,             // a rival alone counts down to a new train
+      want: null,             // a rival steers itself; yours comes from input
+      crashed: 0,             // counts up for the renderer: a crash just happened
+      cut: 0,
+    };
+  }
+  const you = makeTrain(0, 0, 0);
   /* Seeded straight behind the leader, so the first recruits have a path to
      sit on instead of piling up on the spot until it has swum a train's
      length. Same trick the spike's rival trains needed after a wrap. */
-  {
+  function seedTrail (t) {
+    t.trail.length = 0;
     const back = 40 * p.spacing;
     for (let d = back; d >= 0; d -= p.spacing * 0.25)
-      you.trail.push({ x: you.x + Math.sin(you.head) * -d, z: you.z + Math.cos(you.head) * d,
-                       h: you.head, s: -d });
+      t.trail.push({ x: t.x + Math.sin(t.head) * -d, z: t.z + Math.cos(t.head) * d,
+                     h: t.head, s: t.s - d });
   }
+  seedTrail(you);
 
   /* What the player is asking for this step: a heading to steer towards, or
      null to hold course, plus whether burst is held. Set by the input layer
@@ -255,20 +268,26 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   /* Every distance a recruit was at when it joined, for the test that the
      radius is actually the radius. */
   const joinedAt = [];
-  function recruit () {
-    if (you.dazed > 0) return 0;
+  function recruit (t, cap) {
+    if (t.dazed > 0 || t.stunned > 0) return 0;
+    if (t.followers.length >= cap) return 0;
     let joined = 0;
-    hash.near(you.x, you.z, scratch);
+    hash.near(t.x, t.z, scratch);
     for (const m of scratch) {
       if (!m.isWild || !m.alive) continue;
-      if (Math.hypot(m.x - you.x, m.z - you.z) > p.recruitR) continue;
+      if (t.followers.length >= cap) break;
+      if (m.fromTrain === t && m.immune > 0) continue;
+      if (Math.hypot(m.x - t.x, m.z - t.z) > p.recruitR) continue;
       m.alive = false;
-      joinedAt.push(+Math.hypot(m.x - you.x, m.z - you.z).toFixed(3));
+      if (t === you) joinedAt.push(+Math.hypot(m.x - t.x, m.z - t.z).toFixed(3));
       /* At the TAIL. The colour runs from the head out, which the renderer
-         does by tinting every follower with your train's colour. */
-      you.followers.push({ x: m.x, z: m.z, head: m.head, born: time, from: m.colour });
+         does by tinting every follower with the train's colour. */
+      t.followers.push({ x: m.x, z: m.z, head: m.head, born: time, from: m.colour });
       joined++;
-      spawnWild(wild.indexOf(m), [you]);
+      /* A SCATTERED manta is not part of the ambient 300 and is not replaced;
+         an ambient one is, so the ocean keeps its population. */
+      const at = wild.indexOf(m);
+      if (m.loose) wild.splice(at, 1); else spawnWild(at, trains);
     }
     return joined;
   }
@@ -292,6 +311,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     for (const m of wild) {
       if (!m.alive) continue;
       if (m.glow > 0) m.glow = Math.max(0, m.glow - dt);
+      if (m.immune > 0) { m.immune -= dt; if (m.immune <= 0) m.fromTrain = null; }
       const gr = groups[m.group];
       /* Forward is (-sin, -cos), the one convention in this lab. Written
          mirrored, these 300 would spin as they turned exactly the way the
@@ -306,40 +326,212 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     }
   }
 
+  /* Three rival trains, on the same rules as yours. They wander towards a
+     point that drifts, which is enough to bring them across your path. */
+  const rivals = [];
+  for (let r = 0; r < 3; r++) {
+    const a = next() * TAU, d = 500 + next() * 700;
+    const t = makeTrain(Math.cos(a) * d, Math.sin(a) * d, next() * TAU);
+    t.aim = { x: next() * 800 - 400, z: next() * 800 - 400, t: 2 + next() * 5 };
+    seedTrail(t);
+    rivals.push(t);
+  }
+  const trains = [you, ...rivals];
+
+  /* EVERY MANTA IN A TRAIN, leader first. A crash asks "did my leader touch
+     any part of another train", and a cut asks "which part". */
+  function partsOf (t) { return [t, ...t.followers]; }
+
+  /* 6.3: a scattered manta glows in its old train's colour for a few seconds
+     and joins the first leader to touch it; after that it is an ordinary wild
+     manta again. It keeps the colour it owned before it ever joined. */
+  function scatter (t, from, immune = 0) {
+    const dropped = t.followers.splice(from);
+    for (const f of dropped) {
+      wild.push({ x: f.x, z: f.z, head: f.head, group: Math.floor(next() * GROUPS),
+                  speed: 40 + next() * 30, glow: p.scatterGlow, wasColour: t.id,
+                  colour: f.from >= 0 ? f.from : 0, alive: true, isWild: true, loose: true,
+                  /* WHO JUST DROPPED IT, and for how long they may not have it
+                     back. A burst sheds from the tail, which sits one spacing
+                     — 31 units — behind the leader, and the recruit radius is
+                     40: without this the manta you paid with rejoins on the
+                     next step and the burst is free. Measured: a train of
+                     eight drained to one and then stuck there. A crash needs
+                     no such thing, because 6.3 dazes the crasher for exactly
+                     this reason. Everybody ELSE may still take it at once,
+                     which is what 6.3 asks for. */
+                  fromTrain: immune > 0 ? t : null, immune });
+    }
+    return dropped.length;
+  }
+
+  /* 6.1 rule 3 and 6.3. The train you hit is unharmed; you scatter and are
+     dazed, or stunned if you had nobody to lose. */
+  function crash (t) {
+    const had = t.followers.length;
+    scatter(t, 0);
+    if (had > 0) t.dazed = p.daze; else t.stunned = p.stun;
+    t.crashed = 0.25;
+    t.bursting = false;
+    return had;
+  }
+
+  /* 6.3: a cut happens where a BURSTING leader touches another train. Every
+     follower behind the contact point goes wild; the rest of that train,
+     including its leader, carries on. Touching its leader cuts at the front,
+     so the whole train goes. */
+  function cutAt (t, index) {
+    const freed = scatter(t, index);
+    if (freed) t.cut = 0.25;
+    return freed;
+  }
+
+  /* Who is touching whom. Only a leader can start any of this: it is the
+     front of its own train (6.3), and a follower touching anything does
+     nothing at all. */
+  function contacts (t) {
+    hash.near(t.x, t.z, scratch);
+    let hitTrain = null, hitIndex = 0, best = Infinity;
+    for (const o of scratch) {
+      if (o.isWild || o.train === t) continue;
+      if (!o.train) continue;
+      const d = Math.hypot(o.x - t.x, o.z - t.z);
+      if (d > p.leaderR + (o.isLeader ? p.leaderR : p.followerR)) continue;
+      if (d < best) { best = d; hitTrain = o.train; hitIndex = o.index; }
+    }
+    return hitTrain ? { train: hitTrain, index: hitIndex } : null;
+  }
+
+  function resolveTouches () {
+    /* Gathered first and applied afterwards, so a head-on is judged on what
+       both leaders were doing rather than on which one was stepped first.
+       MUTUAL PAIRS GO FIRST, for the same reason: handling them in train
+       order let the first leader crash on its own and the second then read
+       the pair as mutual, so one head-on was scored twice and the other side
+       not at all. */
+    const hits = trains.map(t => (t.dazed > 0 || t.stunned > 0) ? null : contacts(t));
+    const done = new Set();
+    for (let i = 0; i < trains.length; i++) {
+      const t = trains[i], h = hits[i];
+      if (!h) continue;
+      const back = trains.indexOf(h.train);
+      if (back < 0 || back <= i) continue;
+      if (!hits[back] || hits[back].train !== t) continue;
+      /* HEAD ON. Both crash unless exactly one is bursting; the one that is
+         cuts the other instead, and two bursting leaders both crash. */
+      const other = h.train, a = t.bursting, b = other.bursting;
+      if (a && !b) cutAt(other, h.index);
+      else if (b && !a) cutAt(t, hits[back].index);
+      else { crash(t); crash(other); }
+      done.add(t); done.add(other);
+    }
+    for (let i = 0; i < trains.length; i++) {
+      const t = trains[i], h = hits[i];
+      if (!h || done.has(t) || done.has(h.train)) continue;
+      if (t.bursting) cutAt(h.train, h.index);
+      else crash(t);
+      done.add(t);
+    }
+    /* The reef is a wall and hitting it is a crash like any other. */
+    for (const t of trains) {
+      if (t.dazed > 0 || t.stunned > 0) continue;
+      if (Math.hypot(t.x, t.z) >= p.arenaR - p.leaderR - 0.5) crash(t);
+    }
+  }
+
+  /* 6.3: bursting needs at least one follower to pay with, and holding it
+     drains them from the tail at a steady rate. */
+  function payForBurst (t, dt) {
+    if (!t.bursting) { t.burstOwed = 0; return 0; }
+    t.burstOwed += dt;
+    let paid = 0;
+    while (t.burstOwed >= p.burstCost && t.followers.length > 0) {
+      t.burstOwed -= p.burstCost;
+      scatter(t, t.followers.length - 1, p.burstCost * 3);
+      paid++;
+    }
+    if (t.followers.length === 0) { t.bursting = false; t.burstOwed = 0; }
+    return paid;
+  }
+
+  /* A rival that has been cut down to its leader is no use as a target, so
+     it gathers a new train. It does that by recruiting like everyone else,
+     which is why this only has to turn its appetite back on. */
+  function steerRival (t, dt) {
+    const a = t.aim;
+    a.t -= dt;
+    if (a.t <= 0) {
+      a.t = 4 + next() * 6;
+      /* Towards the player often enough to meet: 6.2 wants something to
+         crash into and something to cut. */
+      if (next() < 0.5) { a.x = you.x + (next() - 0.5) * 300; a.z = you.z + (next() - 0.5) * 300; }
+      else { const b = blooms[Math.floor(next() * blooms.length)];
+             a.x = b.x + (next() - 0.5) * 400; a.z = b.z + (next() - 0.5) * 400; }
+    }
+    t.want = Math.atan2(-(a.x - t.x), -(a.z - t.z));
+    if (t.followers.length === 0) { t.rebuild -= dt; } else t.rebuild = 10;
+  }
+
+  function stepTrain (t, want, dt) {
+    if (t.dazed > 0) t.dazed = Math.max(0, t.dazed - dt);
+    if (t.stunned > 0) t.stunned = Math.max(0, t.stunned - dt);
+    if (t.crashed > 0) t.crashed = Math.max(0, t.crashed - dt);
+    if (t.cut > 0) t.cut = Math.max(0, t.cut - dt);
+    const fromX = t.x, fromZ = t.z, sBefore = t.s;
+    const moved = advance(t, want, dt);
+    hold(t, fromX, fromZ, sBefore);
+    recordTrail(t, moved);
+  }
+
   function step () {
     const dt = STEP;
     time += dt;
-    /* NO FOLLOWER GATE YET, and that is deliberate. Bursting SPENDS
-       followers (6.3), and the spending arrives in stage 3 with the cost
-       interval; gating on a train you cannot recruit yet only made the
-       drawer's two burst sliders untestable. Nathan held a double tap on the
-       phone and nothing happened, because stage 1 has nothing to pay with.
-       The gate comes back in stage 3, beside the thing it is paying for. */
-    you.bursting = input.burst;
-    if (you.dazed > 0) you.dazed = Math.max(0, you.dazed - dt);
-    if (you.stunned > 0) you.stunned = Math.max(0, you.stunned - dt);
-    const fromX = you.x, fromZ = you.z, sBefore = you.s;
-    const moved = advance(you, input.want, dt);
-    hold(you, fromX, fromZ, sBefore);
-    recordTrail(you, moved);
+    /* 6.3: bursting needs a follower to pay with. Stage 1 lifted this gate
+       because there was nothing to spend; the spending is here now, so the
+       gate comes back with it. */
+    you.bursting = input.burst && you.followers.length > 0;
+    payForBurst(you, dt);
+    stepTrain(you, you.dazed > 0 || you.stunned > 0 ? null : input.want, dt);
+    for (const t of rivals) {
+      steerRival(t, dt);
+      /* A rival bursts now and then, which is what makes it cut you. A test
+         that is about the head-on rules pins it instead. */
+      if (!t.pinBurst) t.bursting = t.followers.length > 0 && ((time * 0.37 + t.id) % 7) < 0.9;
+      payForBurst(t, dt);
+      stepTrain(t, t.dazed > 0 || t.stunned > 0 ? null : t.want, dt);
+    }
     stepWild(dt);
+
     /* The hash carries every leader and follower circle, which is what both
-       recruiting and (in stage 3) crashing ask about. Wild mantas go in too,
-       because recruiting asks the other way round. */
+       recruiting and crashing ask about. Wild mantas go in too, because
+       recruiting asks the other way round. */
     hash.clear();
-    hash.add(you.x, you.z, you);
-    for (const f of you.followers) hash.add(f.x, f.z, f);
-    for (const m of wild) if (m.alive) { m.isWild = true; hash.add(m.x, m.z, m); }
-    recruit();
+    for (const t of trains) {
+      t.isLeader = true; t.train = t; t.index = 0; t.isWild = false;
+      hash.add(t.x, t.z, t);
+      for (let k = 0; k < t.followers.length; k++) {
+        const f = t.followers[k];
+        f.isLeader = false; f.train = t; f.index = k; f.isWild = false;
+        hash.add(f.x, f.z, f);
+      }
+    }
+    for (const m of wild) if (m.alive) { m.isWild = true; m.train = null; hash.add(m.x, m.z, m); }
+
+    resolveTouches();
+    /* A rival that has been cut down to its leader gets its appetite back
+       after about ten seconds, so there is always something to play against. */
+    for (const t of rivals) recruit(t, t.rebuild <= 0 ? 8 : t.followers.length);
+    recruit(you, 1e9);
     /* AFTER recruiting, so a manta that joined this step is already on the
        path rather than sitting wherever it was caught for a frame. */
-    placeFollowers(you);
+    for (const t of trains) placeFollowers(t);
     return time;
   }
 
   return {
     get time () { return time; },
-    params: p, blooms, you, input, step, wild, groups, hash, joinedAt,
+    params: p, blooms, you, rivals, trains, input, step, wild, groups, hash, joinedAt,
+    scatter, crash, cutAt, makeTrain, seedTrail,
     get length () { return you.followers.length; },
     zoom: () => zoomFor(you.followers.length, p),
     /* For tests and for the panel: the speed actually used this step. */

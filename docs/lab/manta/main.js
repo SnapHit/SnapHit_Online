@@ -24,7 +24,7 @@ import { createSeabed } from './seabed.js';
 import { createCaustics } from './caustics.js';
 import { createShadows } from './shadow.js';
 import { createLab } from './renderer.js';
-import { createMantas, COUNT, TRAIN_MAX, RIVAL_BASE, WILD_BASE, PARKED } from './mantas.js';
+import { createMantas, COUNT, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS, PARKED } from './mantas.js';
 import { createSim, zoomFor, STEP } from './sim.js';
 import { createControls } from './controls.js';
 import { createPost } from './post.js';
@@ -299,7 +299,8 @@ function applyView (v) {
    wore as a wild manta to yours. */
 const RECRUIT_FADE = 0.5;                 // seconds
 const fading = new Map();                 // instance slot -> seconds left
-let drawnFollowers = 0, peakLength = 0;
+const wearing = [], wasScaled = [];       // which wild slots are borrowed colours
+let drawnFollowers = 0, drawnWild = 0, peakLength = 0, shake = 0;
 
 function followCamera (dt) {
   const you = sim.you;
@@ -337,15 +338,53 @@ function followCamera (dt) {
   for (let i = n; i < drawnFollowers; i++) m.aPos.setXYZ(i + 1, PARKED, 0, PARKED);
   drawnFollowers = n;
 
-  /* The 300. Their slot in the buffer is their slot in the simulation, so a
-     respawn keeps the colour that slot was dealt. */
-  const w = sim.wild;
-  for (let i = 0; i < w.length; i++) {
-    const q = w[i];
-    if (q.alive) { m.aPos.setXYZ(WILD_BASE + i, q.x, 0, q.z); m.aHead.setX(WILD_BASE + i, q.head); }
-    else m.aPos.setXYZ(WILD_BASE + i, PARKED, 0, PARKED);
+  /* THE RIVALS ARE THE SIMULATION'S NOW, not the script's: stage 3 puts them
+     on the same rules, so they crash into you, get cut by you, and recruit
+     their own trains back. */
+  for (let r = 0; r < sim.rivals.length; r++) {
+    const t = sim.rivals[r], base = RIVAL_BASE + r * RIVAL_LEN;
+    m.aPos.setXYZ(base, t.x, 0, t.z); m.aHead.setX(base, t.head);
+    const k = Math.min(t.followers.length, RIVAL_LEN - 1);
+    for (let i = 0; i < k; i++) { const g = t.followers[i];
+      m.aPos.setXYZ(base + 1 + i, g.x, 0, g.z); m.aHead.setX(base + 1 + i, g.head); }
+    for (let i = k; i < RIVAL_LEN - 1; i++) m.aPos.setXYZ(base + 1 + i, PARKED, 0, PARKED);
   }
+
+  /* The ambient 300 and everything loose. A scattered manta wears the colour
+     of the train it came out of while it glows, and goes back to its own when
+     the glow runs out (7.2). */
+  const w = sim.wild, lim = Math.min(w.length, WILD_SLOTS);
+  for (let i = 0; i < lim; i++) {
+    const q = w[i], slot = WILD_BASE + i;
+    if (q.alive) { m.aPos.setXYZ(slot, q.x, 0, q.z); m.aHead.setX(slot, q.head); }
+    else m.aPos.setXYZ(slot, PARKED, 0, PARKED);
+    const glowing = q.alive && q.loose && q.glow > 0;
+    if (glowing !== !!wearing[slot]) {
+      wearing[slot] = glowing;
+      m.wearTrain(slot, glowing ? (q.wasColour === 0 ? 0 : RIVAL_BASE + (q.wasColour - 1) * RIVAL_LEN) : -1);
+    }
+    if (glowing) m.setTintScale(slot, 1 + 1.2 * (q.glow / sim.params.scatterGlow));
+    else if (wasScaled[slot]) { m.setTintScale(slot, 1); wasScaled[slot] = 0; }
+    if (glowing) wasScaled[slot] = 1;
+  }
+  for (let i = lim; i < drawnWild; i++) m.aPos.setXYZ(WILD_BASE + i, PARKED, 0, PARKED);
+  drawnWild = lim;
   m.aPos.needsUpdate = true; m.aHead.needsUpdate = true;
+
+  /* SET PIECES ON REAL EVENTS. The cut's shockwave, light burst and beat of
+     slow motion fire where a cut actually happened, and a crash shakes the
+     camera for a quarter of a second. */
+  let event = null;
+  for (const t of sim.trains) { if (t.cut > 0.24) event = 'cut'; if (t.crashed > 0.24) event = event || 'crash'; }
+  if (event === 'cut' && !cut.running) cut.trigger();
+  if (event === 'crash') shake = 0.25;
+  if (shake > 0) {
+    shake = Math.max(0, shake - dt);
+    const a = shake * 26;
+    camera.position.x += Math.sin(shake * 91) * a;
+    camera.position.z += Math.cos(shake * 73) * a;
+    camera.updateMatrixWorld();
+  }
 
   if (f.length > peakLength) peakLength = f.length;
   const el = document.getElementById('len');
@@ -368,6 +407,8 @@ function advance (now, dt) {
       sim.params.cruise = P.cruise; sim.params.burst = P.burstSpeed;
       sim.params.turnCruise = P.turnCruise; sim.params.turnBurst = P.turnBurst;
       sim.params.recruitR = P.recruitR; sim.params.spacing = P.spacing;
+      sim.params.burstCost = P.burstCost; sim.params.scatterGlow = P.scatterGlow;
+      sim.params.daze = P.daze; sim.params.stun = P.stun;
       sim.step();
       simAcc -= STEP;
     }

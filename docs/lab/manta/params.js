@@ -132,6 +132,10 @@ export const SPEC = [
   { key: 'turnBurst',      label: 'turn rate bursting',   def: 4.1,   min: 1,    max: 6,     step: 0.1,   gpu: false },
   { key: 'recruitR',       label: 'recruit radius',       def: 40,    min: 15,   max: 120,   step: 1,     gpu: false },
   { key: 'spacing',        label: 'follower spacing',     def: 31,    min: 12,   max: 60,    step: 1,     gpu: false },
+  { key: 'burstCost',      label: 'burst cost interval',  def: 0.35,  min: 0.1,  max: 1.5,   step: 0.05,  gpu: false },
+  { key: 'scatterGlow',    label: 'scatter glow',         def: 4,     min: 0.5,  max: 10,    step: 0.5,   gpu: false },
+  { key: 'daze',           label: 'daze',                 def: 3,     min: 0,    max: 8,     step: 0.5,   gpu: false },
+  { key: 'stun',           label: 'stun',                 def: 1,     min: 0,    max: 5,     step: 0.5,   gpu: false },
 ];
 
 /* Plain numbers, read from JS each frame. */

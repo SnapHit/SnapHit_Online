@@ -138,6 +138,16 @@ export function createColours ({ COUNT, roles, aTint, rivals, wilds, train }) {
     applyTint(dst);
   }
 
+  /* A SCATTERED MANTA WEARS THE COLOUR OF THE TRAIN IT CAME OUT OF, for as
+     long as it glows (7.2: it "glows in that colour while it's up for grabs,
+     until its own colour returns"). The mix is the one the cut already uses:
+     0 is the train's colour, 1 is its own, so a scatter sets the train's
+     colour as the target and walks the mix back to its own as the glow ends. */
+  function wearTrain (dst, trainIndex) {
+    baseTint[dst] = (trainIndex < 0 ? ownTint[dst] : baseTint[trainIndex]).slice();
+    applyTint(dst);
+  }
+
   function setTintScale (i, k) {
     tintScale[i] = k;
     applyTint(i);
@@ -167,7 +177,7 @@ export function createColours ({ COUNT, roles, aTint, rivals, wilds, train }) {
     setCutMix,
     getCutMix: i => cutMix[i],
     ownColour: i => ownTint[i].slice(),
-    gainFor, adoptOwn,
+    gainFor, adoptOwn, wearTrain,
     get colours () { return dealt; },
     get seed () { return seed; },
   };
