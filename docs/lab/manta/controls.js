@@ -62,7 +62,9 @@ export function createControls (canvas, input, screenToWorld) {
       input.want = leader.head + rate * 12;         // a steady lean, not a snap
     } else if (pointer) {
       const dx = pointer.x - leader.x, dz = pointer.z - leader.z;
-      input.want = (dx * dx + dz * dz) > 4 ? Math.atan2(dx, -dz) : null;
+      /* The heading whose forward vector (-sin, -cos) points at the finger.
+         Mirrored, this steered away from the touch on one axis. */
+      input.want = (dx * dx + dz * dz) > 4 ? Math.atan2(-dx, -dz) : null;
     } else input.want = null;
     input.burst = keyBurst || pointerBurst;
   }

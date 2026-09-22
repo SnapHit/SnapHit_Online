@@ -104,8 +104,15 @@ export function createSim ({ seed = 1, params = {} } = {}) {
       m.head = wrapAngle(m.head + step);
       m.turn = step / dt;
     } else m.turn = 0;
+    /* FORWARD IS (-sin, -cos), which is what every other part of this lab
+       already means by a heading: movers.js moves its mantas that way and
+       the shader points the nose that way at heading 0. Getting it mirrored
+       in x cost Nathan a test session — the body only agreed with the travel
+       direction when the heading was straight up or straight down, and
+       everywhere else the manta visibly span as it turned. One convention,
+       written down once. */
     const v = speedOf(m) * dt;
-    m.x += Math.sin(m.head) * v;
+    m.x -= Math.sin(m.head) * v;
     m.z -= Math.cos(m.head) * v;
     m.s += v;
     return v;
