@@ -136,6 +136,9 @@ export const SPEC = [
   { key: 'regrow',         label: 'regrowth interval',    def: 0.5,     min: 0.2,  max: 8,     step: 0.1,   gpu: false },
   { key: 'wildSize',       label: 'wild size',            def: 28,    min: 10,   max: 28,    step: 1,     gpu: false },
   { key: 'burstCost',      label: 'burst cost interval',  def: 0.35,  min: 0.1,  max: 1.5,   step: 0.05,  gpu: false },
+  { key: 'arenaR',         label: 'arena radius',         def: 2000,  min: 800,  max: 4000,  step: 100,   gpu: false },
+  { key: 'bloomPull',      label: 'bloom pull',           def: 0.22,  min: 0,    max: 1,     step: 0.02,  gpu: false },
+  { key: 'trainScale',     label: 'train size',           def: 1,     min: 0.6,  max: 2,     step: 0.05,  gpu: false },
   { key: 'scatterGlow',    label: 'scatter glow',         def: 5.5,     min: 0.5,  max: 10,    step: 0.5,   gpu: false },
 ];
 

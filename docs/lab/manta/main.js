@@ -246,6 +246,11 @@ function advance (now, dt) {
       sim.params.recruitR = P.recruitR; sim.params.spacing = P.spacing;
       sim.params.wildCount = P.wildCount; sim.params.regrow = P.regrow;
       sim.params.wildSize = P.wildSize;
+      sim.params.bloomPull = P.bloomPull; sim.params.trainScale = P.trainScale;
+      /* THE ARENA CHANGES AT THE NEXT RESTART, never under you: moving the
+         wall while a run is in progress can put your leader outside it, and
+         outside the wall is a crash you did not make. */
+      sim.params.arenaRWanted = P.arenaR;
       uArenaR.value = sim.params.arenaR;
       sim.params.burstCost = P.burstCost; sim.params.scatterGlow = P.scatterGlow;
 

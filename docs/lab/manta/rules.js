@@ -103,7 +103,10 @@ export function createRules (ctx) {
       if (o.isWild || o.train === t) continue;
       if (!o.train) continue;
       const d = Math.hypot(o.x - t.x, o.z - t.z);
-      if (d > p.leaderR + (o.isLeader ? p.leaderR : p.followerR)) continue;
+      /* Train size scales what a manta IS, not just how it looks, so a
+         bigger train is a bigger target and a wider wall. */
+      const k = p.trainScale || 1;
+      if (d > (p.leaderR + (o.isLeader ? p.leaderR : p.followerR)) * k) continue;
       if (d < best) { best = d; hitTrain = o.train; hitIndex = o.index; }
     }
     return hitTrain ? { train: hitTrain, index: hitIndex } : null;
@@ -142,7 +145,7 @@ export function createRules (ctx) {
     /* The reef is a wall and hitting it is a crash like any other. */
     for (const t of ctx.trains) {
       if (t.dead > 0) continue;
-      if (Math.hypot(t.x, t.z) >= p.arenaR - p.leaderR - 0.5) crash(t);
+      if (Math.hypot(t.x, t.z) >= p.arenaR - p.leaderR * (p.trainScale || 1) - 0.5) crash(t);
     }
   }
 

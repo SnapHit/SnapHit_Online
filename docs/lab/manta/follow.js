@@ -7,7 +7,7 @@
  * Lifted out of main.js unchanged. It reads one context at call time, because
  * the light memory and the shadow pass are built after this is created.
  */
-import { joinMix, looseMix, sizeFor } from './sim.js';
+import { joinMix, looseMix, sizeFor, leaderSize } from './sim.js';
 
 export function createFollow (ctx) {
   const { mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS, PARKED,
@@ -52,6 +52,8 @@ export function createFollow (ctx) {
        with the rest of the train. */
     if (dying) m.aPos.setXYZ(0, PARKED, 0, PARKED);
     else { m.aPos.setXYZ(0, you.x, 0, you.z); m.aHead.setX(0, you.head); }
+    const lead = leaderSize(ctx.sim.params);
+    if (m.aSize.getX(0) !== lead) { m.aSize.setX(0, lead); sizeDirty = true; }
     /* Anyone who joined since the last frame arrives wearing their own colour
        and fades into yours. The slot has to take their colour as its own too,
        or a scatter in stage 3 would hand it the one the deal gave the slot. */

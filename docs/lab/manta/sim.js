@@ -40,6 +40,26 @@ export const DEF = {
   wildCount: 120,      // v1.10: 300 with instant respawn never ran dry
   regrow: 2,           // seconds a manta, up to the count, and never faster
   wildSize: 20,        // wingspan, against 28 for a follower and 40 for a leader
+  /* AN EVEN OCEAN. Every group used to steer at the nearest bloom with most
+     of the distance closed each time it chose, so all thirty of them ended
+     up in the same four places and the rest of the arena was empty: measured
+     at an index of dispersion of 22.4 with 120 mantas, where a uniform
+     scatter is 1. The bloom is a lean now, not a sink, it only leans while
+     the bloom has room, and groups keep away from each other's targets. */
+  bloomPull: 0.22,     // 1.0 is the old pull, 0 is none
+  bloomHold: 2,        // groups a bloom will draw at once
+  groupApart: 420,     // how far a group's target stays from another's
+  /* A group is a loose company, not a pile. Every manta holds its own place
+     in it, so four of them cover a stretch of water rather than a point —
+     which is most of what the index of dispersion measures. */
+  /* As a fraction of the gap between neighbouring group homes, not as a
+     fixed distance. A company of four wants to cover a stretch of water
+     without walking into the next company: at 20 mantas the homes are 1,300
+     units apart and the group can afford to spread, at 120 they are 540
+     apart and it cannot. One fixed number could not serve both — 300 gave
+     1.38 at 120 and 1.77 at 20, and 430 gave 1.07 and 1.98. */
+  groupSpread: 0.46,
+  trainScale: 1,       // leaders and followers, visuals and collision alike
   followerSize: 28,
   leaderSize: 40,
   blooms: 4,
@@ -76,8 +96,10 @@ export function joinMix (f, time) {
 }
 export function looseMix (m) { return Math.min(1, Math.max(0, (m.glow || 0) / FADE)); }
 export function sizeFor (mix, p = DEF) {
-  return p.wildSize + (p.followerSize - p.wildSize) * mix;
+  return p.wildSize + (p.followerSize * (p.trainScale || 1) - p.wildSize) * mix;
 }
+/* What a leader is drawn at, which the train size slider moves too. */
+export function leaderSize (p = DEF) { return p.leaderSize * (p.trainScale || 1); }
 
 const TAU = Math.PI * 2;
 const wrapAngle = a => { let d = a % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; };
@@ -133,10 +155,26 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   let planned = 0;
   while (planned < p.wildCount) { const k = 3 + Math.floor(next() * 3); groupCap.push(k); planned += k; }
   const GROUPS = groupCap.length;
+  /* EVERY GROUP HAS A HOME, and the homes are laid out rather than rolled.
+     Thirty random targets over an arena thirty-two screens across cluster by
+     construction — that is what a Poisson scatter does — and no amount of
+     keeping-apart fixes it once two homes share a screen. The sunflower
+     lattice (the golden angle, radius as the square root of the index) is
+     the standard even cover of a disc, so the ocean is evenly occupied by
+     construction and the wandering happens around that. */
+  const GOLDEN = Math.PI * (3 - Math.sqrt(5));
+  /* The gap between neighbouring homes on the lattice, from the area each
+     one has to itself. */
+  const spreadOf = () => {
+    const rr = Math.max(200, p.arenaR - 320);
+    const gap = Math.sqrt(Math.PI * rr * rr / Math.max(1, GROUPS));
+    return Math.min(520, Math.max(190, gap * p.groupSpread));
+  };
   const groups = [];
   for (let g = 0; g < GROUPS; g++) {
-    const a = next() * TAU, r = next() * p.arenaR * 0.9;
-    groups.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, t: next() * 6 });
+    const a = g * GOLDEN, r = Math.sqrt((g + 0.5) / GROUPS) * (p.arenaR - 320);
+    const hx = Math.cos(a) * r, hz = Math.sin(a) * r;
+    groups.push({ x: hx, z: hz, hx, hz, t: next() * 6 });
   }
   const wild = [];
   const groupUsed = new Array(GROUPS).fill(0);
@@ -145,7 +183,9 @@ export function createSim ({ seed = 1, params = {} } = {}) {
        player and is recruited in the same step. */
     let x = 0, z = 0;
     for (let tries = 0; tries < 12; tries++) {
-      const a = next() * TAU, r = Math.sqrt(next()) * (p.arenaR - 60);
+      /* Clear of the reef as well as of every leader: a manta that regrows
+         against the wall is one nobody can reach without crashing. */
+      const a = next() * TAU, r = Math.sqrt(next()) * (p.arenaR - 260);
       x = Math.cos(a) * r; z = Math.sin(a) * r;
       let ok = true;
       for (const L of awayFrom) if (Math.hypot(x - L.x, z - L.z) < 400) { ok = false; break; }
@@ -165,6 +205,8 @@ export function createSim ({ seed = 1, params = {} } = {}) {
        by the time anything looked. */
     const m = {};
     m.x = x; m.z = z; m.head = next() * TAU; m.group = g;
+    const oa = next() * TAU, orr = Math.sqrt(next()) * spreadOf();
+    m.ox = Math.cos(oa) * orr; m.oz = Math.sin(oa) * orr;   // its place in the group
     m.speed = 40 + next() * 30;
     m.glow = 0;                 // seconds left glowing in an old train's colour
     m.wasColour = -1;           // which train it was in, while it glows
@@ -336,15 +378,30 @@ export function createSim ({ seed = 1, params = {} } = {}) {
       const gr = groups[g];
       gr.t -= dt;
       if (gr.t <= 0) {
-        /* A new target, biased towards the nearest bloom: plankton is an
-           attractor, not something anyone collects. */
         gr.t = 4 + next() * 6;
-        let best = blooms[0], bd = Infinity;
-        for (const bl of blooms) { const d = Math.hypot(bl.x - gr.x, bl.z - gr.z); if (d < bd) { bd = d; best = bl; } }
-        const pull = 0.55 + next() * 0.35;
-        const a = next() * TAU, r = next() * 500;
-        gr.x = gr.x + (best.x - gr.x) * pull + Math.cos(a) * r;
-        gr.z = gr.z + (best.z - gr.z) * pull + Math.sin(a) * r;
+        /* AROUND ITS OWN HOME, not anywhere. The old line closed most of the
+           distance to the nearest bloom every time, which is a sink: thirty
+           groups, four blooms, and nothing in between. */
+        const wander = p.groupApart * 0.7;
+        const wa = next() * TAU, wr = Math.sqrt(next()) * wander;
+        let nx = gr.hx + Math.cos(wa) * wr, nz = gr.hz + Math.sin(wa) * wr;
+        /* Then a lean towards the nearest bloom, and only while that bloom
+           has room: plankton is an attractor, not something anyone collects,
+           and a handful of groups at a time is what "gather" means. */
+        let best = null, bd = Infinity;
+        for (const bl of blooms) {
+          const d = Math.hypot(bl.x - nx, bl.z - nz);
+          if (d >= bd) continue;
+          let held = 0;
+          for (const o of groups) if (o !== gr && Math.hypot(o.x - bl.x, o.z - bl.z) < bl.r) held++;
+          if (held >= p.bloomHold) continue;
+          bd = d; best = bl;
+        }
+        if (best) {
+          const pull = p.bloomPull * (0.35 + next() * 0.3);
+          nx += (best.x - nx) * pull; nz += (best.z - nz) * pull;
+        }
+        gr.x = nx; gr.z = nz;
       }
     }
     for (const m of wild) {
@@ -355,7 +412,9 @@ export function createSim ({ seed = 1, params = {} } = {}) {
       /* Forward is (-sin, -cos), the one convention in this lab. Written
          mirrored, these 300 would spin as they turned exactly the way the
          player's train did before 88a0679. */
-      const want = Math.atan2(-(gr.x - m.x), -(gr.z - m.z));
+      /* Towards its own place in the group, not the group's centre. */
+      const tx = gr.x + (m.ox || 0), tz = gr.z + (m.oz || 0);
+      const want = Math.atan2(-(tx - m.x), -(tz - m.z));
       const d = wrapAngle(want - m.head);
       m.head = wrapAngle(m.head + Math.max(-1.2 * dt, Math.min(1.2 * dt, d)));
       m.x -= Math.sin(m.head) * m.speed * dt;
@@ -412,6 +471,8 @@ export function createSim ({ seed = 1, params = {} } = {}) {
       if (clear > 300) break;
     }
     if (!best) best = { x: 0, z: 0 };
+    /* A new arena, if one was asked for while the last run was going. */
+    if (p.arenaRWanted && p.arenaRWanted !== p.arenaR) p.arenaR = p.arenaRWanted;
     t.x = best.x; t.z = best.z; t.head = next() * TAU;
     t.s = 0; t.followers.length = 0; t.bursting = false; t.burstOwed = 0;
     t.lastPeak = t.peak; t.peak = 0; t.runs++;
