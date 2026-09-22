@@ -88,6 +88,15 @@ export function createMovers ({ aPos, aHead, aMotion, COUNT, RIVAL_TRAINS, RIVAL
   let half = { w: 200, h: 420 };
   function setBounds (view) { half = { w: view.w / 2, h: view.h / 2 }; }
 
+  /* EVERYTHING LOOSE WRAPS AROUND THE CAMERA, not around the world origin.
+     These mantas live inside a box a little larger than the view, and stage
+     1 gave the camera to the player: with the box left at the origin the
+     entire cast slid off the screen as the player swam and never came back,
+     so the ocean held nothing but your own train. The box travels with the
+     player now, the same as the seabed, the caustics and the snow do. */
+  let centre = { x: 0, z: 0 };
+  function setCentre (x, z) { centre.x = x; centre.z = z; }
+
   /* The rival leaders and the wild mantas carry their own position and
      heading and are advanced a step at a time, rather than having a position
      written as a function of the clock.
@@ -120,6 +129,8 @@ export function createMovers ({ aPos, aHead, aMotion, COUNT, RIVAL_TRAINS, RIVAL
   let lastSecs = null;
 
   const wrap = (v, lim) => { const s = lim * 2; return ((v + lim) % s + s) % s - lim; };
+  const wrapX = (v, lim) => wrap(v - centre.x, lim) + centre.x;
+  const wrapZ = (v, lim) => wrap(v - centre.z, lim) + centre.z;
   /* The shorter way round from b to a, so interpolating two headings across
      the seam of a full turn does not spin a manta the long way. */
   const angleTo = (a, b) => { let d = (a - b) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; };
@@ -149,7 +160,7 @@ export function createMovers ({ aPos, aHead, aMotion, COUNT, RIVAL_TRAINS, RIVAL
         f.head += (f.turn || 0) * dt;
         f.x += -Math.sin(f.head) * f.speed * dt;
         f.z += -Math.cos(f.head) * f.speed * dt;
-        place(i, wrap(f.x, half.w + 34), wrap(f.z, half.h + 34), 0, f.head);
+        place(i, wrapX(f.x, half.w + 34), wrapZ(f.z, half.h + 34), 0, f.head);
         continue;
       }
       const s = sLead - i * SPACING;
@@ -181,7 +192,7 @@ export function createMovers ({ aPos, aHead, aMotion, COUNT, RIVAL_TRAINS, RIVAL
       const nz = lead.z - Math.cos(lead.head) * lead.speed * dt;
       /* Wrapping would put a kink in the recorded path, so the trail is reset
          when the leader crosses the edge and the followers close up again. */
-      const wx = wrap(nx, half.w + TRAIN_MARGIN), wz = wrap(nz, half.h + TRAIN_MARGIN);
+      const wx = wrapX(nx, half.w + TRAIN_MARGIN), wz = wrapZ(nz, half.h + TRAIN_MARGIN);
       const jumped = Math.hypot(wx - lead.x, wz - lead.z) > 200;
       lead.x = wx; lead.z = wz;
       const base = 5 + r * RIVAL_LEN;
@@ -251,8 +262,8 @@ export function createMovers ({ aPos, aHead, aMotion, COUNT, RIVAL_TRAINS, RIVAL
     for (let i = 0; i < WILD_COUNT; i++) {
       const m = wilds[i];
       m.head += Math.sin(secs * 0.13 + m.phase) * 0.12 * dt;
-      m.x = wrap(m.x - Math.sin(m.head) * m.speed * dt, half.w + MARGIN);
-      m.z = wrap(m.z - Math.cos(m.head) * m.speed * dt, half.h + MARGIN);
+      m.x = wrapX(m.x - Math.sin(m.head) * m.speed * dt, half.w + MARGIN);
+      m.z = wrapZ(m.z - Math.cos(m.head) * m.speed * dt, half.h + MARGIN);
       place(5 + RIVAL_TRAINS * RIVAL_LEN + i, m.x, m.z, (i % 2) * 24 - 12, m.head);
     }
 
@@ -281,5 +292,5 @@ export function createMovers ({ aPos, aHead, aMotion, COUNT, RIVAL_TRAINS, RIVAL
     aPos.needsUpdate = true;
     aHead.needsUpdate = true;
   }
-  return { update, setBounds, setFree, isFree, pathLength: PATH_LENGTH, spacing: SPACING };
+  return { update, setBounds, setCentre, setFree, isFree, pathLength: PATH_LENGTH, spacing: SPACING };
 }

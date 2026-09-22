@@ -281,14 +281,14 @@ export function createMantas (scene) {
   /* Where everyone swims is movers.js; what they look like is here. */
   const movers = createMovers({ aPos, aHead, aMotion, COUNT,
                                 RIVAL_TRAINS, RIVAL_LEN, WILD_COUNT });
-  const { update, setBounds, setFree, isFree } = movers;
+  const { update, setBounds, setCentre, setFree, isFree } = movers;
 
   const isWild = i => roles[i].wild === true;
 
   /* aPos and aHead are exposed so a test can drive update() across a whole
      cycle and measure the gaps, which is the only honest way to check the
      spacing. */
-  return { mesh, shadowMesh, update, setBounds, count: COUNT, aPos, aHead, aSize, aTint, aMotion, vertexBuffers, isWild,
+  return { mesh, shadowMesh, update, setBounds, setCentre, count: COUNT, aPos, aHead, aSize, aTint, aMotion, vertexBuffers, isWild,
            rollColours: colours.rollColours, reroll: colours.reroll,
            get colours () { return colours.colours; }, get seed () { return colours.seed; },
            gainFor: colours.gainFor,

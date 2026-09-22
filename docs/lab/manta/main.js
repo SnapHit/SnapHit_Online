@@ -301,6 +301,10 @@ function advance (now, dt) {
   }
   simTime += dt * scale;
   setSceneTime(simTime);
+  /* The loose mantas wrap inside a box that travels with the player, so
+     the world is never empty behind you. Set before the script runs, not
+     after, or the box is a frame behind the camera it belongs to. */
+  if (sim) mantas.setCentre(sim.you.x, sim.you.z);
   mantas.update(simTime);
   /* AFTER the spike's script, not before. mantas.update() writes every
      instance from the figure eight, so putting your leader in first meant
