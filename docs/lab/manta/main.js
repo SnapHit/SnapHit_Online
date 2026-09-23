@@ -27,6 +27,7 @@ import { createLab } from './renderer.js';
 import { createMantas, COUNT, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS, PARKED } from './mantas.js';
 import { createSim, zoomFor, STEP } from './sim.js';
 import { createControls } from './controls.js';
+import { createDebug } from './debug.js';
 import { createPost } from './post.js';
 import { createCut, flashAllowed, setCutClock } from './cut.js';
 import { createQuality, TIER_SETTINGS } from './tiers.js';
@@ -109,7 +110,9 @@ const SPIKE = new URLSearchParams(location.search).get('scene') === 'spike';
 const { scene, camera, fit, view, setZoom, lookAtWorld } = createScene();
 const mantas = createMantas(scene, { scripted: SPIKE });
 if (shadows) shadows.attach(mantas.shadowMesh);
-const sim = SPIKE ? null : createSim({ seed: (Math.random() * 0xffffffff) >>> 0 });
+/* One seed for the deal and the world, so the debug block can replay both. */
+const sim = SPIKE ? null : createSim({ seed: mantas.seed });
+const dbg = createDebug({ sim, seed: mantas.seed, step: STEP, scene });
 let controls = null;
 /* A fixed 60 steps a second whatever the display does, with an accumulator,
    so the rules behave the same on a 120 Hz phone and in a headless browser
@@ -243,11 +246,12 @@ const followCamera = dt => follower.followCamera(dt);
    advances in scaled time, so everything in the water slows together. That
    scaled total is the one clock every shader reads; see clock.js. */
 function advance (now, dt) {
-  const scale = cut.update(dt);
+  const scale = cut.update(dt) * dbg.rate;     // the debug block's slow motion and pause
+  const owed = dbg.takeOwed();                 // and its single step
   if (sim) {
     /* Steps of exactly 1/60, capped so a long pause does not fast-forward
        the whole world when the tab comes back. */
-    simAcc = Math.min(simAcc + dt * scale, 0.5);
+    simAcc = Math.min(simAcc + dt * scale + owed, 0.5);
     while (simAcc >= STEP) {
       if (controls) controls.apply(sim.you, STEP);
       sim.params.cruise = P.cruise; sim.params.burst = P.burstSpeed;
@@ -279,7 +283,8 @@ function advance (now, dt) {
       simAcc -= STEP;
     }
   }
-  simTime += dt * scale;
+  simTime += dt * scale + owed;
+  if ((++dbgFrames & 15) === 0) dbg.show();
   setSceneTime(simTime);
   /* The loose mantas wrap inside a box that travels with the player, so
      the world is never empty behind you. Set before the script runs, not
@@ -293,11 +298,12 @@ function advance (now, dt) {
      units away. The three rival trains still come from the script; the five
      that are yours come from the simulation, and they have to be written
      last. */
-  if (sim) followCamera(dt * scale);
+  if (sim) followCamera(dt * scale + owed);
   /* Scaled too: the stamp is a deposit per unit of distance travelled, so a
      slowed manta must not lay down a brighter trail. */
-  stampMantas(dt * scale);
+  stampMantas(dt * scale + owed);
 }
+let dbgFrames = 0;
 
 const lab = createLab({
   scene,
@@ -334,6 +340,7 @@ const lab = createLab({
       }
       /* Before the frame is drawn, so the ocean samples this frame's shadows
          and not the last one's. */
+      if (dbg.flat) return;                    // flat shapes: no light memory, no shadows
       if (shadows) shadows.render(renderer);
       lm.setFade(P.fade);
       lm.render(renderer, dt);
@@ -353,7 +360,7 @@ const lab = createLab({
         applyQuality(renderer);
         panel.set('passes', String(post.passes) + ' passes  ·  tone ' + TONE);
       }
-      if (post) post.render(); else renderer.render(sc, cam);
+      if (post && !dbg.flat) post.render(); else renderer.render(sc, cam);
     },
     onRebuild (renderer) {
       /* The renderer that owned these has gone. Probe the new backend and let
