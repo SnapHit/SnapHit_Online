@@ -11,7 +11,7 @@
 
 /* Bumped by hand every time this page is edited, so a stale deploy is obvious
    from the phone rather than something you have to take on trust. */
-export const BUILD = '2026-09-23 20:06 UTC';
+export const BUILD = '2026-09-23 20:17 UTC';
 
 const params = new URLSearchParams(location.search);
 export const FORCE_WEBGL = params.get('backend') === 'webgl2';
@@ -98,6 +98,14 @@ function toggle (on) {
   el.panel.hidden = !on;
   el.bar.hidden = !on;
   el.chip.setAttribute('aria-expanded', on ? 'true' : 'false');
+  /* THE BOARD MOVES INTO THE PANEL while it is open, under the headline, so it
+     stops sitting over the panel's text; closed, it goes back to its own
+     corner. It is plain text, so moving it loses nothing. */
+  const board = document.getElementById('board');
+  if (board) {
+    if (on) el.panel.insertBefore(board, document.getElementById('debug') || el.panel.firstChild);
+    else document.body.appendChild(board);
+  }
 }
 el.chip.addEventListener('click', () => toggle(!expanded()));
 

@@ -30,7 +30,8 @@ const el = {
 /* Enough decimals to show the step and no more. A range input hands back
    0.6000000000000001 for a 0.05 step, which is unreadable on a phone and
    worse than useless when the point is to write the number down. */
-const show = (s, v) => v.toFixed(decimals(s.step));
+const show = (s, v) => s.key === 'scheme' ? ('ABC'[Math.round(v)] || 'A')   // the touch scheme is a letter
+                                          : v.toFixed(decimals(s.step));
 
 const rows = [];
 
