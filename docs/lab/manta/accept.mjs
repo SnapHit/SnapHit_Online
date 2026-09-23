@@ -2,7 +2,8 @@
  * simulation at the committed defaults (Nathan's values in params.js).
  *
  *   node accept.mjs 3 [from] [to]    upsets, seeds from..to-1 (default 0..50)
- *   node accept.mjs 4 [from] [to]    never-burst against always-burst
+ *   node accept.mjs 4 [from] [to] [cost]   timid, bully and the strawman,
+ *                                          burst cost 0.35, 0.5 and 0.7
  *   node accept.mjs 6                coiling: can a lone leader get out?
  *
  * MEASUREMENTS, NOT GATES. Nothing here is tuned to pass; each test prints
@@ -15,6 +16,7 @@
  * brain object and pinBurst.
  */
 import { createSim, STEP } from './sim.js';
+import { PRESETS } from './bots.js';
 import { readFileSync } from 'node:fs';
 
 /* params.js imports three for its uniforms, so Node cannot load it. Its
@@ -103,27 +105,70 @@ function upsets (seed) {
   return { seed, events, cuts, crashes, topLost, reefCrashesOfTop: reef, longest, secondsWithTop: +(topSeen * STEP).toFixed(0) };
 }
 
-/* ---- Test 4: no dominant strategy -------------------------------------- */
-function strategies (seed) {
-  let never = null, always = null;
-  const s = botMatch(seed, s => {
-    never = s.rivals[0]; always = s.rivals[1];
-    /* Otherwise identical: the same personality, the one dealt to the first. */
-    for (const k of ['kind', 'greed', 'caution', 'aggression']) always[k] = never[k];
-    never.pinBurst = true; always.pinBurst = true;
-  });
-  const peak = new Map(s.rivals.map(t => [t, 0]));
+/* ---- Test 4: does bursting to cut pay? -------------------------------- */
+/* Three behaviours in the same match, among seven bots the seed deals:
+     timid     the timid dials, and never bursts (pinned);
+     bully     the bully dials on the ordinary brain: bursts to cut when a
+               train crosses close ahead, then goes after what it cut loose;
+     strawman  the bully dials, but bursts whenever it can pay — the sanity
+               check that burning followers for nothing loses.
+   Cuts are credited to the bursting leader nearest the cut train's body,
+   crashes to the train that crashed; both judged from before the step. */
+const BEHAVIOURS = ['timid', 'bully', 'strawman'];
+
+function strategies (seed, burstCost) {
+  const s = createSim({ seed, params: nathan({ burstCost }) });
+  s.you.dead = 1e9; s.you.followers.length = 0;
+  const who = { timid: s.rivals[0], bully: s.rivals[1], strawman: s.rivals[2] };
+  Object.assign(who.timid, PRESETS.timid, { kind: 'timid', pinBurst: true, bursting: false });
+  Object.assign(who.bully, PRESETS.bully, { kind: 'bully' });
+  Object.assign(who.strawman, PRESETS.bully, { kind: 'bully', pinBurst: true });
+  const stat = new Map(s.rivals.map(t => [t, { peak: 0, cuts: 0, crashes: 0 }]));
+  const reach = (s.params.leaderR + s.params.followerR) * (s.params.trainScale || 1) + 30;
   for (let i = 0; i < STEPS; i++) {
-    never.bursting = false;
-    always.bursting = !always.dead && always.followers.length > 0;   // whenever it can pay
+    who.timid.bursting = false;
+    who.strawman.bursting = !who.strawman.dead && who.strawman.followers.length > 0;
+    const pre = new Map(s.rivals.map(t => [t, { dead: t.dead > 0, bursting: t.bursting,
+      pts: [t, ...t.followers].map(q => ({ x: q.x, z: q.z })) }]));
     s.step();
-    for (const t of s.rivals) if (t.followers.length > peak.get(t)) peak.set(t, t.followers.length);
+    for (const t of s.rivals) {
+      const st = stat.get(t), was = pre.get(t);
+      if (t.followers.length > st.peak) st.peak = t.followers.length;
+      const crashed = !was.dead && t.dead > 0;
+      if (crashed) st.crashes++;
+      if (crashed || t.cut !== 0.25) continue;
+      /* Cut this step: by the bursting leader nearest its body. */
+      let by = null, bd = reach;
+      for (const o of s.rivals) {
+        if (o === t || !pre.get(o).bursting || pre.get(o).dead) continue;
+        const L = pre.get(o).pts[0];
+        for (const q of was.pts) { const d = Math.hypot(q.x - L.x, q.z - L.z); if (d < bd) { bd = d; by = o; } }
+      }
+      if (by) stat.get(by).cuts++;
+    }
   }
-  /* The board as follow.js sorts it: current length, longest first. */
-  const board = [...s.rivals].sort((a, b) => b.followers.length - a.followers.length);
-  const place = t => 1 + board.findIndex(o => o.followers.length === t.followers.length);
-  return { seed, kind: never.kind, peakNever: peak.get(never), peakAlways: peak.get(always),
-           placeNever: place(never), placeAlways: place(always) };
+  const best = Math.max(...s.rivals.map(t => t.followers.length));
+  const leaders = s.rivals.filter(t => t.followers.length === best);
+  const out = { seed, burstCost };
+  for (const k of BEHAVIOURS) {
+    const t = who[k], st = stat.get(t);
+    out[k] = { top: leaders.length === 1 && leaders[0] === t ? 1 : 0, tied: leaders.length > 1 && leaders.includes(t) ? 1 : 0,
+               end: t.followers.length, peak: st.peak, cuts: st.cuts, crashes: st.crashes };
+  }
+  return out;
+}
+
+function summarise (rows) {
+  const n = rows.length, cost = rows[0].burstCost;
+  const lines = [];
+  for (const k of BEHAVIOURS) {
+    const S = f => rows.reduce((a, r) => a + r[k][f], 0);
+    const top = S('top'), share = top / n;
+    lines.push({ burstCost: cost, behaviour: k, seeds: n, topsBoard: top, tiedTop: S('tied'), topShare: +share.toFixed(2),
+      meanPeak: +(S('peak') / n).toFixed(2), meanEnd: +(S('end') / n).toFixed(2),
+      cutsLanded: S('cuts'), crashes: S('crashes'), flag: k !== 'strawman' && share > 2 / 3 ? 'TOPS MORE THAN TWO IN THREE' : '' });
+  }
+  return lines;
 }
 
 /* ---- Test 6: coiling ---------------------------------------------------- */
@@ -212,7 +257,13 @@ const t0 = Date.now();
 if (which === '3') {
   for (const seed of seeds) console.log('T3 ' + JSON.stringify(upsets(seed)));
 } else if (which === '4') {
-  for (const seed of seeds) console.log('T4 ' + JSON.stringify(strategies(seed)));
+  /* The burst cost sweep: pass one cost, or none for all three. */
+  const costs = process.argv[5] ? [parseFloat(process.argv[5])] : [0.35, 0.5, 0.7];
+  for (const cost of costs) {
+    const rows = seeds.map(seed => strategies(seed, cost));
+    for (const r of rows) console.log('T4 ' + JSON.stringify(r));
+    for (const l of summarise(rows)) console.log('T4SUM ' + JSON.stringify(l));
+  }
 } else if (which === '6') {
   console.log('T6 ' + JSON.stringify(coiling()));
 } else {
