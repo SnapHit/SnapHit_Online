@@ -808,3 +808,17 @@ learn:
   renderer being disposed at teardown, no fallback had fired, and the same
   harness on the same build passed on the next run. Check the panel's own
   headline and error count before believing a console.
+
+## 2026-09-23 — two lessons from the greybox
+
+- **Clamp any darkening term to 0..1 before anything divides by brightness.**
+  The shadow was `1 - mean × strength`, unclamped, so at strength 2 it went
+  to -1 and the seabed under every manta went negative. A brightness ceiling
+  added later divided that by a floored luminance and turned it into a bright
+  electric smear a wingspan from each manta. Darkening terms can only take
+  light away if something makes them.
+- **Count the living, not the slots.** Copy values reported 624 wild mantas
+  against a target of 20, because it counted slots in the instance buffer, and
+  regrowth counted only the ambient slots, so mantas scattered by crashes were
+  invisible to the target. Anything that reports or regulates a population
+  counts what is alive.

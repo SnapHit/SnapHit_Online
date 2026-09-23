@@ -382,23 +382,27 @@ export function oceanNode () {
        read. The core still marks the line, and a halo 760 units deep falls
        off into the water behind it, so from half a screen the warning covers
        the upper part of the screen instead of hugging its edge. */
-    const ringCore = smoothstep(uArenaR.sub(float(260)), uArenaR, reefD)
+    /* The core rises over the last 80 units, not 260: a manta a wingspan
+       inside the line sat in its full brightness and read 1.73 times its
+       water against condition 3's 2.0. The halo, dimmer and far wider, is
+       what reads from half a screen; the core only has to mark the line. */
+    const ringCore = smoothstep(uArenaR.sub(float(80)), uArenaR, reefD)
       .mul(float(1.0).sub(smoothstep(uArenaR, uArenaR.add(float(90)), reefD)));
     const ringHalo = smoothstep(uArenaR.sub(float(760)), uArenaR, reefD)
       .mul(float(1.0).sub(smoothstep(uArenaR, uArenaR.add(float(160)), reefD)));
     const ringBand = ringCore;
     /* About four seconds a breath, which is a pulse and not a flicker. */
     const reefPulse = sin(uTime.mul(1.6)).mul(0.5).add(0.5).mul(0.42).add(0.58);
-    /* THE HALO IS OUT, and this is the conflict to report rather than fudge.
-       A glow wide enough to read from half a screen is 760 units of warm
-       light reaching well inside the arena, and the conditions harness
-       counts every non-manta pixel as water: with it, condition 2 read 179.2
-       against a dimmest manta of 80.5 at medium. 7.2 frees warm colour for
-       the reef and calls the crests of the SEABED and the CAUSTICS what
-       condition 2 is about, so the two requirements as written cannot both
-       hold while the harness cannot tell reef from water. The core ring
-       stays; the halo waits for a ruling. */
-    const reefRing = REEF_WARM.mul(ringBand.mul(ringBand)).mul(reefPulse).mul(REEF_RING_LEVEL);
+    /* THE HALO IS BACK, by the architect's ruling in v1.11: the reef's glow
+       is a danger marker, not moonlight, so condition 2 — which is about the
+       seabed and the caustics — leaves the reef zone out of its water, the
+       way it leaves out the chip and the leaderboard. Condition 3 still holds
+       for every manta more than a wingspan inside the line. A core that
+       marks the line and a halo 760 units deep that falls off into the water,
+       so from half a screen the warning covers the upper part of the frame
+       rather than a strip a dozen pixels tall at its edge. */
+    const reefRing = REEF_WARM.mul(ringBand.mul(ringBand)).mul(reefPulse).mul(REEF_RING_LEVEL)
+      .add(REEF_WARM.mul(ringHalo.mul(ringHalo)).mul(reefPulse).mul(REEF_HALO_LEVEL));
     const outside = smoothstep(uArenaR.sub(float(4)), uArenaR.add(float(26)), reefD);
     /* Rubble, in cells about two thirds of a wingspan across. */
     const reefRough = rand(floor(w0.div(float(26)))).mul(0.55).add(0.45);

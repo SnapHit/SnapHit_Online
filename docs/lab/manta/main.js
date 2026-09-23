@@ -34,6 +34,7 @@ import { setSceneTime } from './clock.js';
 import { watchConsole, watchDevice, onIssue, issueText, counts } from './watch.js';
 import { createDrawer } from './drawer.js';
 import { createStamper } from './stamp.js';
+import { rollSummary } from './roll.js';
 import { createFollow } from './follow.js';
 
 const query = new URLSearchParams(location.search);
@@ -132,15 +133,15 @@ panel.set('vbuf', mantas.vertexBuffers + ' of 8 that WebGPU guarantees' +
                   (mantas.vertexBuffers > 8 ? '  \u00b7  OVER THE LIMIT' : ''));
 panel.set('lm', lm ? (lm.size + '×' + lm.size + '  ·  ' + lm.note) : 'off (?fx=off)');
 
-window.__lab = { scene, camera, view, mantas, lm, FX };
+window.__lab = { scene, camera, view, mantas, lm, FX, uArenaR };
 
 /* After __lab exists, not before: this is the same ordering trap that put a
    ReferenceError on the page in 1F. */
+/* One line from roll.js, which Copy values reads too: never one entry per
+   slot. Refreshed about once a second, because the living count moves. */
 function showRoll () {
-  const c = mantas.colours;
-  panel.set('roll', c ? (c.mine.key + '  \u00b7  seed ' + mantas.seed +
-    '  \u00b7  rivals ' + c.rivals.map(r => r.key).join(', ') +
-    '  \u00b7  wild ' + c.wilds.map(r => r.key).join(', ')) : 'not rolled');
+  const r = rollSummary(mantas, sim);
+  panel.set('roll', r ? (r.head + '  \u00b7  ' + r.rivals + '  \u00b7  ' + r.wild) : 'not rolled');
 }
 showRoll();
 window.__lab.reroll = () => { mantas.reroll(); showRoll(); return mantas.colours.mine.key; };
@@ -273,6 +274,7 @@ function advance (now, dt) {
         panel.set('sim step', (stepCost / stepCount).toFixed(3) + ' ms  \u00b7  ' +
           sim.rivals.length + ' bots, ' + sim.liveWild() + ' wild');
         stepCost = 0; stepCount = 0;
+        showRoll();
       }
       simAcc -= STEP;
     }
