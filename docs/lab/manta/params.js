@@ -138,6 +138,12 @@ export const SPEC = [
   { key: 'burstCost',      label: 'burst cost interval',  def: 0.35,  min: 0.1,  max: 1.5,   step: 0.05,  gpu: false },
   { key: 'arenaR',         label: 'arena radius',         def: 4000,  min: 800,  max: 4000,  step: 100,   gpu: false },
   { key: 'bloomPull',      label: 'bloom pull',           def: 0.36,  min: 0,    max: 1,     step: 0.02,  gpu: false },
+  /* Section 10.2's three touch schemes: 0 is A (steer to your finger,
+     double-tap and hold to burst), 1 is B (first finger steers, a second
+     anywhere bursts), 2 is C (a joystick on the left half, a burst button on
+     the right). A slider because the drawer is sliders, and in Copy values
+     like everything else in it. */
+  { key: 'scheme',         label: 'touch scheme (A B C)', def: 0,     min: 0,    max: 2,     step: 1,     gpu: false },
   { key: 'bots',           label: 'bot count',            def: 10,    min: 0,    max: 20,    step: 1,     gpu: false },
   { key: 'trainScale',     label: 'train size',           def: 1,     min: 0.6,  max: 2,     step: 0.05,  gpu: false },
   { key: 'scatterGlow',    label: 'scatter glow',         def: 10,     min: 0.5,  max: 10,    step: 0.5,   gpu: false },

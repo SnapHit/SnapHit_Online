@@ -408,7 +408,7 @@ lab.start().then(ok => {
       /* Screen fraction to world, through the same view the ocean uses. */
       x: sim.you.x + (u - 0.5) * view.w,
       z: sim.you.z + (v - 0.5) * view.h,
-    }));
+    }), () => P.scheme);
   }
   window.__labReady = true;
 });
