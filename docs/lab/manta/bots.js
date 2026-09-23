@@ -37,6 +37,10 @@ export function createBrain (ctx) {
     let best = null, bd = reach;
     for (const w of ctx.wild) {
       if (!w || !w.alive) continue;
+      /* Glowing scattered mantas are food like any other, the ones it has
+         just cut loose included. The only ones it skips are those it may not
+         take back yet: what it shed to pay for its own burst. */
+      if (w.fromTrain === t && w.immune > 0) continue;
       const d = Math.hypot(w.x - t.x, w.z - t.z);
       if (d < bd) { bd = d; best = w; }
     }
@@ -111,7 +115,6 @@ export function createBrain (ctx) {
 
     t.bursting = burst && t.followers.length > 0;
     t.want = Math.atan2(-gx, -gz);
-    if (t.followers.length === 0) t.rebuild -= dt; else t.rebuild = 10;
   }
 
   /* The deal: which personality each bot wears, from the seed, so a seed

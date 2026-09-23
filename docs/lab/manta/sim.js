@@ -382,9 +382,11 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     for (const m of wild) if (m.alive) { m.isWild = true; m.train = null; hash.add(m.x, m.z, m); }
 
     resolveTouches();
-    /* A rival that has been cut down to its leader gets its appetite back
-       after about ten seconds, so there is always something to play against. */
-    for (const t of rivals) if (!t.dead) recruit(t, t.rebuild <= 0 ? 8 : t.followers.length);
+    /* EVERY LEADER RECRUITS THE SAME WAY, bots and you alike. The scripted
+       rivals capped a rival at its own length unless it had sat empty for
+       ten seconds; the brain reset that timer whenever it had a follower, so
+       no bot ever grew past one. Ruled out in 2B part three. */
+    for (const t of rivals) if (!t.dead) recruit(t, 1e9);
     if (!you.dead) recruit(you, 1e9);
     /* AFTER recruiting, so a manta that joined this step is already on the
        path rather than sitting wherever it was caught for a frame. */

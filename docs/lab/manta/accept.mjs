@@ -40,23 +40,10 @@ function nathan (extra = {}) {
   };
 }
 
-/* HUNGRY is a diagnostic, not the game. In the build as it stands a rival
-   recruits only while its appetite is back — ten seconds at zero followers —
-   and then only up to eight; with any follower its cap is its own length
-   (sim.js: recruit(t, t.rebuild <= 0 ? 8 : t.followers.length)), so no bot
-   train grows past what it catches in one step. With `hungry` the appetite
-   is held on after every think, so bots can grow to eight and the tests have
-   something to measure. Labelled in the output whenever it is used. */
-const HUNGRY = process.argv.includes('hungry');
-
 function botMatch (seed, setup) {
   const s = createSim({ seed, params: nathan() });
   s.you.dead = 1e9;                         // parked: not in the water, never restarts
   s.you.followers.length = 0;
-  if (HUNGRY) {
-    const think = s.brain.think;
-    s.brain.think = (t, dt) => { think(t, dt); t.rebuild = -1; };
-  }
   if (setup) setup(s);
   return s;
 }
@@ -219,8 +206,7 @@ function coiling () {
            escapesTried: 72, tally };
 }
 
-const [which, from = '0', to = '50'] = process.argv.slice(2).filter(a => a !== 'hungry');
-if (HUNGRY) console.log('# HUNGRY diagnostic: rival appetite held on, cap 8. Not the build as it plays.');
+const [which, from = '0', to = '50'] = process.argv.slice(2);
 const seeds = []; for (let k = +from; k < +to; k++) seeds.push(1000 + k);
 const t0 = Date.now();
 if (which === '3') {
