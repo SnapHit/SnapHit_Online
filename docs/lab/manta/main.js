@@ -18,7 +18,7 @@ import { REVISION } from 'three';
 import * as panel from './panel.js';
 import { P, U } from './params.js';
 import { createScene, describeView } from './scene.js';
-import { useLightMemory, useLongMemory, useSeabed, useCaustics, useShadows, uCam, uCausticLayers, uViewW, uViewH, uShockC, uShockR, uShockA, uRippleOn, uArenaR } from './ocean.js';
+import { useLightMemory, useLongMemory, useSeabed, useCaustics, useShadows, uCam, uCausticLayers, uViewW, uViewH, uShockC, uShockR, uShockA, uRippleOn, uArenaR, uReefHalo } from './ocean.js';
 import { createLightMemory } from './lightmemory.js';
 import { createSeabed } from './seabed.js';
 import { createCaustics } from './caustics.js';
@@ -136,7 +136,7 @@ panel.set('vbuf', mantas.vertexBuffers + ' of 8 that WebGPU guarantees' +
                   (mantas.vertexBuffers > 8 ? '  \u00b7  OVER THE LIMIT' : ''));
 panel.set('lm', lm ? (lm.size + '×' + lm.size + '  ·  ' + lm.note) : 'off (?fx=off)');
 
-window.__lab = { scene, camera, view, mantas, lm, FX, uArenaR };
+window.__lab = { scene, camera, view, mantas, lm, lmSlow, FX, uArenaR, uReefHalo };
 
 /* After __lab exists, not before: this is the same ordering trap that put a
    ReferenceError on the page in 1F. */

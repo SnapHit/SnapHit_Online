@@ -84,6 +84,9 @@ export const uRippleOn = uniform(1);
 /* The arena's radius, so the water knows where the reef is. Fed from the
    simulation's parameters, which own it. */
 export const uArenaR = uniform(2000);
+/* The halo's level as a uniform, so a harness can switch the halo alone and
+   measure what it adds, instead of moving the whole reef away. */
+export const uReefHalo = uniform(REEF_HALO_LEVEL);
 
 
 /* Blue-green, from the palette already in use. */
@@ -401,8 +404,11 @@ export function oceanNode () {
        marks the line and a halo 760 units deep that falls off into the water,
        so from half a screen the warning covers the upper part of the frame
        rather than a strip a dozen pixels tall at its edge. */
-    const reefRing = REEF_WARM.mul(ringBand.mul(ringBand)).mul(reefPulse).mul(REEF_RING_LEVEL)
-      .add(REEF_WARM.mul(ringHalo.mul(ringHalo)).mul(reefPulse).mul(REEF_HALO_LEVEL));
+    const reefRing = REEF_WARM.mul(ringBand.mul(ringBand)).mul(reefPulse).mul(REEF_RING_LEVEL);
+    /* ITS OWN LIGHT, by ruling 4 of 2B part three: warm, added after the
+       seabed's colouring and after the ceiling, and never multiplied by
+       anything the moonlight is made of. */
+    const reefHalo = REEF_WARM.mul(ringHalo.mul(ringHalo)).mul(reefPulse).mul(uReefHalo);
     const outside = smoothstep(uArenaR.sub(float(4)), uArenaR.add(float(26)), reefD);
     /* Rubble, in cells about two thirds of a wingspan across. */
     const reefRough = rand(floor(w0.div(float(26)))).mul(0.55).add(0.45);
@@ -448,7 +454,7 @@ export function oceanNode () {
           position: near zero in still water, and bright along anything that
           has swum past. Cost is per pixel and does not know how many mantas
           there are, which is the point. */
-    if (lm === null) return capWater(water.mul(reefDim).add(seabed.mul(reefDim)).add(ripple)).add(reef);
+    if (lm === null) return capWater(water.mul(reefDim).add(seabed.mul(reefDim)).add(ripple)).add(reef).add(reefHalo);
 
     /* The exact inverse of the mapping the light memory pass uses, so the two
        agree by construction rather than by coincidence. */
@@ -519,6 +525,6 @@ export function oceanNode () {
     /* Life goes on top of the ceiling, never under it: 7.2 caps moonlight,
        not the plankton a manta stirs. */
     return capWater(water.mul(reefDim).add(seabed.mul(reefDim)).add(ripple))
-      .add(snow).add(plankton).add(reef);
+      .add(snow).add(plankton).add(reef).add(reefHalo);
   })();
 }
