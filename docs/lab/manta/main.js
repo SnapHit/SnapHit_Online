@@ -151,7 +151,7 @@ window.__lab.reroll = () => { mantas.reroll(); showRoll(); return mantas.colours
 window.__lab.post = () => post;
 const quality = createQuality({ forcedTier: FORCED_TIER, dpr: devicePixelRatio });
 window.__lab = window.__lab || {};
-const cut = createCut({ mantas, lm, burstSlot: BURST_SLOT });
+const cut = createCut({ mantas, lm, burstSlot: BURST_SLOT, scatter: SPIKE });
 window.__lab.cut = cut;
 window.__lab.shadows = shadows;
 /* A test can stand the set piece still: the short parts of it are over
@@ -239,6 +239,7 @@ const follower = createFollow({ mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_B
                                 get lm () { return lm; }, get lmSlow () { return lmSlow; },
                                 get shadows () { return shadows; } });
 const followCamera = dt => follower.followCamera(dt);
+window.__lab.follower = follower;              // events skipped off screen, for the checks
 
 /* Hoisted out of the hooks so the step hook below can drive it. The cut owns
    the clock while it is running: its own timeline advances in REAL time — a

@@ -70,8 +70,23 @@ export function createRules (ctx) {
      ends here and its peak is its score, and the death beat runs before
      sim.js puts the train back somewhere clear. A lone leader crashes the
      same way: there is no stun any more, because there is no you to stun. */
+  /* SET PIECES FIRE ON EVENTS, ONE EACH (ruling 4 of 2B part four). The
+     renderer read t.cut and t.crashed every frame, and those stay frozen on a
+     train in its death beat, so one cut fired again and again. Now each crash
+     and each cut is recorded once, with where it happened. A burst that
+     crosses a body touches follower after follower on successive steps: the
+     same cutter against the same train within CROSSING seconds is one cut. */
+  const CROSSING = 0.35;
+  function record (e) {
+    if (!ctx.events) return;
+    ctx.events.push(e);
+    if (ctx.events.length > 256) ctx.events.shift();   // nobody draining: a test
+  }
+
   function crash (t) {
+    if (t.dead > 0) return 0;                     // nothing happens to a wreck
     const had = t.followers.length;
+    record({ kind: 'crash', id: t.id, x: t.x, z: t.z, at: ctx.now ? ctx.now() : 0 });
     t.crashX = t.x; t.crashZ = t.z;
     scatter(t, 0);
     /* The leader itself, at the point of the crash, glowing like the rest. */
@@ -87,9 +102,17 @@ export function createRules (ctx) {
      follower behind the contact point goes wild; the rest of that train,
      including its leader, carries on. Touching its leader cuts at the front,
      so the whole train goes. */
-  function cutAt (t, index) {
+  function cutAt (t, index, by = null) {
+    const at = t.followers[index] || t;           // where it was touched
+    const x = at.x, z = at.z;
     const freed = scatter(t, index);
-    if (freed) t.cut = 0.25;
+    if (freed) {
+      t.cut = 0.25;
+      const now = ctx.now ? ctx.now() : 0;
+      const same = by && t.lastCutBy === by && now - t.lastCutAt < CROSSING;
+      t.lastCutBy = by; t.lastCutAt = now;
+      if (!same) record({ kind: 'cut', id: t.id, by: by ? by.id : -1, x, z, at: now });
+    }
     return freed;
   }
 
@@ -130,15 +153,15 @@ export function createRules (ctx) {
       /* HEAD ON. Both crash unless exactly one is bursting; the one that is
          cuts the other instead, and two bursting leaders both crash. */
       const other = h.train, a = t.bursting, b = other.bursting;
-      if (a && !b) cutAt(other, h.index);
-      else if (b && !a) cutAt(t, hits[back].index);
+      if (a && !b) cutAt(other, h.index, t);
+      else if (b && !a) cutAt(t, hits[back].index, other);
       else { crash(t); crash(other); }
       done.add(t); done.add(other);
     }
     for (let i = 0; i < ctx.trains.length; i++) {
       const t = ctx.trains[i], h = hits[i];
       if (!h || done.has(t) || done.has(h.train)) continue;
-      if (t.bursting) cutAt(h.train, h.index);
+      if (t.bursting) cutAt(h.train, h.index, t);
       else crash(t);
       done.add(t);
     }

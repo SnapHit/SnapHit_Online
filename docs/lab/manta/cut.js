@@ -39,6 +39,9 @@ export function setCutClock (fn) { clock = typeof fn === 'function' ? fn : () =>
 
 /* Page-wide flash ledger. Every flash anywhere asks here first. */
 const flashes = [];
+/* How many flashes the ledger holds right now: a test reads it to prove an
+   off-screen event spent nothing. */
+export const flashCount = () => flashes.length;
 export function flashAllowed (now) {
   while (flashes.length && now - flashes[0] > 1000) flashes.shift();
   if (flashes.length >= 3) return false;
@@ -68,7 +71,16 @@ const CUT_FROM = 3;
 
 const easeInOut = x => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2);
 
-export function createCut ({ mantas, lm, burstSlot }) {
+export function createCut ({ mantas, lm, burstSlot, scatter = true }) {
+  /* SCATTER IS THE SPIKE'S, and only the spike's. In the game the simulation
+     owns every instance slot, and this scatter freed slots 3 and 4 of your
+     train and swam them round the camera as mantas that did not exist in the
+     simulation: drawn, dimmed, impossible to collect, and left standing
+     where the timeline ended. It also held the timeline open for its six
+     second re-form, and anything that happened meanwhile never fired. In the
+     game the set piece ends with its shockwave, and each event fires. */
+  const END = scatter ? REFORM_TIME : SHOCK_TIME;
+  let fired = 0;
   /* The set piece runs on a REAL clock, not on accumulated frame deltas.
      Those deltas are clamped so a hidden tab cannot teleport anything, and
      that clamp turns the whole sequence into slow motion on a slow device:
@@ -103,19 +115,21 @@ export function createCut ({ mantas, lm, burstSlot }) {
     return 1 + (SLOW_SCALE - 1) * Math.sin((secs / SLOW_TIME) * Math.PI);
   }
 
-  function trigger () {
-    if (t >= 0 && t < REFORM_TIME) return false;   // already running
+  function trigger (at = null) {
+    if (scatter && t >= 0 && t < REFORM_TIME) return false;   // the spike's one at a time
     reduced = isReduced();
     flashScale = (flashAllowed(clock()) ? 1 : 0.25) * (reduced ? 0.30 : 1);
+    fired++;
 
-    /* Cut where the train actually is, between followers 2 and 3. */
+    /* At the contact point when there is one (the game); the spike cuts its
+       scripted train between followers 2 and 3. */
     const a = CUT_FROM - 1, b = CUT_FROM;
-    centre = {
+    centre = at ? { x: at.x, z: at.z } : {
       x: (mantas.aPos.getX(a) + mantas.aPos.getX(b)) / 2,
       z: (mantas.aPos.getZ(a) + mantas.aPos.getZ(b)) / 2,
     };
 
-    for (let i = CUT_FROM; i < 5; i++) {
+    for (let i = CUT_FROM; i < (scatter ? 5 : CUT_FROM); i++) {
       const head = mantas.aHead.getX(i);
       /* Each on its own heading, fanned either side of where it was going,
          and each with its own gentle turn so the group keeps opening out
@@ -177,7 +191,7 @@ export function createCut ({ mantas, lm, burstSlot }) {
       const peak = 1 + (FLASH_PEAK - 1) * flashScale;
       const level = peak + (DIM_LEVEL - peak) * easeInOut(k);
       const mix = easeInOut(k);
-      for (let i = CUT_FROM; i < 5; i++) {
+      for (let i = CUT_FROM; i < (scatter ? 5 : CUT_FROM); i++) {
         mantas.setTintScale(i, level);
         if (mantas.setCutMix) mantas.setCutMix(i, mix);
       }
@@ -186,13 +200,13 @@ export function createCut ({ mantas, lm, burstSlot }) {
          two seconds between the fade ending and the manta rejoining, so the
          train does not snap back into your colour in one frame. */
       const k = (t - FADE_TIME) / Math.max(REFORM_TIME - FADE_TIME, 1e-6);
-      for (let i = CUT_FROM; i < 5; i++) {
+      for (let i = CUT_FROM; i < (scatter ? 5 : CUT_FROM); i++) {
         if (mantas.setCutMix) mantas.setCutMix(i, 1 - easeInOut(Math.min(k, 1)));
       }
     }
 
-    if (t >= REFORM_TIME) {
-      for (let i = CUT_FROM; i < 5; i++) {
+    if (t >= END) {
+      for (let i = CUT_FROM; i < (scatter ? 5 : CUT_FROM); i++) {
         mantas.setFree(i, null); mantas.setTintScale(i, 1);
         if (mantas.setCutMix) mantas.setCutMix(i, 0);
       }
@@ -211,6 +225,7 @@ export function createCut ({ mantas, lm, burstSlot }) {
     trigger, update, scaleAt, shockAt,
     get lastScale () { return lastScale; },
     get running () { return t >= 0; },
+    get fired () { return fired; },
     get elapsed () { return t; },
     get reduced () { return isReduced(); },
     setUserReduced (v) { userReduced = v; },

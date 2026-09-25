@@ -22,7 +22,7 @@ export function createFollow (ctx) {
   const fading = new Map();                 // instance slot -> seconds left
   const wearing = [], wasScaled = [];       // which wild slots are borrowed colours
   let drawnFollowers = 0, drawnWild = 0, peakLength = 0, shake = 0, sizeDirty = false;
-  let bestPeak = 0, beatShown = false, boardAt = 0;
+  let bestPeak = 0, beatShown = false, boardAt = 0, offScreen = 0;
 
   /* THE BOARD. Top ten by current length, and every bot says it is a bot:
      nobody should ever wonder whether they were beaten by a person. Twice a
@@ -149,17 +149,23 @@ export function createFollow (ctx) {
     /* SET PIECES ON REAL EVENTS. The cut's shockwave, light burst and beat of
        slow motion fire where a cut actually happened, and a crash shakes the
        camera for a quarter of a second. */
-    let event = null;
-    /* A CUT ANYWHERE IS A SET PIECE; A CRASH SHAKES ONLY IF IT IS YOURS.
-       Ten bots crash all over the arena and the screen was jolting for every
-       one of them, including ones nowhere near the frame. */
-    for (const t of ctx.sim.trains) if (t.cut > 0.24) event = 'cut';
-    if (you.crashed > 0.24) event = 'crash';
-    /* A crash is a set piece too now: the train bursting into light. The cut's
-       own timeline already respects the page-wide flash cap and the reduced
-       flash setting, and the peak card is information, so it shows either way. */
-    if (event && !cut.running) cut.trigger();
-    if (event === 'crash') shake = 0.25;
+    /* ONE SET PIECE PER EVENT, WHERE IT HAPPENED (ruling 4 of 2B part four).
+       This read every train's cut and crash flags each frame: any cut
+       anywhere fired the burst on YOUR train, the flags stayed up through a
+       wreck's death beat, and a crash was dropped while an earlier cut's
+       timeline ran. Now the simulation records each crash and each crossing
+       once, with its contact point; one on screen fires there, one off
+       screen fires nothing and spends none of the page's flash allowance,
+       and a crash shakes the camera only if it is yours. */
+    const evs = ctx.sim.events;
+    if (evs && evs.length) {
+      const v = ctx.view, hw = v.w / 2 + 40, hh = v.h / 2 + 40;
+      for (const e of evs.splice(0)) {
+        if (Math.abs(e.x - at.x) > hw || Math.abs(e.z - at.z) > hh) { offScreen++; continue; }
+        cut.trigger({ x: e.x, z: e.z });
+        if (e.kind === 'crash' && e.id === you.id) shake = 0.25;
+      }
+    }
     if (shake > 0) {
       shake = Math.max(0, shake - dt);
       const a = shake * 26;
@@ -186,5 +192,5 @@ export function createFollow (ctx) {
   }
 
 
-  return { followCamera, get peak () { return peakLength; } };
+  return { followCamera, get peak () { return peakLength; }, get offScreen () { return offScreen; } };
 }

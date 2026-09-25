@@ -287,7 +287,9 @@ export function createSim ({ seed = 1, params = {} } = {}) {
 
   /* The rules live in rules.js. They read this context at call time, so the
      trains array can be finished after they are created. */
-  const ruleCtx = { p, next, GROUPS, wild, scratch, hash, trains, you, blooms };
+  /* Crashes and cuts, once each, with where: the renderer drains this. */
+  const events = [];
+  const ruleCtx = { p, next, GROUPS, wild, scratch, hash, trains, you, blooms, events, now: () => time };
   const { scatter, crash, cutAt, resolveTouches, payForBurst, steerRival } = createRules(ruleCtx);
 
   function stepTrain (t, want, dt) {
@@ -398,7 +400,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     get time () { return time; },
     params: p, blooms, you, rivals, bots, botMix, brain, setBotCount, trains, input, step, wild, groups, hash, joinedAt,
     liveWild: livingWild,
-    scatter, crash, cutAt, makeTrain, seedTrail, restart,
+    scatter, crash, cutAt, makeTrain, seedTrail, restart, events,
     get length () { return you.followers.length; },
     zoom: () => zoomFor(you.followers.length, p),
     /* For tests and for the panel: the speed actually used this step. */
