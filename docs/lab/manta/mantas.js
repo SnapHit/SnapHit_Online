@@ -261,7 +261,10 @@ export function createMantas (scene, { scripted = false } = {}) {
   const shadowMaterial = new MeshBasicNodeMaterial({ side: DoubleSide });
   shadowMaterial.positionNode = material.positionNode;
   shadowMaterial.colorNode = vec3(1.0, 1.0, 1.0);
-  let shadowMesh = new InstancedMesh(geometry, shadowMaterial, cap);
+  /* Its own geometry: r186 frees node-bound buffers through the first
+     render object that used a geometry, and the shadow pass draws first but
+     binds only four of the five attributes, so sharing left aTint behind. */
+  let shadowMesh = new InstancedMesh(geometry.clone(), shadowMaterial, cap);
   shadowMesh.count = COUNT;
   shadowMesh.frustumCulled = false;
 
@@ -340,11 +343,27 @@ export function createMantas (scene, { scripted = false } = {}) {
      the old contents, the material's nodes pointed at them, and new meshes
      built at the new size in place of the old. It doubles, so it is rare. */
   const growHooks = [];
+  /* What a growth replaced, freed on the next call once the new meshes have
+     drawn a frame (so the shared pipeline is never left unused and rebuilt).
+     r186 frees node-bound attribute buffers only when the owning GEOMETRY is
+     disposed, so each growth gives the new meshes a geometry of their own
+     and disposing the old one releases the old attributes, the old instance
+     matrices and the old meshes' render objects together. */
+  let retired = null;
+  function freeRetired () {
+    if (!retired) return;
+    for (const m of retired.meshes) { m.dispose(); m.geometry.dispose(); }
+    retired = null;
+  }
   function grow (need) {
+    freeRetired();
     let cap2 = cap;
     while (cap2 < need) cap2 *= 2;
     const bigger = (a, size) => {
-      const b = new InstancedBufferAttribute(new Float32Array(cap2 * size), size).setUsage(DynamicDrawUsage);
+      /* The same usage as the one it replaces. The node that binds an
+         instanced attribute sets it to static (uploaded only when changed);
+         a grown one left dynamic re-uploaded in full on every render call. */
+      const b = new InstancedBufferAttribute(new Float32Array(cap2 * size), size).setUsage(a.usage);
       b.array.set(a.array);
       return b;
     };
@@ -359,8 +378,9 @@ export function createMantas (scene, { scripted = false } = {}) {
     }
     colours.grow(aTint, roles);
     const drawn = mesh.count;
-    const mesh2 = new InstancedMesh(geometry, material, cap2);
-    const shadow2 = new InstancedMesh(geometry, shadowMaterial, cap2);
+    const mesh2 = new InstancedMesh(mesh.geometry.clone(), material, cap2);
+    const shadow2 = new InstancedMesh(shadowMesh.geometry.clone(), shadowMaterial, cap2);
+    retired = { meshes: [mesh, shadowMesh], fresh: true };
     for (const m of [mesh2, shadow2]) {
       m.frustumCulled = false;
       for (let i = 0; i < cap2; i++) m.setMatrixAt(i, I);
@@ -378,6 +398,8 @@ export function createMantas (scene, { scripted = false } = {}) {
   }
   /* Room for n instances, drawing exactly n. */
   function ensure (n) {
+    if (retired && !retired.fresh) freeRetired();
+    else if (retired) retired.fresh = false;       // one frame drawn first
     if (n > cap) grow(n);
     mesh.count = n; shadowMesh.count = n;
   }
@@ -392,6 +414,7 @@ export function createMantas (scene, { scripted = false } = {}) {
            get aPos () { return aPos; }, get aHead () { return aHead; }, get aSize () { return aSize; },
            get aTint () { return aTint; }, get aMotion () { return aMotion; }, vertexBuffers, isWild,
            ensure, get capacity () { return cap; }, get drawn () { return mesh.count; },
+           get retiring () { return retired !== null; },
            onGrow: fn => growHooks.push(fn),
            rollColours: colours.rollColours, reroll: colours.reroll,
            get colours () { return colours.colours; }, get seed () { return colours.seed; },

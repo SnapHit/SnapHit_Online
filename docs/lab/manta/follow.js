@@ -29,6 +29,11 @@ export function createFollow (ctx) {
      remembers what each spill slot is dressed as, so it is re-dressed only
      when that changes. */
   const spillDress = [];
+  /* Train id -> the slot that draws its leader; follower -> its spill slot
+     this frame (stamp.js reads it, so the spill lays wakes too). */
+  const dressOf = new Map();
+  let wildDeal = null;
+  let spillSlot = new Map();
   let spillDeal = null, drawnRivals = 0;
   const SPILL_BASE = mantas.SPILL_BASE;
   let bestPeak = 0, beatShown = false, boardAt = 0, offScreen = 0;
@@ -120,6 +125,14 @@ export function createFollow (ctx) {
        on the same rules, so they crash into you, get cut by you, and recruit
        their own trains back. */
     const spill = [];                          // [manta, slot to dress as, size or 0]
+    /* WHICH SLOT DRAWS EACH TRAIN'S LEADER, by train id: debris glows in its
+       old train's colour, and a train id is not a block index once the
+       bot-count slider has added or removed bots (ids keep counting up). */
+    if (m.colours !== wildDeal) { wearing.length = 0; wildDeal = m.colours; }   // a new deal repaints
+    dressOf.clear();
+    dressOf.set(you.id, 0);
+    const BLOCKS0 = (WILD_BASE - RIVAL_BASE) / RIVAL_LEN;
+    ctx.sim.rivals.forEach((t, r) => dressOf.set(t.id, RIVAL_BASE + (r % BLOCKS0) * RIVAL_LEN));
     const now0 = ctx.sim.time, sp0 = ctx.sim.params;
     if (!dying) for (let i = n; i < f.length; i++) spill.push([f[i], 0, sizeFor(joinMix(f[i], now0), sp0)]);
     /* Ten bots have fixed blocks. The bot-count slider goes to twenty: the
@@ -158,9 +171,14 @@ export function createFollow (ctx) {
       if (q.alive) { m.aPos.setXYZ(slot, q.x, 0, q.z); m.aHead.setX(slot, q.head); }
       else m.aPos.setXYZ(slot, PARKED, 0, PARKED);
       const glowing = q.alive && q.loose && q.glow > 0;
-      if (glowing !== !!wearing[slot]) {
-        wearing[slot] = glowing;
-        m.wearTrain(slot, glowing ? (q.wasColour === 0 ? 0 : RIVAL_BASE + (q.wasColour - 1) * RIVAL_LEN) : -1);
+      /* Dressed by TARGET, not by a yes/no: a slot refilled by another
+         train's debris while the first still glowed kept the old colour.
+         A train that has gone (the slider removed it) leaves its debris in
+         its own colours. */
+      const target = glowing && dressOf.has(q.wasColour) ? dressOf.get(q.wasColour) : -1;
+      if (wearing[slot] !== target) {
+        wearing[slot] = target;
+        m.wearTrain(slot, target);
       }
       /* A scattered manta keeps its train's size while it glows and shrinks
        back to a wild 20 exactly as its own colour returns. */
@@ -182,7 +200,7 @@ export function createFollow (ctx) {
       /* Past the wild block: glowing debris wears its train's colour, the
          same mapping as the block above, and otherwise its own. */
       const glow = q.loose && q.glow > 0;
-      const dress = glow ? (q.wasColour === 0 ? 0 : RIVAL_BASE + ((q.wasColour - 1) % BLOCKS) * RIVAL_LEN)
+      const dress = glow && dressOf.has(q.wasColour) ? dressOf.get(q.wasColour)
                          : WILD_BASE + ((q.colour >= 0 ? q.colour : 0) % WILD_SLOTS);
       spill.push([q, dress, sizeFor(q.loose ? looseMix(q) : 0, ctx.sim.params)]);
     }
@@ -192,10 +210,12 @@ export function createFollow (ctx) {
     /* A new deal (Reroll, or a palette switch) repaints every slot from its
        role, and a spill slot's role is a stand-in: dress them all again. */
     if (m.colours !== spillDeal) { spillDress.length = 0; spillDeal = m.colours; }
+    spillSlot = new Map();
     m.ensure(SPILL_BASE + spill.length);
     const fsize = m.aSize.getX(RIVAL_BASE + 1);
     for (let j = 0; j < spill.length; j++) {
       const slot = SPILL_BASE + j, [g, dress, size] = spill[j];
+      spillSlot.set(g, slot);
       m.aPos.setXYZ(slot, g.x, 0, g.z); m.aHead.setX(slot, g.head);
       if (spillDress[j] !== dress) { m.wearTrain(slot, dress); m.setTintScale(slot, 1); m.setCutMix(slot, 0); spillDress[j] = dress; }
       const sz = size || fsize;
@@ -250,5 +270,6 @@ export function createFollow (ctx) {
   }
 
 
-  return { followCamera, get peak () { return peakLength; }, get offScreen () { return offScreen; } };
+  return { followCamera, get peak () { return peakLength; }, get offScreen () { return offScreen; },
+           spillSlotOf: g => spillSlot.get(g) };
 }
