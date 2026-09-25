@@ -83,10 +83,13 @@ export function createRules (ctx) {
     if (ctx.events.length > 256) ctx.events.shift();   // nobody draining: a test
   }
 
-  function crash (t) {
+  /* `into` is what it hit — the other train, or null for the reef — and
+     `how` whether that was a leader head on or somebody's body. */
+  function crash (t, into = null, how = 'reef') {
     if (t.dead > 0) return 0;                     // nothing happens to a wreck
     const had = t.followers.length;
-    record({ kind: 'crash', id: t.id, x: t.x, z: t.z, at: ctx.now ? ctx.now() : 0 });
+    record({ kind: 'crash', id: t.id, into: into ? into.id : -1, how,
+             intoLen: into ? into.followers.length : -1, len: had, x: t.x, z: t.z, at: ctx.now ? ctx.now() : 0 });
     t.crashX = t.x; t.crashZ = t.z;
     scatter(t, 0);
     /* The leader itself, at the point of the crash, glowing like the rest. */
@@ -121,7 +124,7 @@ export function createRules (ctx) {
      nothing at all. */
   function contacts (t) {
     hash.near(t.x, t.z, scratch);
-    let hitTrain = null, hitIndex = 0, best = Infinity;
+    let hitTrain = null, hitIndex = 0, hitLeader = false, best = Infinity;
     for (const o of scratch) {
       if (o.isWild || o.train === t) continue;
       if (!o.train) continue;
@@ -130,9 +133,9 @@ export function createRules (ctx) {
          bigger train is a bigger target and a wider wall. */
       const k = p.trainScale || 1;
       if (d > (p.leaderR + (o.isLeader ? p.leaderR : p.followerR)) * k) continue;
-      if (d < best) { best = d; hitTrain = o.train; hitIndex = o.index; }
+      if (d < best) { best = d; hitTrain = o.train; hitIndex = o.index; hitLeader = !!o.isLeader; }
     }
-    return hitTrain ? { train: hitTrain, index: hitIndex } : null;
+    return hitTrain ? { train: hitTrain, index: hitIndex, leader: hitLeader } : null;
   }
 
   function resolveTouches () {
@@ -155,20 +158,20 @@ export function createRules (ctx) {
       const other = h.train, a = t.bursting, b = other.bursting;
       if (a && !b) cutAt(other, h.index, t);
       else if (b && !a) cutAt(t, hits[back].index, other);
-      else { crash(t); crash(other); }
+      else { crash(t, other, 'head-on'); crash(other, t, 'head-on'); }
       done.add(t); done.add(other);
     }
     for (let i = 0; i < ctx.trains.length; i++) {
       const t = ctx.trains[i], h = hits[i];
       if (!h || done.has(t) || done.has(h.train)) continue;
       if (t.bursting) cutAt(h.train, h.index, t);
-      else crash(t);
+      else crash(t, h.train, h.leader ? 'leader' : 'body');
       done.add(t);
     }
     /* The reef is a wall and hitting it is a crash like any other. */
     for (const t of ctx.trains) {
       if (t.dead > 0) continue;
-      if (Math.hypot(t.x, t.z) >= p.arenaR - p.leaderR * (p.trainScale || 1) - 0.5) crash(t);
+      if (Math.hypot(t.x, t.z) >= p.arenaR - p.leaderR * (p.trainScale || 1) - 0.5) crash(t, null, 'reef');
     }
   }
 

@@ -103,13 +103,52 @@ export function createBrain (ctx) {
          pay with. 6.3: bursting into a train cuts it where it touches. */
       burst = t.aggression > 0.5 && t.followers.length > 0 && hit.d < look * 0.75;
       if (!burst) {
-        /* Otherwise go round: push sideways, harder the closer it is and the
+        /* GO ROUND THE WAY THAT CLEARS IT (ruling 5 of 2B part four). This
+           pushed towards whichever side the goal was on, so a bot drove into
+           any long train lying between it and its goal: about 13 crashes a
+           bot every five minutes. Now the train's nearby parts are read as
+           bearings from this bot's nose, each widened by the body it would
+           touch, and it steers just past whichever edge of that arc is
+           nearer — the short way round — harder the closer it is and the
            more cautious the bot. */
-        const px = -hit.dz, pz = hit.dx, pn = Math.hypot(px, pz) || 1;
-        const side = (px * gx + pz * gz) >= 0 ? 1 : -1;
+        const fx = -Math.sin(t.head), fz = -Math.cos(t.head);
+        const body = (p.leaderR + p.followerR) * (p.trainScale || 1) + 8;
+        let lo = Infinity, hi = -Infinity;
+        for (const q of [hit.o, ...hit.o.followers]) {
+          const dx = q.x - t.x, dz = q.z - t.z, d = Math.hypot(dx, dz);
+          if (d > look * 1.6) continue;
+          const ang = Math.atan2(fx * dz - fz * dx, fx * dx + fz * dz);   // signed bearing
+          const w = Math.asin(Math.min(1, body / Math.max(d, body)));
+          if (ang - w < lo) lo = ang - w;
+          if (ang + w > hi) hi = ang + w;
+        }
+        const clear = Math.abs(hi) <= Math.abs(lo) ? hi + 0.15 : lo - 0.15;
+        const c = Math.cos(clear), sn = Math.sin(clear);
         const k = (0.4 + t.caution * 2.6) * (1 - hit.d / look);
-        gx += (px / pn) * side * k;
-        gz += (pz / pn) * side * k;
+        gx += (fx * c - fz * sn) * k * 2;
+        gz += (fz * c + fx * sn) * k * 2;
+      }
+    }
+
+    /* GIVE WAY TO LEADERS. Measured: 96% of bot crashes were two leaders
+       meeting head on, usually over the same food, and only 4% a leader
+       running into a body. A leader closing ahead is turned away from, to
+       the side it is not on, so two bots that meet both turn aside and pass;
+       a bot bursting at it is cutting, and keeps coming. */
+    if (!burst) {
+      const fx = -Math.sin(t.head), fz = -Math.cos(t.head);
+      let near = null, nd = look;
+      for (const o of ctx.trains) {
+        if (o === t || o.dead > 0) continue;
+        const dx = o.x - t.x, dz = o.z - t.z, d = Math.hypot(dx, dz);
+        if (d >= nd || (dx * fx + dz * fz) / (d || 1) < -0.2) continue;
+        nd = d; near = { dx, dz, d };
+      }
+      if (near) {
+        const side = (fx * near.dz - fz * near.dx) >= 0 ? -1 : 1;   // away from its side
+        const k = (0.8 + t.caution * 3.0) * (1 - near.d / look);
+        gx += -fz * side * k * 2;
+        gz += fx * side * k * 2;
       }
     }
 

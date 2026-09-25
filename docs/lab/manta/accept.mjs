@@ -5,6 +5,9 @@
  *   node accept.mjs 4 [from] [to] [cost]   timid, bully and the strawman,
  *                                          burst cost 0.35, 0.5 and 0.7
  *   node accept.mjs 6                coiling: can a lone leader get out?
+ *   node accept.mjs crashes [from] [to]   crashes per bot per 5 min, by preset
+ *   node accept.mjs 4h [from] [to] [cost]  test 4 as ruled: five timid, five bully
+ *   node accept.mjs 4s [from] [to] [cost]  the same with the strawman as the bursting half
  *
  * MEASUREMENTS, NOT GATES. Nothing here is tuned to pass; each test prints
  * what it saw and one JSON line a later brief can compare against.
@@ -52,11 +55,14 @@ function botMatch (seed, setup) {
 
 /* ---- Test 3: upsets ---------------------------------------------------- */
 function upsets (seed) {
+  /* COUNTED FROM THE SIMULATION'S OWN EVENTS (2B part four): one per crash
+     and one per cut crossing, each naming the other party. Part three's
+     count read per-step flags, so one crossing counted several times and a
+     wreck's frozen flag counted again through its death beat. */
   const s = botMatch(seed);
-  const reach = (s.params.leaderR + s.params.followerR) * (s.params.trainScale || 1) + 30;
   let events = 0, cuts = 0, crashes = 0, reef = 0, topSeen = 0, longest = 0, topLost = 0;
   for (let i = 0; i < STEPS; i++) {
-    /* The top train is the strictly longest living one, before the step. */
+    /* The top train is the strictly longest living one, of three or more. */
     let top = null, second = -1;
     for (const t of s.rivals) {
       if (t.dead > 0) continue;
@@ -64,43 +70,21 @@ function upsets (seed) {
       if (!top || n > top.followers.length) { if (top) second = Math.max(second, top.followers.length); top = t; }
       else second = Math.max(second, n);
     }
-    if (top && top.followers.length <= second) top = null;   // a tie has no top
-    const snap = new Map(s.rivals.map(t => [t, { n: t.followers.length, bursting: t.bursting,
-      pts: [t, ...t.followers].map(q => ({ x: q.x, z: q.z })) }]));
+    if (top && (top.followers.length <= second || top.followers.length < 3)) top = null;
+    const len = new Map(s.rivals.map(t => [t.id, t.followers.length]));
     s.step();
-    if (!top || top.followers.length === 0 && snap.get(top).n === 0) continue;
-    if (snap.get(top).n < 3) continue;       // a "top" of two is not a top train
+    const evs = s.events.splice(0);
+    if (!top) continue;
     topSeen++;
-    const was = snap.get(top).n;
+    const was = len.get(top.id);
     if (was > longest) longest = was;
-    const crashed = top.dead > 0;
-    const cut = !crashed && top.cut === 0.25;
-    if (!crashed && !cut) continue;
-    topLost++;
-    if (crashed && Math.hypot(top.crashX, top.crashZ) >= s.params.arenaR - 40) { reef++; continue; }
-    /* Culprit: for a crash, whoever the leader ran into; for a cut, the
-       bursting leader nearest the train's body, both from before the step. */
-    let who = null, d = Infinity;
-    if (crashed) {
-      for (const o of s.rivals) {
-        if (o === top) continue;
-        for (const q of snap.get(o).pts) {
-          const dd = Math.hypot(q.x - snap.get(top).pts[0].x, q.z - snap.get(top).pts[0].z);
-          if (dd < d) { d = dd; who = o; }
-        }
-      }
-    } else {
-      for (const o of s.rivals) {
-        if (o === top || !snap.get(o).bursting) continue;
-        const L = snap.get(o).pts[0];
-        for (const q of snap.get(top).pts) {
-          const dd = Math.hypot(q.x - L.x, q.z - L.z);
-          if (dd < d) { d = dd; who = o; }
-        }
-      }
+    for (const e of evs) {
+      if (e.id !== top.id) continue;
+      topLost++;
+      if (e.kind === 'crash' && e.into < 0) { reef++; continue; }
+      const other = e.kind === 'crash' ? e.into : e.by;
+      if (other >= 0 && len.get(other) < was) { events++; if (e.kind === 'crash') crashes++; else cuts++; }
     }
-    if (!who || d > reach) continue;
-    if (snap.get(who).n < was) { events++; if (crashed) crashes++; else cuts++; }
   }
   return { seed, events, cuts, crashes, topLost, reefCrashesOfTop: reef, longest, secondsWithTop: +(topSeen * STEP).toFixed(0) };
 }
@@ -251,6 +235,63 @@ function coiling () {
            escapesTried: 72, tally };
 }
 
+/* ---- Test 4 as ruled in 2B part four ------------------------------------ */
+/* Ten bots, split evenly and otherwise identical (the bully preset's greed
+   and caution for all ten): five never burst (timid), five burst to cut and
+   then collect what they cut (bully, the ordinary brain at aggression 1).
+   With `strawman`, the bursting half bursts whenever it can pay instead. */
+function halves (seed, burstCost, strawman = false) {
+  const s = createSim({ seed, params: nathan({ burstCost }) });
+  s.you.dead = 1e9; s.you.followers.length = 0;
+  const G = PRESETS.bully.greed, C = PRESETS.bully.caution;
+  const other = strawman ? 'strawman' : 'bully';
+  s.rivals.forEach((t, i) => {
+    const bursts = i % 2 === 1;
+    Object.assign(t, { greed: G, caution: C, aggression: bursts ? 1 : 0, kind: bursts ? other : 'timid' });
+    t.pinBurst = !bursts || strawman; t.bursting = false;
+  });
+  for (let i = 0; i < STEPS; i++) {
+    for (const t of s.rivals) {
+      if (t.kind === 'timid') t.bursting = false;
+      else if (t.kind === 'strawman') t.bursting = !(t.dead > 0) && t.followers.length > 0;
+    }
+    s.step();
+    s.events.length = 0;
+  }
+  const board = [...s.rivals].sort((a, b) => b.followers.length - a.followers.length);
+  const topLen = board[0].followers.length, leaders = board.filter(t => t.followers.length === topLen);
+  return { seed, burstCost, first: leaders.length === 1 ? leaders[0].kind : 'tie',
+           top3: board.slice(0, 3).map(t => t.kind), topLen };
+}
+function summariseHalves (rows, other) {
+  const n = rows.length, out = { burstCost: rows[0].burstCost, seeds: n };
+  for (const k of ['timid', other]) {
+    const firsts = rows.filter(r => r.first === k).length;
+    const top3 = rows.reduce((a, r) => a + r.top3.filter(x => x === k).length, 0) / (3 * n);
+    out[k] = { first: firsts, firstShare: +(firsts / n).toFixed(2), top3Share: +top3.toFixed(2) };
+  }
+  out.ties = rows.filter(r => r.first === 'tie').length;
+  out.flag = ['timid', other].filter(k => out[k].firstShare > 2 / 3).map(k => k + ' TAKES FIRST MORE THAN TWO IN THREE').join('; ');
+  return out;
+}
+
+/* ---- Crash rates: crashes per bot per five minutes, by preset ----------- */
+function crashRates (seed) {
+  const s = botMatch(seed);
+  const by = {};
+  for (const t of s.rivals) by[t.id] = { kind: t.kind, crashes: 0, reef: 0 };
+  for (let i = 0; i < STEPS; i++) {
+    const was = new Map(s.rivals.map(t => [t, t.dead > 0]));
+    s.step();
+    for (const t of s.rivals) {
+      if (was.get(t) || !(t.dead > 0)) continue;
+      by[t.id].crashes++;
+      if (Math.hypot(t.crashX, t.crashZ) >= s.params.arenaR - 40) by[t.id].reef++;
+    }
+  }
+  return Object.values(by);
+}
+
 const [which, from = '0', to = '50'] = process.argv.slice(2);
 const seeds = []; for (let k = +from; k < +to; k++) seeds.push(1000 + k);
 const t0 = Date.now();
@@ -264,6 +305,21 @@ if (which === '3') {
     for (const r of rows) console.log('T4 ' + JSON.stringify(r));
     for (const l of summarise(rows)) console.log('T4SUM ' + JSON.stringify(l));
   }
+} else if (which === '4h' || which === '4s') {
+  const straw = which === '4s', costs = process.argv[5] ? [parseFloat(process.argv[5])] : [0.35, 0.5, 0.7];
+  for (const cost of costs) {
+    const rows = seeds.map(seed => halves(seed, cost, straw));
+    console.log('T4H ' + JSON.stringify(summariseHalves(rows, straw ? 'strawman' : 'bully')));
+  }
+} else if (which === 'crashes') {
+  const tally = {};
+  for (const seed of seeds) for (const r of crashRates(seed)) {
+    const k = tally[r.kind] || (tally[r.kind] = { bots: 0, crashes: 0, reef: 0 });
+    k.bots++; k.crashes += r.crashes; k.reef += r.reef;
+  }
+  for (const [kind, k] of Object.entries(tally))
+    console.log('CRASHES ' + JSON.stringify({ kind, bots: k.bots, perBotPer5min: +(k.crashes / k.bots).toFixed(2),
+      reefPerBotPer5min: +(k.reef / k.bots).toFixed(2) }));
 } else if (which === '6') {
   console.log('T6 ' + JSON.stringify(coiling()));
 } else {
