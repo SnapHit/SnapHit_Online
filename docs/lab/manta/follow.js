@@ -22,6 +22,15 @@ export function createFollow (ctx) {
   const fading = new Map();                 // instance slot -> seconds left
   const wearing = [], wasScaled = [];       // which wild slots are borrowed colours
   let drawnFollowers = 0, drawnWild = 0, peakLength = 0, shake = 0, sizeDirty = false;
+  /* EVERY SIMULATED MANTA IS DRAWN (ruling 1 of 2B part five). Your train has
+     300 follower slots and each bot 8; whatever is past its block — and any
+     wild manta past the wild block — goes to the spill after the fixed slots,
+     dressed in its train's colour, and the pool grows to fit. spillDress
+     remembers what each spill slot is dressed as, so it is re-dressed only
+     when that changes. */
+  const spillDress = [];
+  let spillDeal = null, drawnRivals = 0;
+  const SPILL_BASE = mantas.SPILL_BASE;
   let bestPeak = 0, beatShown = false, boardAt = 0, offScreen = 0;
 
   /* THE BOARD. Top ten by current length, and every bot says it is a bot:
@@ -110,10 +119,31 @@ export function createFollow (ctx) {
     /* THE RIVALS ARE THE SIMULATION'S NOW, not the script's: stage 3 puts them
        on the same rules, so they crash into you, get cut by you, and recruit
        their own trains back. */
-    for (let r = 0; r < ctx.sim.rivals.length; r++) {
+    const spill = [];                          // [manta, slot to dress as, size or 0]
+    const now0 = ctx.sim.time, sp0 = ctx.sim.params;
+    if (!dying) for (let i = n; i < f.length; i++) spill.push([f[i], 0, sizeFor(joinMix(f[i], now0), sp0)]);
+    /* Ten bots have fixed blocks. The bot-count slider goes to twenty: the
+       rest are drawn whole in the spill, dressed as the block whose colour
+       they share. Blocks of bots the slider has removed are parked. */
+    const BLOCKS = (WILD_BASE - RIVAL_BASE) / RIVAL_LEN;
+    for (let r = BLOCKS; r < ctx.sim.rivals.length; r++) {
+      const t = ctx.sim.rivals[r], dress = RIVAL_BASE + (r % BLOCKS) * RIVAL_LEN;
+      if (t.dead > 0) continue;
+      spill.push([t, dress, m.aSize.getX(RIVAL_BASE)]);
+      for (const g of t.followers) spill.push([g, dress, 0]);
+    }
+    for (let r = ctx.sim.rivals.length; r < Math.min(drawnRivals, BLOCKS); r++)
+      for (let k = 0; k < RIVAL_LEN; k++) m.aPos.setXYZ(RIVAL_BASE + r * RIVAL_LEN + k, PARKED, 0, PARKED);
+    drawnRivals = ctx.sim.rivals.length;
+    for (let r = 0; r < Math.min(ctx.sim.rivals.length, BLOCKS); r++) {
       const t = ctx.sim.rivals[r], base = RIVAL_BASE + r * RIVAL_LEN;
-      m.aPos.setXYZ(base, t.x, 0, t.z); m.aHead.setX(base, t.head);
+      /* A crashed bot is not in the water during its death beat: its leader
+         scattered with the rest, so drawing it at the wreck drew a manta the
+         simulation did not have. */
+      if (t.dead > 0) m.aPos.setXYZ(base, PARKED, 0, PARKED);
+      else { m.aPos.setXYZ(base, t.x, 0, t.z); m.aHead.setX(base, t.head); }
       const k = Math.min(t.followers.length, RIVAL_LEN - 1);
+      for (let i = k; i < t.followers.length; i++) spill.push([t.followers[i], base, 0]);
       for (let i = 0; i < k; i++) { const g = t.followers[i];
         m.aPos.setXYZ(base + 1 + i, g.x, 0, g.z); m.aHead.setX(base + 1 + i, g.head); }
       for (let i = k; i < RIVAL_LEN - 1; i++) m.aPos.setXYZ(base + 1 + i, PARKED, 0, PARKED);
@@ -143,6 +173,31 @@ export function createFollow (ctx) {
     }
     for (let i = lim; i < drawnWild; i++) m.aPos.setXYZ(WILD_BASE + i, PARKED, 0, PARKED);
     drawnWild = lim;
+    for (let i = WILD_SLOTS; i < w.length; i++) {
+      const q = w[i];
+      if (!q || !q.alive) continue;
+      /* Past the wild block: glowing debris wears its train's colour, the
+         same mapping as the block above, and otherwise its own. */
+      const glow = q.loose && q.glow > 0;
+      const dress = glow ? (q.wasColour === 0 ? 0 : RIVAL_BASE + ((q.wasColour - 1) % BLOCKS) * RIVAL_LEN)
+                         : WILD_BASE + ((q.colour >= 0 ? q.colour : 0) % WILD_SLOTS);
+      spill.push([q, dress, sizeFor(q.loose ? looseMix(q) : 0, ctx.sim.params)]);
+    }
+
+    /* The spill, packed from SPILL_BASE; the drawn count is exactly what is
+       used, and ensure() grows the pool when it has to. */
+    /* A new deal (Reroll, or a palette switch) repaints every slot from its
+       role, and a spill slot's role is a stand-in: dress them all again. */
+    if (m.colours !== spillDeal) { spillDress.length = 0; spillDeal = m.colours; }
+    m.ensure(SPILL_BASE + spill.length);
+    const fsize = m.aSize.getX(RIVAL_BASE + 1);
+    for (let j = 0; j < spill.length; j++) {
+      const slot = SPILL_BASE + j, [g, dress, size] = spill[j];
+      m.aPos.setXYZ(slot, g.x, 0, g.z); m.aHead.setX(slot, g.head);
+      if (spillDress[j] !== dress) { m.wearTrain(slot, dress); m.setTintScale(slot, 1); m.setCutMix(slot, 0); spillDress[j] = dress; }
+      const sz = size || fsize;
+      if (m.aSize.getX(slot) !== sz) { m.aSize.setX(slot, sz); sizeDirty = true; }
+    }
     m.aPos.needsUpdate = true; m.aHead.needsUpdate = true;
   if (sizeDirty) { m.aSize.needsUpdate = true; sizeDirty = false; }
 

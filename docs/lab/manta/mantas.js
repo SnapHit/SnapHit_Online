@@ -63,6 +63,13 @@ export const RIVAL_BASE = TRAIN_MAX;
 export const WILD_BASE = TRAIN_MAX + RIVAL_TRAINS * RIVAL_LEN;
 export const WILD_SLOTS = WILD_COUNT + (TRAIN_MAX - 1) + RIVAL_TRAINS * (RIVAL_LEN - 1);
 export const COUNT = WILD_BASE + WILD_SLOTS;
+/* THE SPILL (ruling 1 of 2B part five). Every simulated manta is drawn: a
+   follower past its train's block — a bot's ninth onwards, your 301st — is
+   drawn after the fixed slots, in its train's colour, and the pool grows as
+   trains grow rather than capping any of them. Only what is in use is drawn:
+   the mesh's count follows it, so an empty spill costs nothing. */
+export const SPILL_BASE = COUNT;
+const SPILL_START = 512;
 /* Somewhere no camera goes: the arena is 2,000 units across. */
 export const PARKED = 1e5;
 
@@ -119,14 +126,15 @@ const beat = (span, phase) => sin(
 const LIGHT = { x: 0.55, y: 0.66, z: -0.51 };
 
 export function createMantas (scene, { scripted = false } = {}) {
-  const aPos   = new InstancedBufferAttribute(new Float32Array(COUNT * 3), 3).setUsage(DynamicDrawUsage);
-  const aHead  = new InstancedBufferAttribute(new Float32Array(COUNT), 1).setUsage(DynamicDrawUsage);
-  const aSize  = new InstancedBufferAttribute(new Float32Array(COUNT), 1).setUsage(DynamicDrawUsage);
+  let cap = COUNT + SPILL_START;
+  let aPos   = new InstancedBufferAttribute(new Float32Array(cap * 3), 3).setUsage(DynamicDrawUsage);
+  let aHead  = new InstancedBufferAttribute(new Float32Array(cap), 1).setUsage(DynamicDrawUsage);
+  let aSize  = new InstancedBufferAttribute(new Float32Array(cap), 1).setUsage(DynamicDrawUsage);
   /* Phase, bank and the lagged bank in ONE attribute, not three. WebGPU
      guarantees only eight vertex buffers per pipeline and three allocates one
      per attribute, so every separate attribute is a slot spent. */
-  const aMotion = new InstancedBufferAttribute(new Float32Array(COUNT * 3), 3).setUsage(DynamicDrawUsage);
-  const aTint  = new InstancedBufferAttribute(new Float32Array(COUNT * 3), 3).setUsage(DynamicDrawUsage);
+  let aMotion = new InstancedBufferAttribute(new Float32Array(cap * 3), 3).setUsage(DynamicDrawUsage);
+  let aTint  = new InstancedBufferAttribute(new Float32Array(cap * 3), 3).setUsage(DynamicDrawUsage);
 
 
   const instanced = [aPos, aHead, aSize, aTint, aMotion];
@@ -239,7 +247,8 @@ export function createMantas (scene, { scripted = false } = {}) {
     .mul(clamp(lit, 0.5, 1.5));
 
   const geometry = mantaGeometry();
-  const mesh = new InstancedMesh(geometry, material, COUNT);
+  let mesh = new InstancedMesh(geometry, material, cap);
+  mesh.count = COUNT;
 
   /* The same animals again, flat white on black, for the shadow pass.
      The SAME geometry and the SAME position node, so a shadow beats its
@@ -252,7 +261,8 @@ export function createMantas (scene, { scripted = false } = {}) {
   const shadowMaterial = new MeshBasicNodeMaterial({ side: DoubleSide });
   shadowMaterial.positionNode = material.positionNode;
   shadowMaterial.colorNode = vec3(1.0, 1.0, 1.0);
-  const shadowMesh = new InstancedMesh(geometry, shadowMaterial, COUNT);
+  let shadowMesh = new InstancedMesh(geometry, shadowMaterial, cap);
+  shadowMesh.count = COUNT;
   shadowMesh.frustumCulled = false;
 
   /* Every attribute this mesh needs is one WebGPU vertex buffer, and WebGPU
@@ -267,7 +277,7 @@ export function createMantas (scene, { scripted = false } = {}) {
      and size all come from the attributes above. InstancedMesh allocates it
      zeroed, and a zero matrix would collapse the mesh to a point. */
   const I = new Matrix4();
-  for (let i = 0; i < COUNT; i++) { mesh.setMatrixAt(i, I); shadowMesh.setMatrixAt(i, I); }
+  for (let i = 0; i < cap; i++) { mesh.setMatrixAt(i, I); shadowMesh.setMatrixAt(i, I); }
   mesh.instanceMatrix.needsUpdate = true;
   shadowMesh.instanceMatrix.needsUpdate = true;
   scene.add(mesh);
@@ -288,18 +298,21 @@ export function createMantas (scene, { scripted = false } = {}) {
   for (let i = 0; i < WILD_SLOTS; i++) {
     roles.push({ kind: 'wild', idx: i, size: WILD_SIZE, wild: true, group: 'wild' });
   }
+  /* The spill: dressed in its train's colour by follow.js as it is used. */
+  const spillRole = () => ({ kind: 'spill', idx: 0, size: FOLLOWER_SIZE, group: 'spill' });
+  for (let i = COUNT; i < cap; i++) roles.push(spillRole());
 
-  const colours = createColours({ COUNT, roles, aTint,
+  const colours = createColours({ COUNT: cap, roles, aTint,
                                  rivals: RIVAL_TRAINS, wilds: WILD_SLOTS, train: TRAIN_MAX });
 
-  for (let i = 0; i < COUNT; i++) {
+  for (let i = 0; i < cap; i++) {
     aSize.setX(i, roles[i].size);
     /* Each follower's beat is about half a radian behind the one ahead, so
        the whole train ripples like a single ribbon rather than flapping in
        unison. Everything else gets a scattered phase. */
     aMotion.setX(i, roles[i].kind === 'train' ? -0.5 * roles[i].idx : (i * 1.37) % TAU);
   }
-  for (let i = 0; i < COUNT; i++) aPos.setXYZ(i, PARKED, 0, PARKED);
+  for (let i = 0; i < cap; i++) aPos.setXYZ(i, PARKED, 0, PARKED);
   aPos.needsUpdate = true;
   aSize.needsUpdate = aTint.needsUpdate = aMotion.needsUpdate = true;
 
@@ -308,19 +321,78 @@ export function createMantas (scene, { scripted = false } = {}) {
      figure eight is retired (TRAIN_SLOTS 0) because the simulation owns your
      train, and its four wild singles are retired (WILD_COUNT 0) because the
      simulation owns 300 of them. */
-  const movers = createMovers({ aPos, aHead, aMotion, COUNT,
+  const makeMovers = () => createMovers({ aPos, aHead, aMotion, COUNT,
                                 RIVAL_TRAINS, RIVAL_LEN,
                                 WILD_COUNT: scripted ? 4 : 0, RIVAL_LEN: RIVAL_SCRIPT_LEN,
                                 RIVAL_TRAINS: scripted ? 3 : 0,
                                 TRAIN_SLOTS: scripted ? 5 : 0, RIVAL_BASE });
-  const { update, setBounds, setCentre, setFree, isFree } = movers;
+  let movers = makeMovers();
+  let lastBounds = null, lastCentre = null;
+  const update = secs => movers.update(secs);
+  const setBounds = v => { lastBounds = v; movers.setBounds(v); };
+  const setCentre = (x, z) => { lastCentre = [x, z]; movers.setCentre(x, z); };
+  const setFree = (i, st) => movers.setFree(i, st);
+  const isFree = i => movers.isFree(i);
+
+  /* GROWING THE POOL. r186 fixes an InstancedMesh's matrix buffer at the
+     size it was built with, and the material's attribute nodes hold the
+     attribute objects themselves. So growing is: larger attributes holding
+     the old contents, the material's nodes pointed at them, and new meshes
+     built at the new size in place of the old. It doubles, so it is rare. */
+  const growHooks = [];
+  function grow (need) {
+    let cap2 = cap;
+    while (cap2 < need) cap2 *= 2;
+    const bigger = (a, size) => {
+      const b = new InstancedBufferAttribute(new Float32Array(cap2 * size), size).setUsage(DynamicDrawUsage);
+      b.array.set(a.array);
+      return b;
+    };
+    aPos = bigger(aPos, 3); aHead = bigger(aHead, 1); aSize = bigger(aSize, 1);
+    aMotion = bigger(aMotion, 3); aTint = bigger(aTint, 3);
+    for (let i = cap; i < cap2; i++) {
+      aPos.setXYZ(i, PARKED, 0, PARKED); aSize.setX(i, FOLLOWER_SIZE); aMotion.setX(i, (i * 1.37) % TAU);
+      roles.push(spillRole());
+    }
+    for (const [node, attr] of [[nPos, aPos], [nHead, aHead], [nSize, aSize], [nMotion, aMotion], [nTint, aTint]]) {
+      node.value = attr; node.attribute = attr;
+    }
+    colours.grow(aTint, roles);
+    const drawn = mesh.count;
+    const mesh2 = new InstancedMesh(geometry, material, cap2);
+    const shadow2 = new InstancedMesh(geometry, shadowMaterial, cap2);
+    for (const m of [mesh2, shadow2]) {
+      m.frustumCulled = false;
+      for (let i = 0; i < cap2; i++) m.setMatrixAt(i, I);
+      m.instanceMatrix.needsUpdate = true;
+      m.count = drawn;
+    }
+    scene.remove(mesh); scene.add(mesh2);
+    const sp = shadowMesh.parent;                 // the shadow pass's own scene
+    if (sp) { sp.remove(shadowMesh); sp.add(shadow2); }
+    mesh = mesh2; shadowMesh = shadow2; cap = cap2;
+    movers = makeMovers();
+    if (lastBounds) movers.setBounds(lastBounds);
+    if (lastCentre) movers.setCentre(lastCentre[0], lastCentre[1]);
+    for (const fn of growHooks) fn();
+  }
+  /* Room for n instances, drawing exactly n. */
+  function ensure (n) {
+    if (n > cap) grow(n);
+    mesh.count = n; shadowMesh.count = n;
+  }
 
   const isWild = i => roles[i].wild === true;
 
   /* aPos and aHead are exposed so a test can drive update() across a whole
      cycle and measure the gaps, which is the only honest way to check the
      spacing. */
-  return { mesh, shadowMesh, update, setBounds, setCentre, count: COUNT, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS, PARKED, aPos, aHead, aSize, aTint, aMotion, vertexBuffers, isWild,
+  return { get mesh () { return mesh; }, get shadowMesh () { return shadowMesh; }, update, setBounds, setCentre,
+           count: COUNT, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS, PARKED, SPILL_BASE,
+           get aPos () { return aPos; }, get aHead () { return aHead; }, get aSize () { return aSize; },
+           get aTint () { return aTint; }, get aMotion () { return aMotion; }, vertexBuffers, isWild,
+           ensure, get capacity () { return cap; }, get drawn () { return mesh.count; },
+           onGrow: fn => growHooks.push(fn),
            rollColours: colours.rollColours, reroll: colours.reroll,
            get colours () { return colours.colours; }, get seed () { return colours.seed; },
            gainFor: colours.gainFor, adoptOwn: colours.adoptOwn, wearTrain: colours.wearTrain,
@@ -328,7 +400,7 @@ export function createMantas (scene, { scripted = false } = {}) {
            setTintScale: colours.setTintScale, getTintScale: colours.getTintScale,
            setCutMix: colours.setCutMix, getCutMix: colours.getCutMix,
            ownColour: colours.ownColour,
-           pathLength: movers.pathLength, spacing: movers.spacing,
+           get pathLength () { return movers.pathLength; }, get spacing () { return movers.spacing; },
            /* The outline, so a test can measure what was built against the
               table it was built from rather than against a picture of it. */
            shape: { HEAD_FRONT, BODY_BACK, TAIL_LEN, TAIL_W0, TAIL_W1, STATIONS } };

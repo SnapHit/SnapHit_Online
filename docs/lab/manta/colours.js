@@ -74,6 +74,7 @@ export function gainFor (key) {
 }
 
 export function createColours ({ COUNT, roles, aTint, rivals, wilds, train }) {
+  let n = COUNT;
   /* The deal. A seed per load, ?seed= to reproduce one, ?player= to pin the
      roll for a test. */
   const query = new URLSearchParams(location.search);
@@ -94,9 +95,9 @@ export function createColours ({ COUNT, roles, aTint, rivals, wilds, train }) {
      scattered manta "glows in that colour while it's up for grabs, until its
      own colour returns". */
   const ownTint = roles.map(() => [0, 0, 0]);
-  const tintScale = new Float32Array(COUNT).fill(1);
+  let tintScale = new Float32Array(COUNT).fill(1);
   /* 0 wears its train's colour, 1 wears its own. Only the cut moves it. */
-  const cutMix = new Float32Array(COUNT);
+  let cutMix = new Float32Array(COUNT);
 
   function applyTint (i) {
     const a = baseTint[i], b = ownTint[i], m = cutMix[i], k = tintScale[i];
@@ -109,7 +110,7 @@ export function createColours ({ COUNT, roles, aTint, rivals, wilds, train }) {
   function rollColours (newSeed) {
     if (newSeed !== undefined) seed = newSeed >>> 0;
     dealt = deal({ seed, pinned, coolWild: P.coolWild >= 0.5, rivals, wilds, train });
-    for (let i = 0; i < COUNT; i++) {
+    for (let i = 0; i < n; i++) {
       const r = roles[i];
       let t, own;
       if (r.kind === 'train') {
@@ -160,6 +161,22 @@ export function createColours ({ COUNT, roles, aTint, rivals, wilds, train }) {
     applyTint(i);
   }
 
+  /* THE POOL GREW (mantas.js): a new tint buffer, more roles. Every slot's
+     state carries over and is written into the new buffer; the new slots
+     start in their role's colour until follow.js dresses them. */
+  function grow (newTint, newRoles) {
+    aTint = newTint; roles = newRoles;
+    const n2 = newRoles.length;
+    const ts = new Float32Array(n2).fill(1); ts.set(tintScale); tintScale = ts;
+    const cm = new Float32Array(n2); cm.set(cutMix); cutMix = cm;
+    for (let i = n; i < n2; i++) {
+      const t = baseTintFor(dealt.wilds[newRoles[i].idx].hex);
+      newRoles[i].tint = t; baseTint[i] = t.slice(); ownTint[i] = t.slice();
+    }
+    n = n2;
+    for (let i = 0; i < n; i++) applyTint(i);
+  }
+
   /* 0 is the random roll; 1 to 7 pin one of the palette's colours. */
   function pinnedFromParam () {
     const n = Math.round(P.player);
@@ -177,7 +194,7 @@ export function createColours ({ COUNT, roles, aTint, rivals, wilds, train }) {
     setCutMix,
     getCutMix: i => cutMix[i],
     ownColour: i => ownTint[i].slice(),
-    gainFor, adoptOwn, wearTrain,
+    gainFor, adoptOwn, wearTrain, grow,
     get colours () { return dealt; },
     get seed () { return seed; },
   };
