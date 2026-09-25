@@ -164,12 +164,15 @@ export function createFollow (ctx) {
       }
       /* A scattered manta keeps its train's size while it glows and shrinks
        back to a wild 20 exactly as its own colour returns. */
-    const mixL = q.loose ? looseMix(q) : 0;
-    const wantW = sizeFor(mixL, ctx.sim.params);
-    if (m.aSize.getX(slot) !== wantW) { m.aSize.setX(slot, wantW); sizeDirty = true; }
-    if (glowing) m.setTintScale(slot, 1 + 1.2 * (q.glow / ctx.sim.params.scatterGlow));
+      /* SINKING IS DRAWN AS LEAVING (ruling 3): dimming and shrinking away
+         over the sink time, because it can no longer be collected. */
+      const sp = ctx.sim.params, sink = q.alive && q.sinking > 0 ? Math.max(0.08, q.sinking / sp.drain) : 1;
+      const mixL = q.loose ? looseMix(q) : 0;
+      const wantW = sizeFor(mixL, sp) * (sink < 1 ? 0.35 + 0.65 * sink : 1);
+      if (m.aSize.getX(slot) !== wantW) { m.aSize.setX(slot, wantW); sizeDirty = true; }
+      const scale = glowing ? 1 + 1.2 * (q.glow / sp.scatterGlow) : (sink < 1 ? sink : 1);
+      if (scale !== 1) { m.setTintScale(slot, scale); wasScaled[slot] = 1; }
       else if (wasScaled[slot]) { m.setTintScale(slot, 1); wasScaled[slot] = 0; }
-      if (glowing) wasScaled[slot] = 1;
     }
     for (let i = lim; i < drawnWild; i++) m.aPos.setXYZ(WILD_BASE + i, PARKED, 0, PARKED);
     drawnWild = lim;

@@ -21,6 +21,11 @@ export function createRules (ctx) {
      any part of another train", and a cut asks "which part". */
   function partsOf (t) { return [t, ...t.followers]; }
 
+  /* COLLECTABLE FROM THE MOMENT IT IS IN THE WATER (ruling 3): the hash is
+     built before touches resolve, so a manta scattered this step went in
+     only on the next one, drawn for a frame before anyone could take it. */
+  function intoHash (m) { m.isWild = true; m.train = null; hash.add(m.x, m.z, m); }
+
   /* 6.3: a scattered manta glows in its old train's colour for a few seconds
      and joins the first leader to touch it; after that it is an ordinary wild
      manta again. It keeps the colour it owned before it ever joined. */
@@ -33,6 +38,7 @@ export function createRules (ctx) {
     let at = -1;
     for (let i = p.wildCount; i < wild.length; i++) if (!wild[i] || !wild[i].alive) { at = i; break; }
     if (at >= 0) wild[at] = m; else wild.push(m);
+    intoHash(m);
     return m;
   }
 
@@ -58,6 +64,7 @@ export function createRules (ctx) {
       let at = -1;
       for (let i = p.wildCount; i < wild.length; i++) if (!wild[i] || !wild[i].alive) { at = i; break; }
       if (at >= 0) wild[at] = m; else wild.push(m);
+      intoHash(m);
     }
     return dropped.length;
   }
@@ -108,7 +115,10 @@ export function createRules (ctx) {
   function cutAt (t, index, by = null) {
     const at = t.followers[index] || t;           // where it was touched
     const x = at.x, z = at.z;
-    const freed = scatter(t, index);
+    /* The cut train may not take its own loose followers back in the same
+       step: they go into the hash at once now, and its leader sits one
+       spacing from the first of them. One step, as before. */
+    const freed = scatter(t, index, 1 / 60);
     if (freed) {
       t.cut = 0.25;
       const now = ctx.now ? ctx.now() : 0;

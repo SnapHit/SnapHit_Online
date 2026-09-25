@@ -31,12 +31,18 @@ export function createBrain (ctx) {
      something you can watch on the phone. */
   const reachOf = t => 500 + t.greed * 2800;
   const lookOf = t => 140 + t.caution * 300;
+  /* Where this bot turns back from the reef. The reef push and the choice
+     of food use the same line, so no bot chases food it will not reach. */
+  const reefLine = t => p.arenaR - 300 - t.caution * 400;
 
   function pickGoal (t) {
     const reach = reachOf(t);
     let best = null, bd = reach;
     for (const w of ctx.wild) {
-      if (!w || !w.alive) continue;
+      if (!w || !w.alive || w.sinking > 0) continue;
+      /* NEVER PAST ITS OWN REEF LINE (ruling 6): food beyond where this bot
+         turns back from the reef is food it will circle and never reach. */
+      if (Math.hypot(w.x, w.z) > reefLine(t)) continue;
       /* Glowing scattered mantas are food like any other, the ones it has
          just cut loose included. The only ones it skips are those it may not
          take back yet: what it shed to pay for its own burst. */
@@ -87,7 +93,7 @@ export function createBrain (ctx) {
     /* THE REEF FIRST, because the reef ends the run. A cautious bot turns
        inward earlier; every bot turns eventually, and hard. */
     const r = Math.hypot(t.x, t.z) || 1e-6;
-    const edge = p.arenaR - 300 - t.caution * 400;
+    const edge = reefLine(t);
     if (r > edge) {
       const k = Math.min(1.8, (r - edge) / 220 + 0.35);
       gx += (-t.x / r) * k * 2.4;
@@ -165,5 +171,5 @@ export function createBrain (ctx) {
     return key;
   }
 
-  return { think, dealDials, reachOf, lookOf, crossingAhead };
+  return { think, dealDials, reachOf, lookOf, reefLine, crossingAhead };
 }

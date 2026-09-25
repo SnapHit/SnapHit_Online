@@ -56,7 +56,11 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   const spreadOf = () => {
     const rr = Math.max(200, p.arenaR - 320);
     const gap = Math.sqrt(Math.PI * rr * rr / Math.max(1, GROUPS));
-    return Math.min(520, Math.max(190, gap * p.groupSpread));
+    /* The cap scales with the lattice: 520 was sized for a 2,000-unit arena,
+       and at 4,000 with twenty mantas it packed each group two to a screen
+       while whole screens stood empty. Four tenths of the gap barely moves the
+       old arena: 520 becomes 533 at twenty mantas, and 120 is unchanged. */
+    return Math.min(Math.max(520, gap * 0.4), Math.max(190, gap * p.groupSpread));
   };
   const groups = [];
   for (let g = 0; g < GROUPS; g++) {
@@ -67,23 +71,19 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   const wild = [];
   const groupUsed = new Array(GROUPS).fill(0);
   function spawnWild (i, awayFrom) {
-    /* Away from every leader, so nothing pops into existence on top of the
-       player and is recruited in the same step. */
-    let x = 0, z = 0;
-    for (let tries = 0; tries < 12; tries++) {
-      /* Clear of the reef as well as of every leader: a manta that regrows
-         against the wall is one nobody can reach without crashing. */
-      const a = next() * TAU, r = Math.sqrt(next()) * (p.arenaR - 260);
-      x = Math.cos(a) * r; z = Math.sin(a) * r;
-      let ok = true;
-      for (const L of awayFrom) if (Math.hypot(x - L.x, z - L.z) < 400) { ok = false; break; }
-      if (ok) break;
-    }
-    /* Into a group with room in it, so a group stays 3 to 5 strong. */
-    let g = Math.floor(next() * GROUPS);
+    /* ON THE EVEN LATTICE (ruling 2). A regrown manta used to appear at a
+       random point and swim home, so the ocean refilled wherever the dice
+       fell. Now it appears in the group with the most room, at its own place
+       in that group, preferring groups clear of every leader so nothing pops
+       up on a nose and is recruited in the same step. */
+    const start = Math.floor(next() * GROUPS);
+    let g = start, best = -Infinity;
     for (let k = 0; k < GROUPS; k++) {
-      const q = (g + k) % GROUPS;
-      if (groupUsed[q] < groupCap[q]) { g = q; break; }
+      const q = (start + k) % GROUPS;
+      let clear = true;
+      for (const L of awayFrom) if (Math.hypot(groups[q].x - L.x, groups[q].z - L.z) < 400) { clear = false; break; }
+      const score = (groupCap[q] - groupUsed[q]) + (clear ? 100 : 0);
+      if (score > best) { best = score; g = q; }
     }
     groupUsed[g]++;
     /* A FRESH OBJECT, never the recruited one reused. The one that joined
@@ -92,9 +92,12 @@ export function createSim ({ seed = 1, params = {} } = {}) {
        inside the radius" unanswerable, because the recruit was alive again
        by the time anything looked. */
     const m = {};
-    m.x = x; m.z = z; m.head = next() * TAU; m.group = g;
+    m.head = next() * TAU; m.group = g;
     const oa = next() * TAU, orr = Math.sqrt(next()) * spreadOf();
     m.ox = Math.cos(oa) * orr; m.oz = Math.sin(oa) * orr;   // its place in the group
+    m.x = groups[g].x + m.ox; m.z = groups[g].z + m.oz;
+    const rr = Math.hypot(m.x, m.z), lim = p.arenaR - 260;  // clear of the reef
+    if (rr > lim) { m.x *= lim / rr; m.z *= lim / rr; }
     m.speed = 40 + next() * 30;
     m.glow = 0;                 // seconds left glowing in an old train's colour
     m.wasColour = -1;           // which train it was in, while it glows
@@ -323,7 +326,9 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     }
     if (!best) best = { x: 0, z: 0 };
     /* A new arena, if one was asked for while the last run was going. */
-    if (p.arenaRWanted && p.arenaRWanted !== p.arenaR) p.arenaR = p.arenaRWanted;
+    /* YOUR restart, not anybody's (ruling 5): bots restart all the time now
+       they grow and crash, and applying it then moved the wall under you. */
+    if (t === you && p.arenaRWanted && p.arenaRWanted !== p.arenaR) p.arenaR = p.arenaRWanted;
     t.x = best.x; t.z = best.z; t.head = next() * TAU;
     t.s = 0; t.followers.length = 0; t.bursting = false; t.burstOwed = 0;
     t.lastPeak = t.peak; t.peak = 0; t.runs++;
@@ -332,7 +337,9 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   }
 
   /* The living count, the drain and regrowth live in population.js. */
-  const { livingWild, drainSurplus, regrowWild } = createPopulation({ p, wild, you, trains, spawnWild });
+  const release = m => { if (!m.loose && m.group !== undefined) groupUsed[m.group] = Math.max(0, groupUsed[m.group] - 1); };
+  const { livingWild, ambientWild, debrisWild, drainSurplus, regrowWild } =
+    createPopulation({ p, wild, you, trains, spawnWild, release });
 
   function step () {
     const dt = STEP;
@@ -381,7 +388,9 @@ export function createSim ({ seed = 1, params = {} } = {}) {
         hash.add(f.x, f.z, f);
       }
     }
-    for (const m of wild) if (m.alive) { m.isWild = true; m.train = null; hash.add(m.x, m.z, m); }
+    /* A SINKING manta is leaving and is drawn as leaving; it is the one
+       state that cannot be collected, so it is not in the hash at all. */
+    for (const m of wild) if (m.alive && !(m.sinking > 0)) { m.isWild = true; m.train = null; hash.add(m.x, m.z, m); }
 
     resolveTouches();
     /* EVERY LEADER RECRUITS THE SAME WAY, bots and you alike. The scripted
@@ -399,7 +408,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   return {
     get time () { return time; },
     params: p, blooms, you, rivals, bots, botMix, brain, setBotCount, trains, input, step, wild, groups, hash, joinedAt,
-    liveWild: livingWild,
+    liveWild: livingWild, ambientWild, debrisWild,
     scatter, crash, cutAt, makeTrain, seedTrail, restart, events,
     get length () { return you.followers.length; },
     zoom: () => zoomFor(you.followers.length, p),
