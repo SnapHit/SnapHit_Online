@@ -1,8 +1,8 @@
 # Manta trains: design decisions
 
-Working title. Version 1.11, 23 September 2026 (1.11: the greybox's world, rules, bots and leaderboard built; every wild manta counts towards the target; the reef measured apart from moonlight; the greybox's tuned values; 1.10: a crash ends your run, as in slither; wild mantas fewer, smaller and slower to regrow; Nathan's steering values; 1.9: the look spike built and tuned, with its final values; a palette that keeps pink for the pink manta; the greybox plan updated for everything the spike learned; 1.8: every manta bright, as in slither, with warm colours freed from danger duty; your colour rolled at random each run, as in slither; the hierarchy measured for that; no round blobs in the ocean; 1.7: a seabed you can see, lit by moonlight that moves; wild mantas dark like the real animal, lighting up when they join a train; the hierarchy measured the new way round; and Nathan's final tuning; 1.6: a moonlit ocean where life makes the brightest light, the manta measured from a reference photo, electric lime for the player's train, a tighter bloom, and the WebGPU limits learned the hard way; 1.5: the look spike's tuned values, how the brightness hierarchy is measured, untinted bloom and no gold, a page-wide flash cap, three lessons for the greybox, and names for the wake, the sparkle and the bloom; 1.4: the Pixel 9 result and the 60 Hz budget, the repo's paths, automatic fallback, the camera's fixed view area and the decision not to minify; 1.3: the lab page, portrait-first layout, Three.js pinned at r186, Brief 0's scope and how this doc stays in sync; 1.2: WebGPU renderer, the look direction, the identity system and the build approach; 1.1: the prototype gets a cheap procedural look instead of grey shapes). Studio: SnapHit Studios (snap-hit.online). Owner: Nathan.
+Working title. Version 1.12, 25 September 2026 (1.12: the greybox built, with bots that give way, every manta drawn, crash debris that sinks away and set pieces that fire once, on screen; the simulation's acceptance tests measured; a burst cost set by measurement; 1.11: the greybox's world, rules, bots and leaderboard built; every wild manta counts towards the target; the reef measured apart from moonlight; the greybox's tuned values; 1.10: a crash ends your run, as in slither; wild mantas fewer, smaller and slower to regrow; Nathan's steering values; 1.9: the look spike built and tuned, with its final values; a palette that keeps pink for the pink manta; the greybox plan updated for everything the spike learned; 1.8: every manta bright, as in slither, with warm colours freed from danger duty; your colour rolled at random each run, as in slither; the hierarchy measured for that; no round blobs in the ocean; 1.7: a seabed you can see, lit by moonlight that moves; wild mantas dark like the real animal, lighting up when they join a train; the hierarchy measured the new way round; and Nathan's final tuning; 1.6: a moonlit ocean where life makes the brightest light, the manta measured from a reference photo, electric lime for the player's train, a tighter bloom, and the WebGPU limits learned the hard way; 1.5: the look spike's tuned values, how the brightness hierarchy is measured, untinted bloom and no gold, a page-wide flash cap, three lessons for the greybox, and names for the wake, the sparkle and the bloom; 1.4: the Pixel 9 result and the 60 Hz budget, the repo's paths, automatic fallback, the camera's fixed view area and the decision not to minify; 1.3: the lab page, portrait-first layout, Three.js pinned at r186, Brief 0's scope and how this doc stays in sync; 1.2: WebGPU renderer, the look direction, the identity system and the build approach; 1.1: the prototype gets a cheap procedural look instead of grey shapes). Studio: SnapHit Studios (snap-hit.online). Owner: Nathan.
 
-**Status:** concept locked. The look spike is built and tuned (Briefs 0 to 1J), and the greybox's world, rules, ten bots and leaderboard are live (Briefs 2A and 2B part one). The look spike's last two pass tests (a cheap Android, and three people) run alongside. The next step is Brief 2B part two: touch schemes B and C, the debug panel, and the acceptance tests the simulation can run (sections 10.2 and 10.3).
+**Status:** concept locked. The look spike is built and tuned (Briefs 0 to 1J). The greybox is built (Briefs 2A and 2B): the world, the four rules, ten bots, a leaderboard, touch schemes A, B and C, and a debug panel, and the acceptance tests the simulation can run have been measured (section 10.3). Still to run: the human acceptance tests, the cheap Android, and three people on the look. The next step is a clean playtest mode for those tests, then the choice between a solo release and multiplayer first (open decision 8).
 
 **How to use this file:** sections 1 to 9 record what was decided and why, section 10 is the build plan, and sections 11 to 15 cover risks, open decisions, parked ideas, terms and sources. Anything marked (P) is a proposed default to confirm in the greybox; everything else is decided.
 
@@ -170,7 +170,7 @@ Bursting and cutting
 Wild and scattered mantas
 
 - (D) Scattered mantas glow and join the first leader to touch them.
-- (P) The glow lasts a few seconds; after that they're ordinary wild mantas.
+- (P) The glow lasts a few seconds; anything nobody collects in that time sinks away, so a crash is a feast to race for, not a lasting change to the ocean.
 - (P) Every manta is worth one point of length, scattered or not; the pink manta is the exception.
 - (P) Wild mantas gather where plankton is densest. Plankton is scenery and an attractor, not something you collect (it was the resource in the rejected solo loop concept, which is why this needs saying).
 
@@ -359,7 +359,7 @@ Purpose: prove the four rules are fun and readable on a phone before anything el
 In scope:
 
 - A circular arena with a reef ring, and four static plankton blooms that draw wild mantas.
-- Wild mantas spread evenly across the ocean in small groups, drawn gently towards plankton blooms and regrowing slowly away from leaders. Every wild manta counts towards the target, scattered ones included, and a surplus drains away, so a crash can't inflate the ocean.
+- Wild mantas spread evenly across the ocean in small groups on a lattice, drawn gently towards plankton blooms and regrowing slowly away from leaders to their count. Crash and cut debris is separate from that count: it glows and can be collected, then sinks away, so crashes can neither empty nor flood the ocean. Under a crash every half second for a minute, the wild count held at 19 to 20 of 20, where counting debris against it had collapsed it to about 4.
 - Your leader and train, with recruiting, crashing, bursting, cutting and scattering, using the (P) defaults in 6.3.
 - Rival leader bots using the simple brain below.
 - A camera that follows your leader and zooms out as your train grows.
@@ -385,14 +385,14 @@ Starting parameters. These are guesses to tune on the phone. Units are world uni
 | Parameter | Start | Notes |
 |---|---|---|
 | Arena radius | 4,000 | Reef ring; tuned on the Pixel 9, taking effect from the next restart |
-| Cruise speed | 160 per second | Never zero; tuned on the Pixel 9 |
+| Cruise speed | 200 per second | Never zero; tuned on the Pixel 9 |
 | Burst speed | 340 per second | Tuned on the Pixel 9 |
-| Turn rate | 3.1 rad/s cruising, 4.1 rad/s bursting | A burst still carves a wider circle, about 83 units against 52 |
+| Turn rate | 4.0 rad/s cruising, 4.1 rad/s bursting | A burst still carves a wider circle, about 83 units against 50 |
 | Leader radius | 14 | |
 | Follower radius | 10 | |
 | Follower spacing | 19 | Along the leader's path, by arc length: as close as real chain-feeding mantas swim, and a continuous wall for coiling |
 | Recruit radius | 21 | Measured from the leader; tuned on the Pixel 9 |
-| Burst cost | 1 follower every 0.35 seconds | Taken from the tail |
+| Burst cost | 1 follower every 0.8 seconds (P) | Taken from the tail. In bot matches at 0.35, bots that never burst took first place about 60 percent of the time; 0.8 to 1.0 came closest to parity |
 | Scatter glow | 10 seconds | Then ordinary wild |
 | Death beat | 1.5 seconds | Then you start again |
 | Restart distance | At least 800 | From the crash, clear of every train |
@@ -410,6 +410,8 @@ Bot brain (one brain, three dials):
 - Every half second, pick a goal: the nearest reachable group of wild mantas, or a plankton bloom if none are close.
 - Steer towards the goal while avoiding the reef and any train segment ahead.
 - Burst to cut when a rival train crosses close ahead and the bot has enough followers to pay.
+- Give way to any leader closing ahead. Most bot crashes were two leaders meeting at the same food, and giving way cut crashes per bot per five minutes from about 13 to between 0.7 (timid) and 5.3 (bully).
+- Never pick food beyond its own turn-back line from the reef.
 - Each bot has three dials: greed (how far it chases wild mantas), caution (how early it avoids trains) and aggression (how often it bursts to cut). The greedy, timid and bully personalities are presets of these dials.
 
 Touch schemes to compare:
@@ -426,6 +428,8 @@ Implementation notes:
 - Every manta steers its heading and then moves along it. Never write a position as a function of time, or mantas crab sideways (the spike found 79.5 degrees off the nose after two minutes).
 - Set pieces run on a real clock, not the simulation's clamped delta, or they stall on slow devices; what moves inside them, like the scatter, still moves in scene time.
 - Put every leader and follower circle into a uniform spatial hash grid each step, so each leader only checks nearby cells.
+- Every simulated manta is drawn, and nothing solid is ever undrawn: the instance pool grows when trains outgrow their reserved slots. Long bot tails were once solid but invisible.
+- The simulation records each crash and each cut once, where it happened, and a set piece fires only if it is on screen. Events off screen spend none of the page-wide flash allowance.
 - Use a seeded random generator for everything from day one (layout, spawns, bot dials), so the daily ocean and challenge links need no refactor.
 - Run the simulation on a fixed timestep, separate from rendering.
 - Keep the simulation a plain module with no rendering imports, so tests can step it thousands of times a second in Node. The spike's headless browser draws at one or two frames a second, too slow to sample anything shorter than a frame, which is also why every set piece takes an injectable clock.
@@ -446,6 +450,8 @@ Implementation notes:
 7. **Smooth:** a steady 60 fps on Nathan's phone, on WebGPU and on the fallback.
 
 If tests 1 to 3 still fail after tuning, rethink the rules before any art.
+
+Measured in the simulation, bots only, over 50 to 100 seeds of five minutes (September 2026): test 3, an upset in every seed, about eight per five minutes; test 4, see the burst cost row in 10.2; test 6, a train at spacing 19 leaves no gap a leader can pass, and all 72 escape headings crash. Tests 1, 2, 5 and 7 need people and phones.
 
 ### 10.4 Before the first Claude Code brief
 
@@ -499,12 +505,12 @@ If tests 1 to 3 still fail after tuning, rethink the rules before any art.
 
 1. The game's name (working title: Manta trains).
 2. The pink manta's name and value.
-3. The touch control scheme (candidates in section 10.2).
+3. The touch control scheme: A, B and C are built; choose after the human playtests.
 4. Every (P) default in section 6.3.
 5. Event frequency and the whale shark's exact behaviour.
 6. Clip length and video format.
 7. Where the game sits on snap-hit.online.
-8. Whether and when to add live rooms (an invariant change).
+8. Whether and when to add live rooms (an invariant change). Costed in September 2026: a solo release first takes two or three sessions; multiplayer first takes six to ten more, a paid Cloudflare plan and a change to the no-server rule.
 9. Whether to add cyclone netting after launch (section 13).
 10. The six archetypes and how each is computed.
 11. The secret names list and what each unlocks.
