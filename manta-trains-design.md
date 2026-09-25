@@ -1,8 +1,8 @@
 # Manta trains: design decisions
 
-Working title. Version 1.12, 25 September 2026 (1.12: the greybox built, with bots that give way, every manta drawn, crash debris that sinks away and set pieces that fire once, on screen; the simulation's acceptance tests measured; a burst cost set by measurement; 1.11: the greybox's world, rules, bots and leaderboard built; every wild manta counts towards the target; the reef measured apart from moonlight; the greybox's tuned values; 1.10: a crash ends your run, as in slither; wild mantas fewer, smaller and slower to regrow; Nathan's steering values; 1.9: the look spike built and tuned, with its final values; a palette that keeps pink for the pink manta; the greybox plan updated for everything the spike learned; 1.8: every manta bright, as in slither, with warm colours freed from danger duty; your colour rolled at random each run, as in slither; the hierarchy measured for that; no round blobs in the ocean; 1.7: a seabed you can see, lit by moonlight that moves; wild mantas dark like the real animal, lighting up when they join a train; the hierarchy measured the new way round; and Nathan's final tuning; 1.6: a moonlit ocean where life makes the brightest light, the manta measured from a reference photo, electric lime for the player's train, a tighter bloom, and the WebGPU limits learned the hard way; 1.5: the look spike's tuned values, how the brightness hierarchy is measured, untinted bloom and no gold, a page-wide flash cap, three lessons for the greybox, and names for the wake, the sparkle and the bloom; 1.4: the Pixel 9 result and the 60 Hz budget, the repo's paths, automatic fallback, the camera's fixed view area and the decision not to minify; 1.3: the lab page, portrait-first layout, Three.js pinned at r186, Brief 0's scope and how this doc stays in sync; 1.2: WebGPU renderer, the look direction, the identity system and the build approach; 1.1: the prototype gets a cheap procedural look instead of grey shapes). Studio: SnapHit Studios (snap-hit.online). Owner: Nathan.
+Working title. Version 1.12, 25 September 2026 (1.12: the greybox built, with bots that give way, every manta drawn, crash debris that sinks away and set pieces that fire once, on screen; the simulation's acceptance tests measured; burst cost set to 1.0 seconds; live rooms decided, and built before the human playtests; 1.11: the greybox's world, rules, bots and leaderboard built; every wild manta counts towards the target; the reef measured apart from moonlight; the greybox's tuned values; 1.10: a crash ends your run, as in slither; wild mantas fewer, smaller and slower to regrow; Nathan's steering values; 1.9: the look spike built and tuned, with its final values; a palette that keeps pink for the pink manta; the greybox plan updated for everything the spike learned; 1.8: every manta bright, as in slither, with warm colours freed from danger duty; your colour rolled at random each run, as in slither; the hierarchy measured for that; no round blobs in the ocean; 1.7: a seabed you can see, lit by moonlight that moves; wild mantas dark like the real animal, lighting up when they join a train; the hierarchy measured the new way round; and Nathan's final tuning; 1.6: a moonlit ocean where life makes the brightest light, the manta measured from a reference photo, electric lime for the player's train, a tighter bloom, and the WebGPU limits learned the hard way; 1.5: the look spike's tuned values, how the brightness hierarchy is measured, untinted bloom and no gold, a page-wide flash cap, three lessons for the greybox, and names for the wake, the sparkle and the bloom; 1.4: the Pixel 9 result and the 60 Hz budget, the repo's paths, automatic fallback, the camera's fixed view area and the decision not to minify; 1.3: the lab page, portrait-first layout, Three.js pinned at r186, Brief 0's scope and how this doc stays in sync; 1.2: WebGPU renderer, the look direction, the identity system and the build approach; 1.1: the prototype gets a cheap procedural look instead of grey shapes). Studio: SnapHit Studios (snap-hit.online). Owner: Nathan.
 
-**Status:** concept locked. The look spike is built and tuned (Briefs 0 to 1J). The greybox is built (Briefs 2A and 2B): the world, the four rules, ten bots, a leaderboard, touch schemes A, B and C, and a debug panel, and the acceptance tests the simulation can run have been measured (section 10.3). Still to run: the human acceptance tests, the cheap Android, and three people on the look. The next step is a clean playtest mode for those tests, then the choice between a solo release and multiplayer first (open decision 8).
+**Status:** concept locked. The look spike is built and tuned (Briefs 0 to 1J). The greybox is built (Briefs 2A and 2B): the world, the four rules, ten bots, a leaderboard, touch schemes A, B and C, and a debug panel, and the acceptance tests the simulation can run have been measured (section 10.3). Next: live rooms (10.6), decided in September 2026 and built before any human playtests, so testers play each other from their first swim. The human acceptance tests, the cheap Android and three people on the look then run on the multiplayer build.
 
 **How to use this file:** sections 1 to 9 record what was decided and why, section 10 is the build plan, and sections 11 to 15 cover risks, open decisions, parked ideas, terms and sources. Anything marked (P) is a proposed default to confirm in the greybox; everything else is decided.
 
@@ -237,11 +237,11 @@ All of it is cosmetic or social; the four rules and the five-point test are unto
 
 Matched or beaten: upsets (two routes), death feeds the living (a glowing swarm), a price on power, constant motion and coiling, a chase target (the pink manta), identity (catalogued mantas, crews, secret names and friends' mantas), look (a moonlit ocean where life makes the brightest light), and restart (the crash card).
 
-Slither's weak spots beaten: lag (none with bots on a static site), ads (none, since zero external requests rules them out, and nothing to buy), names (nobody sees a name you didn't share), replay value (daily ocean and events).
+Slither's weak spots beaten: lag (rooms send only each leader's path, the server runs the same simulation as the phone, and solo play has none), ads (none, since zero external requests rules them out, and nothing to buy), names (nobody sees a name you didn't share), replay value (daily ocean and events).
 
 Can't copy, and the substitute:
 
-- Real humans: friends' mantas carried in by links and driven by bots tuned to how their owners play, plus bots with personalities and honest tags; live rooms later as a deliberate decision.
+- Real humans: friends' mantas carried in by links and driven by bots tuned to how their owners play, plus bots with personalities and honest tags, and live rooms full of bots that people replace as they join (10.6).
 - Nostalgia: the "wait, mantas really do that?" facts.
 - App stores and 2016 YouTube: the built-in clip button and loud money shots (the cut, the crash, the coil).
 
@@ -251,7 +251,7 @@ Technical (the repo's CLAUDE.md invariants apply):
 
 - Static site on Cloudflare Workers Static Assets, deployed from GitHub (SnapHit/SnapHit_Online).
 - Zero external requests: no ad networks, analytics, external fonts, CDNs or third-party scripts. Everything ships in the repo.
-- No Worker script in wrangler.jsonc. Live rooms would need a Worker with Durable Objects, so they're a deliberate invariant change, not v1.
+- One Worker, for Manta trains' live rooms only, with a Durable Object per room. It runs on snap-hit.online itself, so zero external requests still holds, and everything else stays static. This changes CLAUDE.md's no-Worker invariant deliberately (September 2026).
 - Renderer: WebGPU through Three.js's WebGPURenderer with TSL shaders, falling back to WebGL2 automatically. Three.js is pinned at r186 (npm three 0.186.0, released 8 September 2026) and copied into the repo with its licence file, never loaded from a CDN. Its unminified build carries its own JSDoc, so the vendored files double as version-exact API docs.
 - The prototype lives at snap-hit.online/lab/manta/: a standalone page, not linked from the arcade shelf, marked noindex, and not embedded in a cabinet until launch.
 - Repo paths: the site is served from docs/, so the page is docs/lab/manta/, Three.js is docs/vendor/three/r186/, and this doc sits at the repo root, outside docs/, so it is never served. CLAUDE.md carries the lab's bounded exception to the one-file rule, plus the storage, vendoring and real-device rules that follow from it.
@@ -285,14 +285,15 @@ Workflow:
 
 1. **Look spike:** one screen, no gameplay: the ocean, light memory, bloom and ten mantas swimming, on WebGPU and the WebGL2 fallback, at 60 fps on Nathan's phone (spec in 10.2). Built and tuned on the Pixel 9 in Briefs 0 to 1J.
 2. **Greybox prototype:** the four rules on the look spike's rendering pipeline, tuned on Nathan's phone (spec in 10.2).
-3. **Playtest and tune:** run the acceptance tests (10.3), then settle the (P) defaults and the touch scheme.
-4. **Art pass:** the full lighting model in 7.2, set pieces for the cut, crash and coil, and audio.
-5. **Identity and share layer:** catalogued mantas, secret names, crews, archetypes, marks, the manta card, challenge links that carry mantas, friends in your ocean, the passport, the crash card, personal bests and the daily ocean.
-6. **Variety:** bot personalities, blooms as events, the whale shark and the pink manta.
-7. **Clip button:** built last because of Apple's canvas recording history.
-8. **Launch** on snap-hit.online.
+3. **Live rooms:** people play each other in rooms kept full by bots, with solo play one tap away (spec in 10.6).
+4. **Playtest and tune:** run the acceptance tests (10.3) on the multiplayer build with testers playing at the same time, then settle the (P) defaults and the touch scheme.
+5. **Art pass:** the full lighting model in 7.2, set pieces for the cut, crash and coil, and audio.
+6. **Identity and share layer:** catalogued mantas, secret names, crews, archetypes, marks, the manta card, challenge links that carry mantas, friends in your ocean, the passport, the crash card, personal bests and the daily ocean.
+7. **Variety:** bot personalities, blooms as events, the whale shark and the pink manta.
+8. **Clip button:** built last because of Apple's canvas recording history.
+9. **Launch** on snap-hit.online.
 
-Later: the live rooms decision, and compute-driven living water for WebGPU devices.
+Later: compute-driven living water for WebGPU devices.
 
 ### 10.2 Milestones 1 and 2: look spike and greybox spec
 
@@ -392,7 +393,7 @@ Starting parameters. These are guesses to tune on the phone. Units are world uni
 | Follower radius | 10 | |
 | Follower spacing | 19 | Along the leader's path, by arc length: as close as real chain-feeding mantas swim, and a continuous wall for coiling |
 | Recruit radius | 21 | Measured from the leader; tuned on the Pixel 9 |
-| Burst cost | 1 follower every 0.8 seconds (P) | Taken from the tail. In bot matches at 0.35, bots that never burst took first place about 60 percent of the time; 0.8 to 1.0 came closest to parity |
+| Burst cost | 1 follower every 1.0 seconds | Taken from the tail. Tuned on the Pixel 9. In bot matches at 0.35, bots that never burst took first place about 60 percent of the time; at 1.0, never bursting and bursting took it 47 and 45 percent |
 | Scatter glow | 10 seconds | Then ordinary wild |
 | Death beat | 1.5 seconds | Then you start again |
 | Restart distance | At least 800 | From the crash, clear of every train |
@@ -457,7 +458,7 @@ Measured in the simulation, bots only, over 50 to 100 seeds of five minutes (Sep
 
 - Confirm how existing cabinet games are structured in SnapHit/SnapHit_Online: single file or folder, shared components, how cabinets embed a game, how keyboard focus and pausing are handled, and whether there's a build step (Brief 0).
 - Dev-only path: decided, /lab/manta/ (section 9).
-- Confirm on-device storage is acceptable under CLAUDE.md (Brief 0; needed from milestone 5).
+- Confirm on-device storage is acceptable under CLAUDE.md (Brief 0; needed from milestone 6).
 - Pin a Three.js release: decided, r186. Brief 0 copies its WebGPU build and TSL addons into the repo. The API changes between releases (by r186, PostProcessing has been renamed RenderPipeline), so every brief requires checking Three.js and TSL names against the vendored files rather than memory or online examples.
 - Commit this doc to the repo outside the served folder, so briefs can point at it instead of pasting it (Brief 0).
 - Add a bare diagnostics page at /lab/manta/ that reports the active backend, frame rate and time to first frame, and can force the fallback; the look spike grows out of it (Brief 0).
@@ -474,6 +475,52 @@ Measured in the simulation, bots only, over 50 to 100 seeds of five minutes (Sep
 - One source of truth: this doc lives in project knowledge and in the repo, outside the served folder. Each new version is uploaded by hand to both, and the next brief gives Claude Code the hash to check the repo copy against, so the two can never drift.
 - Nathan sends screenshots and screen recordings to the architect chat, which turns what looks off into the next brief.
 
+### 10.6 Milestone 3: live rooms spec
+
+Decided in September 2026: live rooms come before the human playtests. (P) marks a default to confirm in testing.
+
+Shape:
+
+- A room is one ocean as tuned: arena radius 4000, 20 wild mantas and 11 mantas in all. (P) Each person who joins replaces a bot, and bots refill the room as people leave, so a room is never empty or overfull. A full room opens another.
+- Opening the page joins the public room. A private room has its own link.
+- Solo play, the game against bots on the phone alone, stays one tap away. It is the fallback when the server is down, and the comparison that separates rule problems from network ones in feedback.
+- Names are generated, never typed, so there is nothing to moderate.
+
+Server:
+
+- One Cloudflare Worker, for rooms only, with one Durable Object per room.
+- The room runs the existing simulation unchanged, as the referee: bots, recruiting, crashes, cuts and bursts are all decided there.
+- Phones send only what the player does, steering and burst, and only when it changes, up to 20 times a second (P).
+- The room sends every phone a snapshot 20 times a second (P): each leader's position and its new path points, train lengths, and events (recruits, crashes, cuts, wild mantas appearing and sinking). Followers are rebuilt on each phone from the same path points, so every phone draws each train where the server has it.
+- A room with no people in it shuts down and costs nothing while idle.
+
+On the phone:
+
+- Your own leader moves the instant you steer (prediction), and eases back to the server's position when they differ.
+- Rival leaders are drawn a fraction of a second in the past, smoothly between snapshots (interpolation).
+- Crashes and cuts happen when the server says, and the set pieces play from its events.
+- Cuts are judged where the server has the trains. If they feel unfair on mobile data, the fix is lag compensation: judging your leader against rival trains as your phone showed them. Measure before building it.
+
+Tuning:
+
+- Look settings stay on each phone.
+- Gameplay settings belong to the room, because a shared ocean needs one set of rules. Public rooms run Nathan's values, which he changes live with an admin key. A private room's creator tunes it for everyone in it, which keeps tuning in the feedback loop.
+
+Dropped connections: (P) when a phone drops, a bot holds its manta for 15 seconds, labelled as a bot. Reconnect in time and it's yours again.
+
+Cost: Cloudflare's free plan covers development, where one room busy all day uses about 10,800 of its 13,000 GB-seconds a day. Before the public feedback release, move to Workers Paid (a US$5 a month minimum) with a usage alert.
+
+Privacy: a one-paragraph note on the page saying the room server sees your connection and what your manta does, and the game keeps none of it after the room closes.
+
+Acceptance:
+
+- Fake players in Node fill rooms, join, leave and drop, and every phone's trains match the server's.
+- Round trips from the Pixel 9 are measured on wifi and on mobile data, and your own leader never visibly jumps.
+- Nathan and at least two others share a room, some on mobile data. A deliberate cut lands and feels fair to both players.
+- Solo play works with the server switched off.
+
+Build order, about six to ten sessions: the server skeleton, live; the room runs the simulation and phones watch it; phones play, with prediction and smoothing; rooms fill, empty and reconnect, with private rooms and the admin key; then a tester build with a clean playtest mode and session stats, tested by several people at once.
+
 ## 11. Risks and mitigations
 
 - **It reads as slither with mantas.** Individual wingbeats, instant break-up on cuts and crashes, the glow, and the cut as the signature move; the pitch and name lead with herding, not steering.
@@ -483,7 +530,10 @@ Measured in the simulation, bots only, over 50 to 100 seeds of five minutes (Sep
 - **Crash self-recovery.** You start again at least 800 units away, so you can never swim back and collect your own scattered train.
 - **Snowballing.** Only leaders recruit, big trains are big targets, plankton blooms and events redistribute mantas, and wild mantas regrow slowly, so a train can only grow as fast as the ocean refills. The first greybox build held 300 wild mantas by respawning each one instantly, and trains grew to ridiculous lengths within minutes.
 - **Performance on mid-range phones.** Spatial hashing, object pooling and capped counts.
-- **No real humans online.** Challenge links, the daily ocean and clips now; live rooms later.
+- **No real humans online.** Live rooms kept full by bots that people replace, plus challenge links, the daily ocean and clips.
+- **Lag makes cuts feel unfair.** The server judges every cut from one shared ocean, your own leader is predicted, rivals are smoothed, and lag compensation is the measured next step (10.6).
+- **Feedback mixes the rules with the network.** Solo play stays one tap away in the tester build, so a complaint that holds in solo is about the rules.
+- **Server costs or outages.** Rooms shut down when empty, a usage alert watches the bill, and solo play works with the server off.
 - **Canvas recording bugs on Apple devices.** Feature-detect, hide the clip button where it fails, and build it last.
 - **A weak name.** Pick a one-word name that says the verb before launch.
 - **WebGPU coverage and fallback quality.** Design the signature look for the WebGL2 fallback, keep a toggle that forces it, and test both at every milestone.
@@ -510,7 +560,7 @@ Measured in the simulation, bots only, over 50 to 100 seeds of five minutes (Sep
 5. Event frequency and the whale shark's exact behaviour.
 6. Clip length and video format.
 7. Where the game sits on snap-hit.online.
-8. Whether and when to add live rooms (an invariant change). Costed in September 2026: a solo release first takes two or three sessions; multiplayer first takes six to ten more, a paid Cloudflare plan and a change to the no-server rule.
+8. Live rooms: decided in September 2026, built before the human playtests (10.6). Still open: its (P) defaults.
 9. Whether to add cyclone netting after launch (section 13).
 10. The six archetypes and how each is computed.
 11. The secret names list and what each unlocks.
@@ -533,7 +583,6 @@ Rejected for this game:
 - **Ads:** they'd break zero external requests, and they were slither's most criticised feature.
 - **A skin menu:** replaced by name-generated patterns.
 - **A death screen:** replaced by the crash card.
-- **Live multiplayer in v1:** it breaks the invariants and faces an empty-arena cold start.
 - **Canvas 2D:** fine for half decent, but it can't reach stunning.
 - **A custom WebGL2 renderer:** lean and universal, but no WebGPU path without a rewrite.
 - **A custom WebGPU renderer with a hand-written WebGL2 fallback:** every shader written twice.
