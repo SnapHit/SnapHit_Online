@@ -28,7 +28,7 @@ import { createMotion } from './motion.js';
 export const PROTOCOL = 1;
 export const SNAP_HZ = 20;
 export const MARGIN = 400;               // units beyond the view a phone is sent
-export const PATH_STEP = 6;              // path points at least this far apart
+export const PATH_STEP = 8;              // path points at least this far apart (0.2 units of curve error at the tightest turn)
 
 const r1 = v => Math.round(v * 10) / 10;
 const r2 = v => Math.round(v * 100) / 100;
@@ -68,7 +68,7 @@ export function snapFor (sim, phone, n, events) {
   for (let i = 0; i < sim.wild.length; i++) {
     const w = sim.wild[i];
     if (!w || !w.alive || !near(view, w.x, w.z)) continue;
-    wd.push([i, r1(w.x), r1(w.z), r2(w.head), (w.loose ? 1 : 0) | (w.sinking > 0 ? 2 : 0), w.glow > 0 ? w.wasColour : -1]);
+    wd.push([i, r1(w.x), r1(w.z), r1(w.head), (w.loose ? 1 : 0) | (w.sinking > 0 ? 2 : 0), w.glow > 0 ? w.wasColour : -1]);
   }
   const ev = [];
   for (const e of events) if ((e.kind === 'crash' || e.kind === 'cut') && near(view, e.x, e.z)) ev.push({ k: e.kind, x: r1(e.x), z: r1(e.z) });

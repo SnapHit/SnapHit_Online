@@ -37,7 +37,6 @@ import { createDrawer } from './drawer.js';
 import { createStamper } from './stamp.js';
 import { rollSummary, wildSplit } from './roll.js';
 import { createFollow } from './follow.js';
-import { createRoomView } from './roomview.js';
 
 const query = new URLSearchParams(location.search);
 /* ?fx=off builds the page without the light memory, the plankton or anything
@@ -120,6 +119,9 @@ if (shadows) shadows.attach(mantas.shadowMesh);
    The loop copies them in before the first step, but the first ocean was
    already spawned by then: 120 wild mantas for a wild count of 20, and the
    100 extra were never drained. The same mapping the Node tests use. */
+/* The room modules load only in watch mode (3D): without ?room nothing new
+   is fetched, run or connected, and the solo lab is exactly as it was. */
+const createRoomView = ROOM ? (await import('./roomview.js')).createRoomView : null;
 const sim = SPIKE ? null : ROOM ? createRoomView({ room: ROOM, build: panel.BUILD, view }) : createSim({ seed: mantas.seed, params: {
   cruise: P.cruise, burst: P.burstSpeed, turnCruise: P.turnCruise, turnBurst: P.turnBurst,
   recruitR: P.recruitR, spacing: P.spacing, wildCount: P.wildCount, regrow: P.regrow,
@@ -276,7 +278,7 @@ function advance (now, dt) {
   if (sim && ROOM) {
     /* Watch mode: no steps and no drawer values. The room's clock is real
        time, so the mirror lays out its snapshots once a frame on its own. */
-    sim.step(dt);
+    sim.step(dt, dbg.rate === 0, owed);   // Pause and Step hold what is drawn
     uArenaR.value = sim.params.arenaR;
   } else if (sim) {
     /* Steps of exactly 1/60, capped so a long pause does not fast-forward

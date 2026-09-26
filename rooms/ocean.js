@@ -88,7 +88,8 @@ export function createOcean (env, url) {
       phone.view = viewOf(m.view); phone.watch = Number.isInteger(m.watch) ? m.watch : -1;
       phone.debug = !!(m.debug && phone.local);   // truth for tests, only under wrangler dev
       phone.sent.clear(); phone.board = null; phone.ready = true;
-      ws.send(JSON.stringify({ t: 'init', build, seed, params: sim.params, time: sim.time, steps }));
+      ws.send(JSON.stringify({ t: 'init', build, seed, params: sim.params, time: sim.time, steps,
+        kinds: sim.rivals.map(t => [t.id, t.kind || 'bot']) }));
       start();
     },
     get stepping () { return timer !== null; },

@@ -103,7 +103,10 @@ export function createRoomView ({ room, build, params: start, view }) {
 
   function receive (m) {
     if (m.t === 'reload') { stopped = true; clearTimeout(retry); try { ws.close(); } catch (_) {} ws = null; connected = false; showSignal(); showReload(); return; }
-    if (m.t === 'init') { Object.assign(params, m.params || {}); resync(); connected = true; backoff = 0.5; viewDirty = true; showSignal(); return; }
+    if (m.t === 'init') { Object.assign(params, m.params || {}); resync();
+      /* Every bot's kind, once on joining, so the board says timid, greedy or
+         bully for bots that have never been near you (3D). */
+      for (const [id, k] of m.kinds || []) kinds.set(id, k); connected = true; backoff = 0.5; viewDirty = true; showSignal(); return; }
     if (m.t === 'pong') { rtt = performance.now() - m.c; showSignal(); return; }
     if (m.t === 'snap') snap(m);
   }
@@ -166,12 +169,21 @@ export function createRoomView ({ room, build, params: start, view }) {
   const holes = [];
   const hole = i => holes[i] || (holes[i] = { id: -2 - i, hole: true, dead: 1, x: 0, z: 0, head: 0, followers: [] });
 
-  function step (dt) {
+  /* The debug block's Pause and Step (3D): paused, what is drawn holds at one
+     moment and Step moves it on by one step; the room carries on regardless,
+     and unpausing returns to live. */
+  let held = null;
+  function step (dt, paused = false, owed = 0) {
     const now = performance.now() / 1000;
     mirror.time = now;                       // monotonic: the board's throttle and the join fade read it
     tick(now);
     if (!snaps.length || offset === null || stopped) return;
-    const T = now - offset - delay;
+    let T = now - offset - delay;
+    if (paused) {
+      if (held === null) held = T;
+      if (!(owed > 0)) return;              // held: nothing moves until Step
+      held += owed; T = held; dt = owed;
+    } else held = null;
     let A = snaps[0], B = snaps[0];
     if (T >= snaps[snaps.length - 1].time) A = B = snaps[snaps.length - 1];
     else for (let i = 0; i + 1 < snaps.length; i++) if (snaps[i + 1].time > T) { A = snaps[i]; B = snaps[i + 1]; break; }
@@ -198,19 +210,16 @@ export function createRoomView ({ room, build, params: start, view }) {
       t.followers.length = len;
       if (len) core.placeFollowers(t);
     }
-    /* Each train keeps its index while it is in view, so it keeps its colour;
-       a gap is a parked stand-in. The watched train takes index 0, the one
-       stamp.js gives a wake. */
-    for (let i = 0; i < rivals.length; i++) if (!rivals[i].hole && !B.tr.has(rivals[i].id)) rivals[i] = hole(i);
-    const placed = new Set(rivals.map(r => r.id));
+    /* Every bot keeps ONE index, its id less one, so its colour never changes
+       (3D): not when it leaves the view, and not when you watch another. A
+       bot out of view is a parked stand-in. */
+    for (let i = 0; i < rivals.length; i++) rivals[i] = hole(i);
     for (const id of B.tr.keys()) {
-      if (placed.has(id) || !drawn.has(id)) continue;
-      const i = rivals.findIndex(r => r.hole);
-      rivals[i < 0 ? rivals.length : i] = drawn.get(id);
+      if (!(id >= 1) || !drawn.has(id)) continue;
+      while (rivals.length < id) rivals.push(hole(rivals.length));
+      rivals[id - 1] = drawn.get(id);
     }
     while (rivals.length && rivals[rivals.length - 1].hole) rivals.pop();
-    const wi = rivals.findIndex(r => r.id === watched);
-    if (wi > 0) { const r0 = rivals[0]; rivals[0] = rivals[wi]; rivals[wi] = r0.hole ? hole(wi) : r0; }
 
     /* The camera: on the watched leader, and held where it is while that
        train is in its death beat or not yet in the mirror. */
