@@ -1,7 +1,8 @@
 # Working on this repository
 
 You are editing a live site. **snap-hit.online** deploys automatically from
-`main` via Cloudflare Workers Static Assets. A merged pull request is in front
+`main` via Cloudflare Workers Static Assets, plus one Worker for Manta trains'
+live rooms. A merged pull request is in front
 of the public within a minute.
 
 Read `NOTES.md` before changing anything visual or audible. It records why
@@ -17,20 +18,46 @@ tried and rejected for a reason.
 third-party script, no remote image. Everything is inline or same-origin.
 Verify by loading the page and asserting the off-origin request count is zero.
 
-**No build step and no Worker script.** `wrangler.jsonc` has no `main` field.
-That absence is the entire cost model: static asset requests are free and
-unlimited; adding a script makes them billable Worker invocations. A framework
-or bundler also breaks the "one self-contained file per game" rule.
+**No build step, and one Worker only: Manta trains' rooms.** Static asset
+requests are free and unlimited; a Worker invocation is billed. So
+`wrangler.jsonc` has exactly one `main`, `rooms/worker.js`, and
+`run_worker_first` lists only `/lab/manta/rooms/*`. Every other request, a miss
+included, is answered by the asset server and never runs the Worker. Never
+widen that list, never add a second Worker, and never route a page, a game or a
+static file through it. The Worker lives in `rooms/`, outside `docs/`, so it is
+never served. `wrangler deploy` bundles it with the unchanged simulation from
+`docs/lab/manta/`; there is still no build command, no `package.json`, no
+framework and no bundler of our own. Rooms connect same-origin, so zero
+external requests still holds. Secrets, such as the rooms admin key, live in
+Cloudflare's dashboard, never in the repo or in `wrangler.jsonc`.
+
+**A broken Worker blocks every deploy.** Every push to `main` deploys the
+Worker with the static files, and a Worker that fails to build stops the whole
+site updating, every game included. So any commit touching `rooms/`,
+`wrangler.jsonc` or a simulation module the Worker imports passes
+`npx wrangler@4.141.0 deploy --dry-run` before it is pushed. Deploys use that
+pinned version; upgrade it deliberately, in Cloudflare's dashboard and here
+together. Only `main` ever deploys.
+
+**Switching rooms off is a one-line change, not a revert.** Once a Durable
+Object class has been deployed, a deploy that removes it fails, so reverting
+the commit that added it cannot take rooms down. The off switch is one line in
+`rooms/worker.js` that refuses room connections, and the lab then falls back to
+solo play. Removing rooms entirely is a deliberate migration, never a revert.
+Migration tags are permanent: append, never edit or remove.
+
+**Every push restarts the rooms.** Anyone playing is disconnected. No pushes
+during a playtest.
 
 **One self-contained file per game.** Each file in `docs/play/` carries its own
 markup, styles, script and assets. No shared runtime, no imports, no build.
 
-**One written exception to that rule.** Manta trains lives in
-`docs/lab/manta/` and is built on Three.js, because a WebGPU game cannot be one
-hand-written file. The exception is bounded: that folder, plus the library
-vendored at `docs/vendor/three/r186/`. Still no build step, still no Worker
-script, still zero external requests. Every other game stays one file. See
-"Manta trains and the lab" below.
+**One written exception to that rule.** Manta trains lives in `docs/lab/manta/`
+and is built on Three.js, because a WebGPU game cannot be one hand-written
+file. The exception is bounded: that folder, plus the library vendored at
+`docs/vendor/three/r186/`. Still no build step, no Worker script beyond the
+rooms Worker, and still zero external requests. Every other game stays one
+file. See "Manta trains and the lab" below.
 
 **The two cabinet games are copies.** `hurtle.html` and `beakdown.html` mirror
 games that live at hurtle.site and beakdown.fun. Each carries a canonical tag
@@ -119,7 +146,8 @@ docs/404.html            same materials as the site
 docs/og.jpg              share card, referenced absolutely
 docs/lab/manta/          Manta trains prototype. Unlinked, noindex.
 docs/vendor/three/r186/  Three.js, vendored unmodified. Do not edit.
-wrangler.jsonc           deploy config. Do not add "main".
+wrangler.jsonc           deploy config. One main: the rooms Worker. Do not add another.
+rooms/                   Manta trains' rooms Worker. Not served.
 NOTES.md                 the build record
 manta-trains-design.md   Manta trains: rules, look, build plan. Not served.
 ```
@@ -220,6 +248,8 @@ say what you would have done, say what you could not test, and stop.
 
 **One change per commit.** If a commit turns out to be wrong it has to be
 revertable on its own, from a phone, by someone who is not at a computer.
+The one exception is a deployed Durable Object: switch rooms off instead (see
+above).
 
 **Never leave the site broken.** If a change is half finished at the end of a
 session, do not commit it. A working site with the bug still in it beats a
