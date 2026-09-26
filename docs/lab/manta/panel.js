@@ -11,10 +11,13 @@
 
 /* Bumped by hand every time this page is edited, so a stale deploy is obvious
    from the phone rather than something you have to take on trust. */
-export const BUILD = '2026-09-26 10:08 UTC';
+export const BUILD = '2026-09-26 10:48 UTC';
 
 const params = new URLSearchParams(location.search);
 export const FORCE_WEBGL = params.get('backend') === 'webgl2';
+/* ?preload=1: index.html named every module up front (3E). Shown in the
+   panel, and so in the Copy report beside the timing it is there to change. */
+export const PRELOAD = params.get('preload') === '1';
 
 const ROWS = [
   ['load',           'load'],
@@ -37,6 +40,7 @@ const ROWS = [
   ['seabed',         'seabed'],
   ['render passes',  'passes'],
   ['first frame',    'ttff'],
+  ['preload',        'preload'],
   ['timing (ms)',    'timing'],
   ['vendor bytes',   'bytes'],
   ['three.webgpu.js','fwebgpu'],
@@ -90,6 +94,7 @@ for (const [label, key] of ROWS) {
   cell[key] = dd;
 }
 export const set = (k, v) => { if (cell[k]) cell[k].textContent = v; };
+set('preload', PRELOAD ? 'on' : 'off');
 
 /* ------------------------------------------------------------ collapse */
 

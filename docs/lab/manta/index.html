@@ -397,6 +397,26 @@
   el.type = 'importmap';
   el.textContent = JSON.stringify({ imports: imports });
   document.head.appendChild(el);
+  /* ?preload=1 (3E stage 5), a switch to try on the phone: the modules are
+     otherwise found one import level at a time (main.js, then what it
+     imports, then theirs), which on a 300 ms link spends a round trip per
+     level. With the switch they are all asked for at once, straight after
+     the map: 3D's fastest warm variant, the lab's own modules and the three
+     build. The same URLs the imports resolve to, so nothing new is fetched,
+     and the rooms modules are not named. Without it, not one line here runs
+     and the page asks for exactly what it did before. */
+  if (new URLSearchParams(location.search).get('preload') === '1') {
+    var mods = ['main', 'panel', 'params', 'scene', 'ocean', 'lightmemory', 'seabed', 'caustics', 'shadow',
+      'renderer', 'mantas', 'sim', 'controls', 'debug', 'post', 'cut', 'tiers', 'clock', 'watch', 'drawer',
+      'stamp', 'roll', 'follow', 'lighten', 'palette', 'rules', 'bots', 'motion', 'population', 'simcore',
+      'colours', 'shape', 'movers'].map(function (m) { return './' + m + '.js'; });
+    mods.push(imports['three'], imports['three/tsl'], imports[BASE + 'three.core.js'] || BASE + 'three.core.js');
+    for (var i = 0; i < mods.length; i++) {
+      var l = document.createElement('link');
+      l.rel = 'modulepreload'; l.href = mods[i];
+      document.head.appendChild(l);
+    }
+  }
 })();
 </script>
 
