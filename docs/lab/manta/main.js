@@ -35,7 +35,7 @@ import { setSceneTime } from './clock.js';
 import { watchConsole, watchDevice, onIssue, issueText, counts } from './watch.js';
 import { createDrawer } from './drawer.js';
 import { createStamper } from './stamp.js';
-import { rollSummary } from './roll.js';
+import { rollSummary, wildSplit } from './roll.js';
 import { createFollow } from './follow.js';
 
 const query = new URLSearchParams(location.search);
@@ -111,7 +111,16 @@ const { scene, camera, fit, view, setZoom, lookAtWorld } = createScene();
 const mantas = createMantas(scene, { scripted: SPIKE });
 if (shadows) shadows.attach(mantas.shadowMesh);
 /* One seed for the deal and the world, so the debug block can replay both. */
-const sim = SPIKE ? null : createSim({ seed: mantas.seed });
+/* Created with the drawer's values, not the simulation's own defaults (3A).
+   The loop copies them in before the first step, but the first ocean was
+   already spawned by then: 120 wild mantas for a wild count of 20, and the
+   100 extra were never drained. The same mapping the Node tests use. */
+const sim = SPIKE ? null : createSim({ seed: mantas.seed, params: {
+  cruise: P.cruise, burst: P.burstSpeed, turnCruise: P.turnCruise, turnBurst: P.turnBurst,
+  recruitR: P.recruitR, spacing: P.spacing, wildCount: P.wildCount, regrow: P.regrow,
+  wildSize: P.wildSize, bloomPull: P.bloomPull, trainScale: P.trainScale,
+  arenaR: P.arenaR, arenaRWanted: P.arenaR, bots: P.bots,
+  burstCost: P.burstCost, scatterGlow: P.scatterGlow } });
 const dbg = createDebug({ sim, seed: mantas.seed, step: STEP, scene });
 let controls = null;
 /* A fixed 60 steps a second whatever the display does, with an accumulator,
@@ -120,7 +129,14 @@ let controls = null;
 let simAcc = 0;
 let stepCost = 0, stepCount = 0;
 window.__sim = sim;
-panel.set('mantas', String(mantas.count) + ' in 1 instanced mesh');
+/* What is drawn and what the pool holds, not the fixed slot count: the
+   pool grows past 1071 for long trains, and a row that stayed at 1071 said
+   nothing about it (3A). Refreshed with the sim step row and on growth. */
+function showMantas () {
+  panel.set('mantas', mantas.drawn + ' drawn  \u00b7  capacity ' + mantas.capacity + '  \u00b7  1 instanced mesh');
+}
+showMantas();
+mantas.onGrow(showMantas);
 /* WHICH PERSONALITIES THE SEED DEALT, and how long a step of the whole
    simulation costs, measured over the last second rather than guessed. */
 if (sim) {
@@ -279,9 +295,9 @@ function advance (now, dt) {
       stepCost += performance.now() - t0; stepCount++;
       if (stepCount >= 60) {
         panel.set('sim step', (stepCost / stepCount).toFixed(3) + ' ms  \u00b7  ' +
-          sim.rivals.length + ' bots, ' + sim.liveWild() + ' wild');
+          sim.rivals.length + ' bots, ' + wildSplit(sim).text);
         stepCost = 0; stepCount = 0;
-        showRoll();
+        showRoll(); showMantas();
       }
       simAcc -= STEP;
     }

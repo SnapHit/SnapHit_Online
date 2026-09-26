@@ -6,7 +6,9 @@
  *                                          burst cost 0.35, 0.5 and 0.7
  *   node accept.mjs 6                coiling: can a lone leader get out?
  *   node accept.mjs crashes [from] [to]   crashes per bot per 5 min, by preset
- *   node accept.mjs 4h [from] [to] [cost]  test 4 as ruled: five timid, five bully
+ *   node accept.mjs 4h [from] [to] [costs]  test 4 as ruled: five timid, five bully;
+ *                                          costs as one or a list, 0.6,0.7,0.8,1.0
+ *   The recorded sweeps are in accept-sweeps.txt.
  *   node accept.mjs 4s [from] [to] [cost]  the same with the strawman as the bursting half
  *
  * MEASUREMENTS, NOT GATES. Nothing here is tuned to pass; each test prints
@@ -306,11 +308,19 @@ if (which === '3') {
     for (const l of summarise(rows)) console.log('T4SUM ' + JSON.stringify(l));
   }
 } else if (which === '4h' || which === '4s') {
-  const straw = which === '4s', costs = process.argv[5] ? [parseFloat(process.argv[5])] : [0.35, 0.5, 0.7];
+  /* Costs as a list, "0.6,0.7,0.8,1.0", so the balance can be re-run after
+     any tuning; the closest is where the two halves' first places differ
+     least. A measurement, never a change of default. */
+  const straw = which === '4s', other = straw ? 'strawman' : 'bully';
+  const costs = process.argv[5] ? process.argv[5].split(',').map(parseFloat) : [0.35, 0.5, 0.7];
+  let closest = null;
   for (const cost of costs) {
-    const rows = seeds.map(seed => halves(seed, cost, straw));
-    console.log('T4H ' + JSON.stringify(summariseHalves(rows, straw ? 'strawman' : 'bully')));
+    const sum = summariseHalves(seeds.map(seed => halves(seed, cost, straw)), other);
+    console.log('T4H ' + JSON.stringify(sum));
+    const gap = Math.abs(sum.timid.first - sum[other].first);
+    if (!closest || gap < closest.gap) closest = { burstCost: cost, gap };
   }
+  if (costs.length > 1) console.log('T4H closest ' + JSON.stringify(closest));
 } else if (which === 'crashes') {
   const tally = {};
   for (const seed of seeds) for (const r of crashRates(seed)) {

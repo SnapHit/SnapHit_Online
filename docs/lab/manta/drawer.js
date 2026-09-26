@@ -123,7 +123,9 @@ export function createDrawer () {
     const L = window.__lab;
     const r = L && L.mantas ? rollSummary(L.mantas, window.__sim || null) : null;
     if (!r) return '';
-    return '\nyour colour: ' + r.head + '\n' + r.rivals + '\n' + r.wild;
+    const M = L.mantas;
+    return '\nyour colour: ' + r.head + '\n' + r.rivals + '\n' + r.wild +
+      '\nmantas: ' + M.drawn + ' drawn  \u00b7  capacity ' + M.capacity + '  \u00b7  1 instanced mesh';
   }
 
   el.copy.addEventListener('click', async () => {

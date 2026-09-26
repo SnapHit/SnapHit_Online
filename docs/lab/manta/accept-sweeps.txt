@@ -1,0 +1,18 @@
+Test 4 burst-cost sweeps, recorded output of accept.mjs (see its header).
+Five never-burst bots (timid) against five that burst to cut and collect (bully),
+same greed and caution, bots only, committed defaults of the day, 5 simulated minutes.
+
+2B part five, 2026-09-25, HEAD b41a997, 100 seeds per cost, burst cost default then 0.35.
+Run as: node accept.mjs 4h 0 100 <cost>, one process per cost.
+
+T4H {"burstCost":0.6,"seeds":100,"timid":{"first":60,"firstShare":0.6,"top3Share":0.63},"bully":{"first":37,"firstShare":0.37,"top3Share":0.37},"ties":3,"flag":""}
+# 4h took 215.7 s
+T4H {"burstCost":0.7,"seeds":100,"timid":{"first":57,"firstShare":0.57,"top3Share":0.57},"bully":{"first":39,"firstShare":0.39,"top3Share":0.43},"ties":4,"flag":""}
+# 4h took 213.0 s
+T4H {"burstCost":0.8,"seeds":100,"timid":{"first":51,"firstShare":0.51,"top3Share":0.54},"bully":{"first":44,"firstShare":0.44,"top3Share":0.46},"ties":5,"flag":""}
+# 4h took 215.8 s
+T4H {"burstCost":1,"seeds":100,"timid":{"first":47,"firstShare":0.47,"top3Share":0.55},"bully":{"first":45,"firstShare":0.45,"top3Share":0.45},"ties":8,"flag":""}
+# 4h took 217.3 s
+
+Closest on first place: 1.0 (timid 47, bully 45). Closest on top-three share: 0.8 (0.54 / 0.46).
+Nathan set the default to 1.0 after testing on his phone (design doc v1.12).

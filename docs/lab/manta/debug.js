@@ -15,6 +15,7 @@
  * the drawing; if not, it was in the simulation.
  */
 import { MeshBasicNodeMaterial, Color } from 'three';
+import { wildSplit } from './roll.js';
 
 const RATES = [1, 0.5, 0.25];
 
@@ -80,7 +81,7 @@ export function createDebug ({ sim, seed, step, scene }) {
       if (!t.dead) live++;
       if (t.followers.length > longest) longest = t.followers.length;
     }
-    counts.textContent = 'trains ' + live + ' of ' + ts.length + '  ·  wild alive ' + sim.liveWild() +
+    counts.textContent = 'trains ' + live + ' of ' + ts.length + '  ·  ' + wildSplit(sim).text +
       '\nyou ' + sim.you.followers.length + '  ·  longest ' + longest +
       '\nclock ×' + (paused ? 0 : rate) + (paused ? ' (paused)' : '') + '  ·  seed ' + seed;
     counts.style.whiteSpace = 'pre';

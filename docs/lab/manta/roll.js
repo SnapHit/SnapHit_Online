@@ -15,20 +15,38 @@ const tally = keys => {
     .map(([k, v]) => k + ' ×' + v).join(', ');
 };
 
+/* ORDINARY WILD AND DEBRIS, counted apart (3A). One "wild alive" number
+   mixed the ambient population with crash debris, so a phone read "wild
+   alive 46" against a wild count of 20 and it looked like a bug. Ordinary
+   is every living wild manta that is not loose, at ANY index, so a surplus
+   anywhere shows; debris is everything loose, glowing or sinking. The two
+   add up to everything alive in the water. The panel, Copy values and the
+   Copy report all read this one line. */
+export function wildSplit (sim) {
+  let ordinary = 0, debris = 0;
+  for (const w of sim.wild) {
+    if (!w || !w.alive) continue;
+    if (w.loose) debris++; else ordinary++;
+  }
+  const target = sim.params.wildCount;
+  return { ordinary, target, debris,
+    text: 'wild ' + ordinary + ' of ' + target + '  \u00b7  debris ' + debris };
+}
+
 export function rollSummary (mantas, sim) {
   const c = mantas && mantas.colours;
   if (!c) return null;
   const head = c.mine.key + '  ·  seed ' + mantas.seed;
   const rivals = 'rivals ' + (c.rivals.length ? tally(c.rivals.map(r => r.key)) : 'none');
   /* A living wild manta at index i wears the colour the deal gave slot i. */
-  let wild = 'wild alive ?';
+  let wild = 'wild ?';
   if (sim) {
     const alive = [];
     for (let i = 0; i < sim.wild.length && i < c.wilds.length; i++) {
       const w = sim.wild[i];
-      if (w && w.alive) alive.push(c.wilds[i].key);
+      if (w && w.alive && !w.loose) alive.push(c.wilds[i].key);
     }
-    wild = 'wild alive ' + alive.length + (alive.length ? ': ' + tally(alive) : '');
+    wild = wildSplit(sim).text + (alive.length ? '  \u00b7  wild colours ' + tally(alive) : '');
   }
   return { head, rivals, wild };
 }

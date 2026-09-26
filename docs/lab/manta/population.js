@@ -56,9 +56,13 @@ export function createPopulation (ctx) {
       }
       if (w.loose && !(w.glow > 0)) { w.sinking = p.drain; started++; }
     }
-    if (ambientWild() > p.wildCount) {
+    /* The surplus is any ordinary manta in a slot at or past the count.
+       This used to test ambientWild() > p.wildCount, which can never be
+       true because ambientWild() only counts slots below the count, so a
+       lowered wild count left its surplus swimming forever (3A). */
+    {
       let far = null, fd = -1;
-      for (let i = 0; i < wild.length; i++) {
+      for (let i = p.wildCount; i < wild.length; i++) {
         const w = wild[i];
         if (!w || !w.alive || w.loose || w.sinking > 0) continue;
         const d = Math.hypot(w.x - you.x, w.z - you.z);
