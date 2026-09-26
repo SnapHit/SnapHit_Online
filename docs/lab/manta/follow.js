@@ -71,10 +71,15 @@ export function createFollow (ctx) {
        stands in the middle of the screen. Then a clean cut to wherever the
        simulation has put you. */
     const dying = you.dead > 0;
+    /* WATCH MODE (?room=, roomview.js): `you` is only where the camera looks,
+       a bot's leader. That bot is drawn once, with the rivals, so slot 0
+       stays parked and the zoom follows the watched train's length. Unset in
+       the solo lab, where every line here runs as before. */
+    const watching = !!ctx.sim.watching;
     const beat = dying ? 1 - you.dead / ctx.sim.params.deathBeat : 0;
     const at = dying ? { x: you.crashX, z: you.crashZ } : you;
     const z = dying ? Math.max(0.55, zoomFor(peakLength, ctx.sim.params) * (1 - 0.35 * beat))
-                    : zoomFor(you.followers.length, ctx.sim.params);
+                    : zoomFor(watching ? you.len : you.followers.length, ctx.sim.params);
     if (setZoom(z)) applyView(ctx.view);
     uCam.value.set(at.x, at.z);
     camera.position.set(at.x, 1000, at.z);
@@ -89,7 +94,7 @@ export function createFollow (ctx) {
     const n = dying ? 0 : Math.min(f.length, TRAIN_MAX - 1);
     /* Nothing of yours is in the water during the beat: the leader scattered
        with the rest of the train. */
-    if (dying) m.aPos.setXYZ(0, PARKED, 0, PARKED);
+    if (dying || watching) m.aPos.setXYZ(0, PARKED, 0, PARKED);
     else { m.aPos.setXYZ(0, you.x, 0, you.z); m.aHead.setX(0, you.head); }
     const lead = leaderSize(ctx.sim.params);
     if (m.aSize.getX(0) !== lead) { m.aSize.setX(0, lead); sizeDirty = true; }
@@ -257,7 +262,8 @@ export function createFollow (ctx) {
     if (you.lastPeak > bestPeak) bestPeak = you.lastPeak;
     if (peakLength > bestPeak) bestPeak = peakLength;
     const el = document.getElementById('len');
-    if (el) el.textContent = 'length ' + f.length + '   peak ' + peakLength + '   best ' + bestPeak;
+    if (el) el.textContent = watching ? 'watching bot ' + you.watched + '   length ' + you.len + '   tap for the next'
+                                      : 'length ' + f.length + '   peak ' + peakLength + '   best ' + bestPeak;
     drawBoard(ctx.sim.time);
   const card = document.getElementById('beat');
     if (card) {

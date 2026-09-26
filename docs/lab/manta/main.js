@@ -37,6 +37,7 @@ import { createDrawer } from './drawer.js';
 import { createStamper } from './stamp.js';
 import { rollSummary, wildSplit } from './roll.js';
 import { createFollow } from './follow.js';
+import { createRoomView } from './roomview.js';
 
 const query = new URLSearchParams(location.search);
 /* ?fx=off builds the page without the light memory, the plankton or anything
@@ -52,6 +53,10 @@ const FORCED_TIER = query.get('tier');
    measures the ocean's own gradient and whatever the bloom is doing to the
    wake near the middle. */
 const VIG = query.has('vig') ? Number(query.get('vig')) : null;
+/* ?room=<name> is WATCH MODE: the room runs the world and this page draws
+   it (roomview.js). No controls, no local steps, the room's own numbers.
+   Without it, every line below runs exactly as it did. */
+const ROOM = /^[a-z0-9-]{1,32}$/.test(query.get('room') || '') ? query.get('room') : null;
 
 /* Before anything else builds: a complaint during init is the one most worth
    catching, and console.error is where three makes most of them. */
@@ -115,7 +120,7 @@ if (shadows) shadows.attach(mantas.shadowMesh);
    The loop copies them in before the first step, but the first ocean was
    already spawned by then: 120 wild mantas for a wild count of 20, and the
    100 extra were never drained. The same mapping the Node tests use. */
-const sim = SPIKE ? null : createSim({ seed: mantas.seed, params: {
+const sim = SPIKE ? null : ROOM ? createRoomView({ room: ROOM, build: panel.BUILD, view }) : createSim({ seed: mantas.seed, params: {
   cruise: P.cruise, burst: P.burstSpeed, turnCruise: P.turnCruise, turnBurst: P.turnBurst,
   recruitR: P.recruitR, spacing: P.spacing, wildCount: P.wildCount, regrow: P.regrow,
   wildSize: P.wildSize, bloomPull: P.bloomPull, trainScale: P.trainScale,
@@ -153,6 +158,7 @@ panel.set('vbuf', mantas.vertexBuffers + ' of 8 that WebGPU guarantees' +
 panel.set('lm', lm ? (lm.size + '×' + lm.size + '  ·  ' + lm.note) : 'off (?fx=off)');
 
 window.__lab = { scene, camera, view, mantas, lm, lmSlow, FX, uArenaR, uReefHalo };
+if (ROOM && sim) window.__lab.room = sim.room;
 
 /* After __lab exists, not before: this is the same ordering trap that put a
    ReferenceError on the page in 1F. */
@@ -267,7 +273,12 @@ window.__lab.follower = follower;              // events skipped off screen, for
 function advance (now, dt) {
   const scale = cut.update(dt) * dbg.rate;     // the debug block's slow motion and pause
   const owed = dbg.takeOwed();                 // and its single step
-  if (sim) {
+  if (sim && ROOM) {
+    /* Watch mode: no steps and no drawer values. The room's clock is real
+       time, so the mirror lays out its snapshots once a frame on its own. */
+    sim.step(dt);
+    uArenaR.value = sim.params.arenaR;
+  } else if (sim) {
     /* Steps of exactly 1/60, capped so a long pause does not fast-forward
        the whole world when the tab comes back. */
     simAcc = Math.min(simAcc + dt * scale + owed, 0.5);
@@ -428,7 +439,7 @@ window.__lab.step = (seconds = 1 / 60) => {
 
 lab.start().then(ok => {
   if (!ok) { window.__labReady = true; return; }
-  if (sim) {
+  if (sim && !ROOM) {
     const canvas = lab.renderer && lab.renderer.domElement;
     if (canvas) controls = createControls(canvas, sim.input, (u, v) => ({
       /* Screen fraction to world, through the same view the ocean uses. */
