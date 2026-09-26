@@ -42,5 +42,12 @@
 
     // Lets the Worker hand anything unexpected back to the static site.
     "binding": "ASSETS"
-  }
+  },
+
+  // One Durable Object per room, named by the room. PERMANENT once deployed:
+  // a deploy that removes the class fails, and the dashboard cannot roll back
+  // past the version that added it. Switch rooms off with ROOMS_OPEN in
+  // rooms/worker.js instead. Migration tags: append, never edit or remove.
+  "durable_objects": { "bindings": [ { "name": "ROOMS", "class_name": "Room" } ] },
+  "migrations": [ { "tag": "v1", "new_sqlite_classes": ["Room"] } ]
 }

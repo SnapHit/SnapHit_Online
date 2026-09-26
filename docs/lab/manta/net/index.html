@@ -40,6 +40,8 @@
   .big dd { font-size: 20px; font-weight: 650; }
   .big dt { align-self: center; }
   .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .pick { margin-bottom: 14px; }
+  .pick button[aria-pressed="true"] { background: rgba(127,227,208,.22); border-color: #7fe3d0; color: #bdf3e8; }
   button {
     font: inherit; font-weight: 600; color: #d8e6f5; padding: 10px 16px; min-height: 44px;
     border-radius: 10px; border: 1px solid rgba(160,190,230,.35); background: rgba(40,70,110,.35);
@@ -59,6 +61,11 @@
   <h1>Rooms probe</h1>
   <p class="sub">Fifty pings to the rooms server on this site, one after another.</p>
 
+  <div class="row pick" role="group" aria-label="What to measure">
+    <button id="pickEdge" type="button" aria-pressed="true">Edge echo</button>
+    <button id="pickRoom" type="button" aria-pressed="false">Room echo</button>
+  </div>
+
   <div id="state" class="busy"><span class="dot"></span><span id="stateText">starting…</span></div>
 
   <dl class="big">
@@ -71,6 +78,7 @@
     <dt>pings</dt><dd id="count">—</dd>
     <dt>connect</dt><dd id="connect">—</dd>
     <dt>connection</dt><dd id="conn">—</dd>
+    <dt>measured</dt><dd id="which">—</dd>
     <dt>address</dt><dd id="addr">—</dd>
   </dl>
 
@@ -86,17 +94,22 @@
 <script>
 'use strict';
 /* Bumped by hand whenever this page changes, so a stale deploy is obvious. */
-const BUILD = '2026-09-26 05:08 UTC';
+const BUILD = '2026-09-26 06:32 UTC';
 const PINGS = 50;
-const PATH = '/lab/manta/rooms/echo';
+/* Two things to measure: the Worker's own echo at the edge, and a room, the
+   Durable Object named "probe", which is what live rooms will run on. */
+const TARGETS = {
+  edge: { label: 'edge echo', path: '/lab/manta/rooms/echo' },
+  room: { label: 'room echo (room "probe")', path: '/lab/manta/rooms/room/probe' },
+};
+let target = 'edge';
 /* Per step, never for the whole run: fifty pings on a slow phone link can
    take far longer than any fixed total, and that is what this measures. */
 const CONNECT_MS = 10000, PING_MS = 5000;
 
 const $ = id => document.getElementById(id);
 $('build').textContent = BUILD;
-const url = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + PATH;
-$('addr').textContent = url;
+const urlOf = path => (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + path;
 
 let last = null;          // the latest run's results, for Copy
 let running = false;
@@ -161,7 +174,7 @@ function finish (r, text, cls) {
 async function diagnose (r) {
   let text = 'could not connect';
   try {
-    const res = await fetch(PATH, { cache: 'no-store' });
+    const res = await fetch(r.path, { cache: 'no-store' });
     let body = (await res.text()).trim();
     body = body.startsWith('<') ? '' : body.slice(0, 80);   // a page, not a message
     text = res.status === 503 ? 'rooms are off' : 'could not connect: HTTP ' + res.status + (body ? ' ' + body : '');
@@ -175,8 +188,12 @@ function run () {
   if (running) return;
   running = true; $('again').disabled = true;
   $('plain').className = '';
+  const t = TARGETS[target];
   const r = { rtts: [], connectMs: null, connection: connection(), done: false, opened: false,
+              label: t.label, path: t.path, url: urlOf(t.path),
               when: new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC' };
+  $('which').textContent = r.label;
+  $('addr').textContent = r.url;
   show(r);
   state('connecting…', 'busy');
   const t0 = performance.now();
@@ -185,7 +202,7 @@ function run () {
     arm(PING_MS, 'no answer to ping ' + (i + 1) + ' in ' + PING_MS / 1000 + ' s');
     r.ws.send(JSON.stringify({ i, t: performance.now() }));
   };
-  try { r.ws = new WebSocket(url); } catch (e) { finish(r, 'could not connect: ' + e.message, 'bad'); return; }
+  try { r.ws = new WebSocket(r.url); } catch (e) { finish(r, 'could not connect: ' + e.message, 'bad'); return; }
   arm(CONNECT_MS, 'timed out connecting after ' + CONNECT_MS / 1000 + ' s');
   r.ws.onopen = () => {
     r.opened = true; r.connectMs = performance.now() - t0;
@@ -210,15 +227,25 @@ function run () {
 function report () {
   const r = last;
   if (!r) return 'Rooms probe: no run yet';
-  return ['Rooms probe — ' + r.outcome,
+  return ['Rooms probe — ' + r.label + ' — ' + r.outcome,
     'median ' + ms(r.median) + ' · p95 ' + ms(r.p95) + ' · worst ' + ms(r.worst) + ' · best ' + ms(r.best),
     'pings ' + r.rtts.length + ' of ' + PINGS + ' · connect ' + ms(r.connectMs),
     'connection: ' + r.connection,
-    'when: ' + r.when, 'address: ' + url, 'build: ' + BUILD,
+    'measured: ' + r.label, 'when: ' + r.when, 'address: ' + r.url, 'build: ' + BUILD,
     'browser: ' + navigator.userAgent].join('\n');
 }
 
 $('again').addEventListener('click', run);
+/* Choosing what to measure runs it, unless a run is already going. */
+function pick (which) {
+  if (running) return;
+  target = which;
+  $('pickEdge').setAttribute('aria-pressed', String(which === 'edge'));
+  $('pickRoom').setAttribute('aria-pressed', String(which === 'room'));
+  run();
+}
+$('pickEdge').addEventListener('click', () => pick('edge'));
+$('pickRoom').addEventListener('click', () => pick('room'));
 $('copy').addEventListener('click', async () => {
   const text = report(), btn = $('copy');
   try {
