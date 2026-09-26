@@ -12,7 +12,9 @@
 export function createRules (ctx) {
   const { p } = ctx;
   const next = ctx.next;
-  const GROUPS = ctx.GROUPS;
+  /* Read at call time: the groups are laid out again when the arena or the
+     wild count changes (3B). */
+  const groupCount = ctx.groupCount;
   const wild = ctx.wild;
   const scratch = ctx.scratch;
   const hash = ctx.hash;
@@ -31,7 +33,7 @@ export function createRules (ctx) {
      manta again. It keeps the colour it owned before it ever joined. */
   /* One way into the water, so the leader glows exactly like its train. */
   function scatterOne (t, f, owner, immune = 0) {
-    const m = { x: f.x, z: f.z, head: f.head, group: Math.floor(next() * GROUPS),
+    const m = { x: f.x, z: f.z, head: f.head, group: Math.floor(next() * groupCount()),
                 speed: 40 + next() * 30, glow: p.scatterGlow, wasColour: t.id,
                 colour: f.from >= 0 ? f.from : 0, alive: true, isWild: true, loose: true,
                 fromTrain: immune > 0 ? owner : null, immune };
@@ -48,7 +50,7 @@ export function createRules (ctx) {
       /* Into a loose slot that has gone dead if there is one, so a long run
          of crashes does not grow this array without bound. Ambient slots —
          everything below wildCount — belong to the regrowth timer. */
-      const m = { x: f.x, z: f.z, head: f.head, group: Math.floor(next() * GROUPS),
+      const m = { x: f.x, z: f.z, head: f.head, group: Math.floor(next() * groupCount()),
                   speed: 40 + next() * 30, glow: p.scatterGlow, wasColour: t.id,
                   colour: f.from >= 0 ? f.from : 0, alive: true, isWild: true, loose: true,
                   /* WHO JUST DROPPED IT, and for how long they may not have it

@@ -24,25 +24,37 @@ export { STEP, DEF, FADE, zoomFor, viewFor, joinMix, looseMix, sizeFor, leaderSi
 
 export function createSim ({ seed = 1, params = {} } = {}) {
   const p = { ...DEF, ...params };
-  const next = rng(seed >>> 0);
+  /* One generator, swappable, so New ocean can reseed the world in place:
+     everything that holds this sim (and its next) keeps holding it. */
+  let gen = rng(seed >>> 0);
+  const next = () => gen();
   let time = 0;
 
+  /* THE LAYOUT (3B): the blooms, the groups and their homes come from the
+     CURRENT arena radius and wild count, and are rebuilt when either
+     changes: the arena at your restart, the count when the drawer moves it.
+     Built once at creation, a world made at 4000 kept its homes and blooms
+     at 4000 after a restart at 2000, and 88% of the ordinary wild mantas
+     ended up pressed against the reef; and a count raised from 20 to 300
+     was squeezed into the five groups laid out for 20. */
   /* Four static blooms, placed by the seed inside the reef. */
   const blooms = [];
-  for (let i = 0; i < p.blooms; i++) {
-    const a = next() * TAU, r = (0.35 + next() * 0.45) * p.arenaR;
-    blooms.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, r: 260 + next() * 140 });
+  function layBlooms () {
+    blooms.length = 0;
+    for (let i = 0; i < p.blooms; i++) {
+      const a = next() * TAU, r = (0.35 + next() * 0.45) * p.arenaR;
+      blooms.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, r: 260 + next() * 140 });
+    }
   }
+  layBlooms();
 
   /* 300 wild mantas in small groups. A group shares a wander target that
      drifts towards the nearest bloom, which is what makes them gather where
      the plankton is without any of them being told to path anywhere. */
   /* GROUPS OF 3 TO 5 (10.2), so the count decides how many groups there are
      rather than the other way round. */
-  const groupCap = [];
-  let planned = 0;
-  while (planned < p.wildCount) { const k = 3 + Math.floor(next() * 3); groupCap.push(k); planned += k; }
-  const GROUPS = groupCap.length;
+  let groupCap = [], GROUPS = 0, groupUsed = [], laidCount = 0;
+  const groups = [];
   /* EVERY GROUP HAS A HOME, and the homes are laid out rather than rolled.
      Thirty random targets over an arena thirty-two screens across cluster by
      construction — that is what a Poisson scatter does — and no amount of
@@ -62,15 +74,25 @@ export function createSim ({ seed = 1, params = {} } = {}) {
        old arena: 520 becomes 533 at twenty mantas, and 120 is unchanged. */
     return Math.min(Math.max(520, gap * 0.4), Math.max(190, gap * p.groupSpread));
   };
-  const groups = [];
-  for (let g = 0; g < GROUPS; g++) {
-    const a = g * GOLDEN, r = Math.sqrt((g + 0.5) / GROUPS) * (p.arenaR - 320);
-    const hx = Math.cos(a) * r, hz = Math.sin(a) * r;
-    groups.push({ x: hx, z: hz, hx, hz, t: next() * 6 });
+  function layGroups () {
+    groupCap = [];
+    let planned = 0;
+    while (planned < p.wildCount) { const k = 3 + Math.floor(next() * 3); groupCap.push(k); planned += k; }
+    GROUPS = groupCap.length;
+    groups.length = 0;
+    for (let g = 0; g < GROUPS; g++) {
+      const a = g * GOLDEN, r = Math.sqrt((g + 0.5) / GROUPS) * (p.arenaR - 320);
+      const hx = Math.cos(a) * r, hz = Math.sin(a) * r;
+      groups.push({ x: hx, z: hz, hx, hz, t: next() * 6 });
+    }
+    groupUsed = new Array(GROUPS).fill(0);
+    laidCount = p.wildCount;
   }
+  layGroups();
   const wild = [];
-  const groupUsed = new Array(GROUPS).fill(0);
-  function spawnWild (i, awayFrom) {
+  /* Where a wild manta goes: a group with room, its own place in it, clear
+     of the reef. Used by every spawn and by a relayout. */
+  function placeWild (m, awayFrom) {
     /* ON THE EVEN LATTICE (ruling 2). A regrown manta used to appear at a
        random point and swim home, so the ocean refilled wherever the dice
        fell. Now it appears in the group with the most room, at its own place
@@ -86,18 +108,21 @@ export function createSim ({ seed = 1, params = {} } = {}) {
       if (score > best) { best = score; g = q; }
     }
     groupUsed[g]++;
-    /* A FRESH OBJECT, never the recruited one reused. The one that joined
-       your train is a follower now; this is a different animal that happens
-       to keep the count at 300. Reusing it made "was it recruited from
-       inside the radius" unanswerable, because the recruit was alive again
-       by the time anything looked. */
-    const m = {};
     m.head = next() * TAU; m.group = g;
     const oa = next() * TAU, orr = Math.sqrt(next()) * spreadOf();
     m.ox = Math.cos(oa) * orr; m.oz = Math.sin(oa) * orr;   // its place in the group
     m.x = groups[g].x + m.ox; m.z = groups[g].z + m.oz;
     const rr = Math.hypot(m.x, m.z), lim = p.arenaR - 260;  // clear of the reef
     if (rr > lim) { m.x *= lim / rr; m.z *= lim / rr; }
+  }
+  function spawnWild (i, awayFrom) {
+    /* A FRESH OBJECT, never the recruited one reused. The one that joined
+       your train is a follower now; this is a different animal that happens
+       to keep the count at 300. Reusing it made "was it recruited from
+       inside the radius" unanswerable, because the recruit was alive again
+       by the time anything looked. */
+    const m = {};
+    placeWild(m, awayFrom);
     m.speed = 40 + next() * 30;
     m.glow = 0;                 // seconds left glowing in an old train's colour
     m.wasColour = -1;           // which train it was in, while it glows
@@ -107,6 +132,28 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     return m;
   }
   for (let i = 0; i < p.wildCount; i++) spawnWild(i, []);
+
+  /* Every living wild manta into a new layout. On a new arena the ordinary
+     ones are laid out afresh, as at creation, because their old water may be
+     past the new reef; on a new count they keep swimming and take a place in
+     the nearest group with room. Debris and anything sinking just needs a
+     group that exists. */
+  function rehome (relay) {
+    for (const m of wild) {
+      if (!m || !m.alive) continue;
+      if (m.loose || m.sinking > 0) { m.group = Math.floor(next() * GROUPS); continue; }
+      if (relay) { placeWild(m, trains.filter(t => !(t.dead > 0))); continue; }
+      let g = 0, bd = Infinity;
+      for (let q = 0; q < GROUPS; q++) {
+        if (groupUsed[q] >= groupCap[q]) continue;
+        const d = Math.hypot(groups[q].hx - m.x, groups[q].hz - m.z);
+        if (d < bd) { bd = d; g = q; }
+      }
+      groupUsed[g]++; m.group = g;
+      const oa = next() * TAU, orr = Math.sqrt(next()) * spreadOf();
+      m.ox = Math.cos(oa) * orr; m.oz = Math.sin(oa) * orr;
+    }
+  }
 
   /* Rebuilt every step: every leader and follower circle in the world. */
   const hash = createHash(Math.max(p.recruitR, p.spacing) * 2);
@@ -232,8 +279,15 @@ export function createSim ({ seed = 1, params = {} } = {}) {
       /* Forward is (-sin, -cos), the one convention in this lab. Written
          mirrored, these 300 would spin as they turned exactly the way the
          player's train did before 88a0679. */
-      /* Towards its own place in the group, not the group's centre. */
-      const tx = gr.x + (m.ox || 0), tz = gr.z + (m.oz || 0);
+      /* Towards its own place in the group, not the group's centre, and
+         inside the reef (3C). With few groups a place can lie a thousand
+         units from its centre, past the wall, and a manta sent there
+         bounced along the wall for good. A place past the reef line is
+         reflected back inside by as much as it overshot, so the mantas
+         spread over a band there rather than piling on one line. */
+      let tx = gr.x + (m.ox || 0), tz = gr.z + (m.oz || 0);
+      const inside = p.arenaR - 260, tr = Math.hypot(tx, tz);
+      if (tr > inside) { const k = Math.max(0, 2 * inside - tr) / tr; tx *= k; tz *= k; }
       const want = Math.atan2(-(tx - m.x), -(tz - m.z));
       const d = wrapAngle(want - m.head);
       m.head = wrapAngle(m.head + Math.max(-1.2 * dt, Math.min(1.2 * dt, d)));
@@ -292,7 +346,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
      trains array can be finished after they are created. */
   /* Crashes and cuts, once each, with where: the renderer drains this. */
   const events = [];
-  const ruleCtx = { p, next, GROUPS, wild, scratch, hash, trains, you, blooms, events, now: () => time };
+  const ruleCtx = { p, next, groupCount: () => GROUPS, wild, scratch, hash, trains, you, blooms, events, now: () => time };
   const { scatter, crash, cutAt, resolveTouches, payForBurst, steerRival } = createRules(ruleCtx);
 
   function stepTrain (t, want, dt) {
@@ -310,6 +364,14 @@ export function createSim ({ seed = 1, params = {} } = {}) {
      the first that is clear; the last resort is the furthest one tried, which
      cannot happen in an arena this size but must not be an infinite loop. */
   function restart (t) {
+    /* A new arena, if one was asked for while the last run was going:
+       YOUR restart, not anybody's (ruling 5), and BEFORE choosing where you
+       come back, which used to be chosen inside the old wall (3B). The
+       layout follows it. */
+    if (t === you && p.arenaRWanted && p.arenaRWanted !== p.arenaR) {
+      p.arenaR = p.arenaRWanted;
+      layBlooms(); layGroups(); rehome(true);
+    }
     let best = null, bestClear = -1;
     for (let k = 0; k < 40; k++) {
       const a = next() * TAU;
@@ -325,10 +387,6 @@ export function createSim ({ seed = 1, params = {} } = {}) {
       if (clear > 300) break;
     }
     if (!best) best = { x: 0, z: 0 };
-    /* A new arena, if one was asked for while the last run was going. */
-    /* YOUR restart, not anybody's (ruling 5): bots restart all the time now
-       they grow and crash, and applying it then moved the wall under you. */
-    if (t === you && p.arenaRWanted && p.arenaRWanted !== p.arenaR) p.arenaR = p.arenaRWanted;
     t.x = best.x; t.z = best.z; t.head = next() * TAU;
     t.s = 0; t.followers.length = 0; t.bursting = false; t.burstOwed = 0;
     t.lastPeak = t.peak; t.peak = 0; t.runs++;
@@ -341,8 +399,30 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   const { livingWild, ambientWild, debrisWild, drainSurplus, regrowWild } =
     createPopulation({ p, wild, you, trains, spawnWild, release });
 
+  /* NEW OCEAN (3B): the whole world again, in place, from the current
+     values and a fresh seed, so a change can be judged on a clean ocean.
+     The arena applies at once. Every train starts again alone. */
+  function newOcean (seed2) {
+    gen = rng(seed2 >>> 0);
+    if (p.arenaRWanted) p.arenaR = p.arenaRWanted;
+    layBlooms(); layGroups();
+    wild.length = 0;
+    for (let i = 0; i < p.wildCount; i++) spawnWild(i, []);
+    /* The bots are dealt again, numbered 1 to n as at creation (you are 0),
+       so the board does not read "bot 11" after a New ocean. */
+    const n = rivals.length;
+    setBotCount(0); nextId = 1; setBotCount(n);
+    you.followers.length = 0; you.x = 0; you.z = 0; you.head = next() * TAU;
+    you.dead = 0; you.crashed = 0; you.cut = 0; you.bursting = false; you.burstOwed = 0;
+    you.s = 0; you.peak = 0; you.lastPeak = 0; you.rebuild = 10;
+    seedTrail(you);
+    events.length = 0;
+  }
+
   function step () {
     const dt = STEP;
+    /* A new wild count lays the groups out again for it. */
+    if (p.wildCount !== laidCount) { layGroups(); rehome(false); }
     time += dt;
     /* 6.3: bursting needs a follower to pay with. Stage 1 lifted this gate
        because there was nothing to spend; the spending is here now, so the
@@ -409,7 +489,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     get time () { return time; },
     params: p, blooms, you, rivals, bots, botMix, brain, setBotCount, trains, input, step, wild, groups, hash, joinedAt,
     liveWild: livingWild, ambientWild, debrisWild,
-    scatter, crash, cutAt, makeTrain, seedTrail, restart, events,
+    scatter, crash, cutAt, makeTrain, seedTrail, restart, events, newOcean,
     get length () { return you.followers.length; },
     zoom: () => zoomFor(you.followers.length, p),
     /* For tests and for the panel: the speed actually used this step. */

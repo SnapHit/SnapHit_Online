@@ -71,6 +71,13 @@ export function createDebug ({ sim, seed, step, scene }) {
     u.searchParams.set('seed', String(seed));
     location.href = u.href;
   });
+  /* NEW OCEAN (3B): the whole world again, now, in place, with the current
+     slider values and a fresh seed, so a change can be judged on a clean
+     ocean. The arena applies at once rather than at your next restart. */
+  button('dbgNew', 'New ocean', () => {
+    if (!sim || !sim.newOcean) return;
+    sim.newOcean((Math.random() * 4294967296) >>> 0);
+  });
   mark();
 
   function show () {
