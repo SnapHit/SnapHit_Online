@@ -1,0 +1,186 @@
+Balance on a full ocean (brief 3E stage 2), recorded output of accept.mjs.
+
+MEASURED AT THE PROPOSED FULL-OCEAN DEFAULTS, WHICH ARE NOT LIVE. Stage 1 of
+3E (wild count 300, arena radius 2000, refill time 5 s, burst speed 470, turn
+rate cruising 5.2, recruit radius 30, sparkle 8.0) was held back: at those
+defaults a room sends each phone about 26 KB/s, over the 8 KB/s bar, so the
+room checks failed. Its patch was kept, not committed. params.js still holds
+the earlier defaults, so re-running these commands on this commit measures
+those instead; apply the stage 1 patch first to reproduce the numbers below.
+
+Bots only (your manta parked out of the water), ten bots on the one brain of
+10.2, 5 simulated minutes a match, seeds 1000 onward. Each command was run in
+chunks of 25 seeds, four at a time in separate directories, and the chunks
+summed exactly (first places and ties add; top-three counts are recovered
+from each chunk's share, which is exact at 75 slots).
+
+  node accept.mjs 4h <from> <to> <cost>     test 4, five timid against five bully
+  node accept.mjs 3 <from> <to>             test 3, upsets and the top train
+  node accept.mjs crashes <from> <to>       crashes per bot per five minutes
+  half.mjs <from> <to>                      the longest train's share (below)
+
+The share: every simulated second, the longest living train's mantas (its
+leader and followers) over every manta in the water (living trains and every
+living wild manta, debris included); each seed's worst moment is kept. The
+script is short enough to give here in full:
+
+  const s = createSim({ seed, params: <the same mapping as accept.mjs> });
+  s.you.dead = 1e9; s.you.followers.length = 0;
+  for (let i = 0; i < 18000; i++) { s.step(); s.events.length = 0; if (i % 60) continue;
+    let all = 0, big = 0;
+    for (const t of s.rivals) { if (t.dead > 0) continue; const n = 1 + t.followers.length; all += n; big = Math.max(big, n); }
+    for (const w of s.wild) if (w && w.alive) all++;
+    worst = Math.max(worst, big / all); }
+
+A flag is raised where either half takes first place two times in three or
+more. Nothing here changes a game value.
+
+Run 2026-09-26, 09:30 to 10:08 UTC, on HEAD 83e6308 with the 3E stage 1 patch applied.
+
+
+Test 4, five timid (never burst) against five bully (burst to cut and collect), bots only, 5 simulated minutes:
+burst cost | seeds | timid first | bully first | ties | top-three share timid / bully
+       0.5 |   100 |          42 |          57 |    1 | 0.45 / 0.55
+       0.6 |   100 |          28 |          70 |    2 | 0.42 / 0.58 FLAG: bully first two times in three or more
+       0.7 |   100 |          40 |          59 |    1 | 0.40 / 0.60
+      0.85 |   100 |          39 |          58 |    3 | 0.44 / 0.56
+       1.0 |   100 |          39 |          59 |    2 | 0.40 / 0.60
+Closest to parity on first place: 0.5 (timid 42, bully 57). Flags: 0.6
+
+Test 3 (upsets), 50 seeds: the top train's longest, median 225.0, maximum 548; upsets (top train cut or crashed by a shorter one) median 10.0 per match
+Longest train's share of all mantas in the water (its worst moment per seed, sampled every second), 50 seeds: median 0.257, 90th percentile 0.356, maximum 0.437, seeds over half: 0
+Crashes per bot per five minutes, 50 seeds: bully 4.75 (reef 0.00, 160 bots); greedy 4.13 (reef 0.00, 172 bots); timid 5.81 (reef 0.00, 168 bots)
+
+Every cost has bully ahead on first place. 0.6 is the one flag, and it sits
+out of line with its neighbours (0.5 and 0.7 give 57 and 59): with 100
+seeds a count near 60 has a standard deviation of about 5, so 70 is about
+two of those away. Worth re-running before anything is tuned on it.
+
+Raw output, one chunk per line (seeds 1000+from to 1000+to-1). A chunk's own
+flag is judged on its 25 seeds only; the table above judges the 100.
+4h 0.5   0- 25  T4H {"burstCost":0.5,"seeds":25,"timid":{"first":10,"firstShare":0.4,"top3Share":0.45},"bully":{"first":14,"firstShare":0.56,"top3Share":0.55},"ties":1,"flag":""}
+4h 0.5  25- 50  T4H {"burstCost":0.5,"seeds":25,"timid":{"first":12,"firstShare":0.48,"top3Share":0.41},"bully":{"first":13,"firstShare":0.52,"top3Share":0.59},"ties":0,"flag":""}
+4h 0.5  50- 75  T4H {"burstCost":0.5,"seeds":25,"timid":{"first":8,"firstShare":0.32,"top3Share":0.45},"bully":{"first":17,"firstShare":0.68,"top3Share":0.55},"ties":0,"flag":"bully TAKES FIRST MORE THAN TWO IN THREE"}
+4h 0.5  75-100  T4H {"burstCost":0.5,"seeds":25,"timid":{"first":12,"firstShare":0.48,"top3Share":0.47},"bully":{"first":13,"firstShare":0.52,"top3Share":0.53},"ties":0,"flag":""}
+4h 0.6   0- 25  T4H {"burstCost":0.6,"seeds":25,"timid":{"first":6,"firstShare":0.24,"top3Share":0.45},"bully":{"first":18,"firstShare":0.72,"top3Share":0.55},"ties":1,"flag":"bully TAKES FIRST MORE THAN TWO IN THREE"}
+4h 0.6  25- 50  T4H {"burstCost":0.6,"seeds":25,"timid":{"first":10,"firstShare":0.4,"top3Share":0.47},"bully":{"first":15,"firstShare":0.6,"top3Share":0.53},"ties":0,"flag":""}
+4h 0.6  50- 75  T4H {"burstCost":0.6,"seeds":25,"timid":{"first":5,"firstShare":0.2,"top3Share":0.33},"bully":{"first":19,"firstShare":0.76,"top3Share":0.67},"ties":1,"flag":"bully TAKES FIRST MORE THAN TWO IN THREE"}
+4h 0.6  75-100  T4H {"burstCost":0.6,"seeds":25,"timid":{"first":7,"firstShare":0.28,"top3Share":0.43},"bully":{"first":18,"firstShare":0.72,"top3Share":0.57},"ties":0,"flag":"bully TAKES FIRST MORE THAN TWO IN THREE"}
+4h 0.7   0- 25  T4H {"burstCost":0.7,"seeds":25,"timid":{"first":13,"firstShare":0.52,"top3Share":0.39},"bully":{"first":12,"firstShare":0.48,"top3Share":0.61},"ties":0,"flag":""}
+4h 0.7  25- 50  T4H {"burstCost":0.7,"seeds":25,"timid":{"first":8,"firstShare":0.32,"top3Share":0.39},"bully":{"first":16,"firstShare":0.64,"top3Share":0.61},"ties":1,"flag":""}
+4h 0.7  50- 75  T4H {"burstCost":0.7,"seeds":25,"timid":{"first":12,"firstShare":0.48,"top3Share":0.47},"bully":{"first":13,"firstShare":0.52,"top3Share":0.53},"ties":0,"flag":""}
+4h 0.7  75-100  T4H {"burstCost":0.7,"seeds":25,"timid":{"first":7,"firstShare":0.28,"top3Share":0.37},"bully":{"first":18,"firstShare":0.72,"top3Share":0.63},"ties":0,"flag":"bully TAKES FIRST MORE THAN TWO IN THREE"}
+4h 0.85   0- 25  T4H {"burstCost":0.85,"seeds":25,"timid":{"first":7,"firstShare":0.28,"top3Share":0.43},"bully":{"first":18,"firstShare":0.72,"top3Share":0.57},"ties":0,"flag":"bully TAKES FIRST MORE THAN TWO IN THREE"}
+4h 0.85  25- 50  T4H {"burstCost":0.85,"seeds":25,"timid":{"first":7,"firstShare":0.28,"top3Share":0.37},"bully":{"first":17,"firstShare":0.68,"top3Share":0.63},"ties":1,"flag":"bully TAKES FIRST MORE THAN TWO IN THREE"}
+4h 0.85  50- 75  T4H {"burstCost":0.85,"seeds":25,"timid":{"first":12,"firstShare":0.48,"top3Share":0.52},"bully":{"first":12,"firstShare":0.48,"top3Share":0.48},"ties":1,"flag":""}
+4h 0.85  75-100  T4H {"burstCost":0.85,"seeds":25,"timid":{"first":13,"firstShare":0.52,"top3Share":0.45},"bully":{"first":11,"firstShare":0.44,"top3Share":0.55},"ties":1,"flag":""}
+4h 1.0   0- 25  T4H {"burstCost":1,"seeds":25,"timid":{"first":9,"firstShare":0.36,"top3Share":0.4},"bully":{"first":15,"firstShare":0.6,"top3Share":0.6},"ties":1,"flag":""}
+4h 1.0  25- 50  T4H {"burstCost":1,"seeds":25,"timid":{"first":11,"firstShare":0.44,"top3Share":0.31},"bully":{"first":14,"firstShare":0.56,"top3Share":0.69},"ties":0,"flag":""}
+4h 1.0  50- 75  T4H {"burstCost":1,"seeds":25,"timid":{"first":14,"firstShare":0.56,"top3Share":0.51},"bully":{"first":10,"firstShare":0.4,"top3Share":0.49},"ties":1,"flag":""}
+4h 1.0  75-100  T4H {"burstCost":1,"seeds":25,"timid":{"first":5,"firstShare":0.2,"top3Share":0.37},"bully":{"first":20,"firstShare":0.8,"top3Share":0.63},"ties":0,"flag":"bully TAKES FIRST MORE THAN TWO IN THREE"}
+crashes 0-25  CRASHES {"kind":"timid","bots":83,"perBotPer5min":6.02,"reefPerBotPer5min":0}
+crashes 0-25  CRASHES {"kind":"greedy","bots":85,"perBotPer5min":3.96,"reefPerBotPer5min":0}
+crashes 0-25  CRASHES {"kind":"bully","bots":82,"perBotPer5min":4.6,"reefPerBotPer5min":0}
+crashes 25-50  CRASHES {"kind":"bully","bots":78,"perBotPer5min":4.9,"reefPerBotPer5min":0}
+crashes 25-50  CRASHES {"kind":"timid","bots":85,"perBotPer5min":5.6,"reefPerBotPer5min":0}
+crashes 25-50  CRASHES {"kind":"greedy","bots":87,"perBotPer5min":4.3,"reefPerBotPer5min":0}
+T3 {"seed":1000,"events":11,"cuts":9,"crashes":2,"topLost":11,"reefCrashesOfTop":0,"longest":170,"secondsWithTop":288}
+T3 {"seed":1001,"events":6,"cuts":5,"crashes":1,"topLost":6,"reefCrashesOfTop":0,"longest":325,"secondsWithTop":284}
+T3 {"seed":1002,"events":8,"cuts":4,"crashes":4,"topLost":8,"reefCrashesOfTop":0,"longest":164,"secondsWithTop":290}
+T3 {"seed":1003,"events":15,"cuts":12,"crashes":3,"topLost":15,"reefCrashesOfTop":0,"longest":183,"secondsWithTop":281}
+T3 {"seed":1004,"events":16,"cuts":14,"crashes":2,"topLost":16,"reefCrashesOfTop":0,"longest":347,"secondsWithTop":293}
+T3 {"seed":1005,"events":10,"cuts":7,"crashes":3,"topLost":10,"reefCrashesOfTop":0,"longest":212,"secondsWithTop":277}
+T3 {"seed":1006,"events":5,"cuts":3,"crashes":2,"topLost":5,"reefCrashesOfTop":0,"longest":295,"secondsWithTop":290}
+T3 {"seed":1007,"events":20,"cuts":17,"crashes":3,"topLost":20,"reefCrashesOfTop":0,"longest":176,"secondsWithTop":293}
+T3 {"seed":1008,"events":15,"cuts":12,"crashes":3,"topLost":15,"reefCrashesOfTop":0,"longest":187,"secondsWithTop":292}
+T3 {"seed":1009,"events":9,"cuts":5,"crashes":4,"topLost":9,"reefCrashesOfTop":0,"longest":383,"secondsWithTop":287}
+T3 {"seed":1010,"events":7,"cuts":3,"crashes":4,"topLost":7,"reefCrashesOfTop":0,"longest":258,"secondsWithTop":290}
+T3 {"seed":1011,"events":14,"cuts":10,"crashes":4,"topLost":14,"reefCrashesOfTop":0,"longest":284,"secondsWithTop":294}
+T3 {"seed":1012,"events":8,"cuts":6,"crashes":2,"topLost":8,"reefCrashesOfTop":0,"longest":316,"secondsWithTop":295}
+T3 {"seed":1013,"events":7,"cuts":4,"crashes":3,"topLost":7,"reefCrashesOfTop":0,"longest":228,"secondsWithTop":287}
+T3 {"seed":1014,"events":9,"cuts":5,"crashes":4,"topLost":9,"reefCrashesOfTop":0,"longest":228,"secondsWithTop":296}
+T3 {"seed":1015,"events":16,"cuts":13,"crashes":3,"topLost":16,"reefCrashesOfTop":0,"longest":283,"secondsWithTop":292}
+T3 {"seed":1016,"events":4,"cuts":4,"crashes":0,"topLost":4,"reefCrashesOfTop":0,"longest":391,"secondsWithTop":292}
+T3 {"seed":1017,"events":3,"cuts":2,"crashes":1,"topLost":3,"reefCrashesOfTop":0,"longest":404,"secondsWithTop":284}
+T3 {"seed":1018,"events":15,"cuts":11,"crashes":4,"topLost":15,"reefCrashesOfTop":0,"longest":136,"secondsWithTop":292}
+T3 {"seed":1019,"events":13,"cuts":7,"crashes":6,"topLost":13,"reefCrashesOfTop":0,"longest":160,"secondsWithTop":293}
+T3 {"seed":1020,"events":5,"cuts":1,"crashes":4,"topLost":5,"reefCrashesOfTop":0,"longest":315,"secondsWithTop":293}
+T3 {"seed":1021,"events":4,"cuts":0,"crashes":4,"topLost":4,"reefCrashesOfTop":0,"longest":312,"secondsWithTop":286}
+T3 {"seed":1022,"events":25,"cuts":19,"crashes":6,"topLost":25,"reefCrashesOfTop":0,"longest":114,"secondsWithTop":289}
+T3 {"seed":1023,"events":9,"cuts":6,"crashes":3,"topLost":9,"reefCrashesOfTop":0,"longest":224,"secondsWithTop":279}
+T3 {"seed":1024,"events":13,"cuts":10,"crashes":3,"topLost":13,"reefCrashesOfTop":0,"longest":144,"secondsWithTop":295}
+T3 {"seed":1025,"events":10,"cuts":9,"crashes":1,"topLost":10,"reefCrashesOfTop":0,"longest":259,"secondsWithTop":291}
+T3 {"seed":1026,"events":10,"cuts":6,"crashes":4,"topLost":10,"reefCrashesOfTop":0,"longest":176,"secondsWithTop":287}
+T3 {"seed":1027,"events":13,"cuts":8,"crashes":5,"topLost":13,"reefCrashesOfTop":0,"longest":209,"secondsWithTop":277}
+T3 {"seed":1028,"events":5,"cuts":3,"crashes":2,"topLost":5,"reefCrashesOfTop":0,"longest":201,"secondsWithTop":291}
+T3 {"seed":1029,"events":28,"cuts":22,"crashes":6,"topLost":28,"reefCrashesOfTop":0,"longest":205,"secondsWithTop":281}
+T3 {"seed":1030,"events":14,"cuts":11,"crashes":3,"topLost":14,"reefCrashesOfTop":0,"longest":209,"secondsWithTop":289}
+T3 {"seed":1031,"events":17,"cuts":15,"crashes":2,"topLost":17,"reefCrashesOfTop":0,"longest":188,"secondsWithTop":290}
+T3 {"seed":1032,"events":21,"cuts":15,"crashes":6,"topLost":21,"reefCrashesOfTop":0,"longest":189,"secondsWithTop":285}
+T3 {"seed":1033,"events":12,"cuts":9,"crashes":3,"topLost":12,"reefCrashesOfTop":0,"longest":140,"secondsWithTop":290}
+T3 {"seed":1034,"events":6,"cuts":4,"crashes":2,"topLost":6,"reefCrashesOfTop":0,"longest":357,"secondsWithTop":279}
+T3 {"seed":1035,"events":7,"cuts":2,"crashes":5,"topLost":7,"reefCrashesOfTop":0,"longest":202,"secondsWithTop":286}
+T3 {"seed":1036,"events":1,"cuts":0,"crashes":1,"topLost":1,"reefCrashesOfTop":0,"longest":548,"secondsWithTop":282}
+T3 {"seed":1037,"events":14,"cuts":10,"crashes":4,"topLost":14,"reefCrashesOfTop":0,"longest":203,"secondsWithTop":284}
+T3 {"seed":1038,"events":9,"cuts":7,"crashes":2,"topLost":9,"reefCrashesOfTop":0,"longest":343,"secondsWithTop":289}
+T3 {"seed":1039,"events":14,"cuts":11,"crashes":3,"topLost":14,"reefCrashesOfTop":0,"longest":176,"secondsWithTop":286}
+T3 {"seed":1040,"events":4,"cuts":3,"crashes":1,"topLost":4,"reefCrashesOfTop":0,"longest":385,"secondsWithTop":272}
+T3 {"seed":1041,"events":9,"cuts":7,"crashes":2,"topLost":9,"reefCrashesOfTop":0,"longest":245,"secondsWithTop":291}
+T3 {"seed":1042,"events":4,"cuts":0,"crashes":4,"topLost":4,"reefCrashesOfTop":0,"longest":267,"secondsWithTop":292}
+T3 {"seed":1043,"events":11,"cuts":8,"crashes":3,"topLost":11,"reefCrashesOfTop":0,"longest":226,"secondsWithTop":289}
+T3 {"seed":1044,"events":7,"cuts":1,"crashes":6,"topLost":7,"reefCrashesOfTop":0,"longest":321,"secondsWithTop":290}
+T3 {"seed":1045,"events":12,"cuts":11,"crashes":1,"topLost":12,"reefCrashesOfTop":0,"longest":254,"secondsWithTop":285}
+T3 {"seed":1046,"events":22,"cuts":17,"crashes":5,"topLost":22,"reefCrashesOfTop":0,"longest":164,"secondsWithTop":286}
+T3 {"seed":1047,"events":13,"cuts":9,"crashes":4,"topLost":13,"reefCrashesOfTop":0,"longest":176,"secondsWithTop":283}
+T3 {"seed":1048,"events":20,"cuts":15,"crashes":5,"topLost":20,"reefCrashesOfTop":0,"longest":161,"secondsWithTop":293}
+T3 {"seed":1049,"events":4,"cuts":0,"crashes":4,"topLost":4,"reefCrashesOfTop":0,"longest":352,"secondsWithTop":289}
+HALF {"seed":1000,"worstShare":0.211,"length":171}
+HALF {"seed":1001,"worstShare":0.387,"length":317}
+HALF {"seed":1002,"worstShare":0.21,"length":154}
+HALF {"seed":1003,"worstShare":0.184,"length":157}
+HALF {"seed":1004,"worstShare":0.358,"length":346}
+HALF {"seed":1005,"worstShare":0.253,"length":193}
+HALF {"seed":1006,"worstShare":0.314,"length":228}
+HALF {"seed":1007,"worstShare":0.217,"length":176}
+HALF {"seed":1008,"worstShare":0.234,"length":161}
+HALF {"seed":1009,"worstShare":0.325,"length":377}
+HALF {"seed":1010,"worstShare":0.31,"length":257}
+HALF {"seed":1011,"worstShare":0.306,"length":285}
+HALF {"seed":1012,"worstShare":0.308,"length":268}
+HALF {"seed":1013,"worstShare":0.245,"length":229}
+HALF {"seed":1014,"worstShare":0.283,"length":200}
+HALF {"seed":1015,"worstShare":0.279,"length":243}
+HALF {"seed":1016,"worstShare":0.378,"length":315}
+HALF {"seed":1017,"worstShare":0.355,"length":401}
+HALF {"seed":1018,"worstShare":0.184,"length":133}
+HALF {"seed":1019,"worstShare":0.216,"length":141}
+HALF {"seed":1020,"worstShare":0.302,"length":234}
+HALF {"seed":1021,"worstShare":0.356,"length":306}
+HALF {"seed":1022,"worstShare":0.175,"length":103}
+HALF {"seed":1023,"worstShare":0.246,"length":221}
+HALF {"seed":1024,"worstShare":0.188,"length":144}
+HALF {"seed":1025,"worstShare":0.286,"length":237}
+HALF {"seed":1026,"worstShare":0.239,"length":161}
+HALF {"seed":1027,"worstShare":0.235,"length":206}
+HALF {"seed":1028,"worstShare":0.24,"length":188}
+HALF {"seed":1029,"worstShare":0.275,"length":206}
+HALF {"seed":1030,"worstShare":0.269,"length":189}
+HALF {"seed":1031,"worstShare":0.215,"length":185}
+HALF {"seed":1032,"worstShare":0.227,"length":162}
+HALF {"seed":1033,"worstShare":0.182,"length":125}
+HALF {"seed":1034,"worstShare":0.293,"length":357}
+HALF {"seed":1035,"worstShare":0.205,"length":166}
+HALF {"seed":1036,"worstShare":0.437,"length":458}
+HALF {"seed":1037,"worstShare":0.232,"length":195}
+HALF {"seed":1038,"worstShare":0.314,"length":336}
+HALF {"seed":1039,"worstShare":0.209,"length":172}
+HALF {"seed":1040,"worstShare":0.338,"length":374}
+HALF {"seed":1041,"worstShare":0.26,"length":245}
+HALF {"seed":1042,"worstShare":0.249,"length":263}
+HALF {"seed":1043,"worstShare":0.26,"length":225}
+HALF {"seed":1044,"worstShare":0.274,"length":267}
+HALF {"seed":1045,"worstShare":0.272,"length":243}
+HALF {"seed":1046,"worstShare":0.199,"length":164}
+HALF {"seed":1047,"worstShare":0.21,"length":157}
+HALF {"seed":1048,"worstShare":0.211,"length":161}
+HALF {"seed":1049,"worstShare":0.372,"length":320}
