@@ -1,9 +1,15 @@
 {
-  // Workers Static Assets, with NO Worker script.
+  // Workers Static Assets, plus ONE Worker: Manta trains' live rooms.
   //
-  // The absence of a "main" field is the entire cost model: static asset
-  // requests are free and unlimited. Adding a script, a framework or a build
-  // step quietly undoes that. Do not add one without a reason.
+  // Static asset requests are free and unlimited; a Worker invocation is
+  // billed. The Worker runs only for the paths in run_worker_first below, and
+  // every other request, a miss included, is answered by the asset server
+  // without invoking it. Never widen that list, never add a second Worker,
+  // and never route a page, a game or a static file through it. There is no
+  // build command, no package.json and no framework: wrangler deploy bundles
+  // rooms/worker.js itself. Deploys use npx wrangler@4.141.0, pinned in
+  // Cloudflare's dashboard, and every commit touching this file or rooms/
+  // passes npx wrangler@4.141.0 deploy --dry-run first. See CLAUDE.md.
 
   // Must match the Worker Cloudflare actually created. The first deploy used
   // "snap-hit", did not match, and was silently overridden by the CI name.
@@ -14,6 +20,9 @@
   // the next deploy. Named here, the site has exactly one public address.
   "workers_dev": false,
   "preview_urls": false,
+
+  // The rooms Worker. Outside docs/, so it is never served as a file.
+  "main": "rooms/worker.js",
 
   "assets": {
     // Everything served lives here. Anything at the repo root is never
@@ -26,6 +35,12 @@
     "html_handling": "auto-trailing-slash",
 
     // A miss serves docs/404.html rather than a bare Cloudflare error.
-    "not_found_handling": "404-page"
+    "not_found_handling": "404-page",
+
+    // Only room connections reach the Worker. Everything else is static.
+    "run_worker_first": ["/lab/manta/rooms/*"],
+
+    // Lets the Worker hand anything unexpected back to the static site.
+    "binding": "ASSETS"
   }
 }

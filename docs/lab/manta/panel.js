@@ -11,7 +11,7 @@
 
 /* Bumped by hand every time this page is edited, so a stale deploy is obvious
    from the phone rather than something you have to take on trust. */
-export const BUILD = '2026-09-26 04:45 UTC';
+export const BUILD = '2026-09-26 05:08 UTC';
 
 const params = new URLSearchParams(location.search);
 export const FORCE_WEBGL = params.get('backend') === 'webgl2';
