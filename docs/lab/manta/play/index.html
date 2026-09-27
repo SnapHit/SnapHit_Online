@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Manta trains</title>
+<!-- An empty data URL, so the browser never asks for /favicon.ico. A data:
+     URL is not a request; a missing favicon is a 404 in the log. -->
+<link rel="icon" href="data:,">
+
+<!--
+  Manta trains: the feedback page (3G stage 3). Not part of the site.
+
+  Nothing links here: no GAMES entry, no sitemap line, noindex/nofollow above.
+  It is the lab page (../index.html) with the lab's tools hidden and a small
+  play bar added, running the lab's own modules from ../. It joins the public
+  room "lobby" as a player at once; ?room=<code> joins a private room;
+  ?solo=1 plays alone. A two-second press on the top-left corner shows the
+  lab's chip and panel. Everything is same-origin, as on the lab page.
+-->
+
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+
+  /* The ocean, painted in CSS before a single byte of JavaScript runs, in the
+     same colours the shader starts from. Three hundred to four hundred
+     milliseconds pass before the first frame, and a black rectangle for a
+     third of a second is the difference between "it is loading" and "it is
+     broken". When the canvas does come up it replaces like with like. */
+  body {
+    background: linear-gradient(180deg, #060b14 0%, #040711 55%, #02040a 100%);
+    font: 400 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+    color: #e8eef5;
+    overflow: hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+  #gl { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+
+  /* ---- the chip: what you see by default ---- */
+  #chip {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    left: calc(env(safe-area-inset-left, 0px) + 10px);
+    z-index: 3;
+    display: flex; align-items: center; gap: 8px;
+    min-height: 34px; padding: 0 12px;
+    font: inherit; font-size: 13px; font-weight: 600;
+    color: #bfeee3;
+    background: rgba(4,9,18,.55);
+    border: 1px solid rgba(120,190,210,.30);
+    border-radius: 999px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #chip .dot { width: 7px; height: 7px; border-radius: 50%; background: #7fe3d0; }
+  #chip.webgl2 { color: #ffd9a8; } #chip.webgl2 .dot { background: #ffc46b; }
+  #chip.failed { color: #ffb3ab; } #chip.failed .dot { background: #ff8a80; }
+  #chip .fps { color: #8fa6bb; font-weight: 400; font-variant-numeric: tabular-nums; }
+  /* Something complained. Not necessarily fatal — see __labIssue. */
+  #chip .warn { color: #ffc46b; font-size: 15px; line-height: 1; }
+
+  /* ---- the panel: everything, once you ask for it ---- */
+  #panel {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 54px);
+    left: env(safe-area-inset-left, 0px);
+    right: env(safe-area-inset-right, 0px);
+    z-index: 2;
+    max-height: calc(100% - 212px - env(safe-area-inset-top, 0px));
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 10px;
+    padding: 12px 14px 14px;
+    border: 1px solid rgba(120,190,210,.28);
+    border-radius: 12px;
+    background: rgba(4,9,18,.86);
+  }
+  #panel[hidden], #bar[hidden] { display: none; }
+
+  #backend { font-size: 26px; font-weight: 700; line-height: 1.1; margin: 0 0 2px; color: #7fe3d0; }
+  #backend.webgl2 { color: #ffc46b; }
+  #backend.failed { color: #ff8a80; }
+  #sub { margin: 0 0 10px; font-size: 14px; color: #9fb4c7; }
+
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; }
+  dt { color: #8fa6bb; white-space: nowrap; }
+  dd { margin: 0; word-break: break-word; }
+  .num { font-variant-numeric: tabular-nums; }
+  #rows dd.block {
+    white-space: pre; overflow-x: auto;
+    font: 400 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  #err {
+    display: none; margin: 0 0 12px; padding: 9px 10px;
+    border-radius: 8px; background: rgba(120,20,20,.55);
+    border: 1px solid #ff8a80; color: #ffd9d4; font-size: 14px;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  #err.on { display: block; }
+  /* A fallback that worked is not a failure. Amber, and the headline stays the
+     name of the backend that is actually drawing. Capped and scrollable: a
+     stack trace is ten lines, and unbounded it pushed every diagnostic row off
+     a phone screen. Copy report reads the text, not the visible part. A red
+     #err is not capped, because when nothing draws there is nothing else. */
+  #err.note {
+    background: rgba(90,62,10,.5); border-color: #ffc46b; color: #ffe6bd;
+    max-height: 7.5em; overflow-y: auto;
+  }
+
+  #bar {
+    position: fixed; z-index: 3;
+    left: env(safe-area-inset-left, 0px);
+    right: env(safe-area-inset-right, 0px);
+    bottom: env(safe-area-inset-bottom, 0px);
+    display: flex; flex-wrap: wrap; gap: 10px; margin: 10px;
+  }
+  #bar button {
+    flex: 1 1 calc(50% - 5px); min-height: 48px;
+    font: inherit; font-size: 16px; font-weight: 600;
+    color: #04060d; background: #7fe3d0;
+    border: 0; border-radius: 10px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #bar button:active { transform: translateY(1px); }
+  #bar button.wide { flex: 1 1 100%; background: #ffd9a8; }
+  #reduceRow {
+    display: flex; align-items: center; gap: 8px;
+    margin: 0 0 10px; font-size: 14px; color: #9fb4c7;
+  }
+  #reduceRow input { width: 18px; height: 18px; accent-color: #7fe3d0; }
+  #bar button.ghost {
+    background: rgba(127,227,208,.14); color: #bfeee3;
+    box-shadow: inset 0 0 0 1px rgba(127,227,208,.45);
+  }
+
+  /* ---- the tuning drawer ---- */
+  /* Full width at the top of the bar's flex row. Capped and scrollable so it
+     can never take more than four tenths of the screen: the train is what is
+     being judged, and a drawer over the train judges nothing. */
+  #drawer { flex: 1 1 100%; }
+  #drawerToggle { width: 100%; }
+  #drawerBody[hidden] { display: none; }
+  /* While the drawer is open the bar's other buttons and the diagnostics panel
+     both stand down. They are not what Nathan is doing, and between them they
+     are most of the screen that the ocean can have back — which is the
+     difference between the drawer covering the train and sitting under it.
+     The panel also has to go because the drawer sits over it: a translucent
+     drawer with twenty rows of diagnostics showing through was unreadable, and
+     it took looking at a screenshot to see it. The backend and the frame rate
+     stay on the chip, which is the part worth having while tuning. */
+  body.tuning #bar > button, body.tuning #panel { display: none; }
+  /* Opaque, and not nearly opaque. See above. */
+  #bar #drawerToggle { background: #0b1526; color: #bfeee3; }
+  #drawerBody {
+    margin-top: 10px; padding: 8px 12px;
+    max-height: 38vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    border-radius: 10px;
+    background: #040912;
+    box-shadow: inset 0 0 0 1px rgba(120,190,210,.28);
+  }
+  .srow { display: block; padding: 1px 0; }
+  .shead {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; font-size: 12px; line-height: 1.3; color: #9fb4c7;
+  }
+  .sval { color: #bfeee3; font-variant-numeric: tabular-nums; }
+  .srow input[type=range] {
+    display: block; width: 100%; height: 20px; margin: 0;
+    accent-color: #7fe3d0; background: transparent;
+  }
+  /* Nine sliders are taller than the drawer is allowed to be, so the list
+     scrolls — and Copy values and Reset were below the fold, which is where
+     buttons go to be missed. Stuck to the bottom of the scroller instead, on
+     the same opaque ground so nothing reads through them. */
+  #drawerActions {
+    position: sticky; bottom: -8px; z-index: 1;
+    display: flex; gap: 10px; margin-top: 8px;
+    padding: 8px 0; background: #040912;
+  }
+  #drawerActions button { flex: 1 1 0; min-height: 40px; font-size: 15px; }
+
+  @media (orientation: landscape) and (max-height: 520px) {
+    #panel { max-width: 56%; max-height: calc(100% - 74px - env(safe-area-inset-top, 0px)); }
+    #bar { left: auto; width: 40%; }
+    #bar button { min-height: 40px; font-size: 14px; }
+    /* The bar is off to the right here, so the ocean is never behind the
+       drawer and it can have more of the height. */
+    #drawerBody { max-height: 58vh; }
+    #backend { font-size: 22px; }
+  }
+
+  #plain {
+    position: fixed; left: 10px; right: 10px; top: 10px;
+    height: 60%; display: none; z-index: 5;
+    font: 400 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #e8eef5; background: #060c17;
+    border: 1px solid #7fe3d0; border-radius: 10px; padding: 10px;
+  }
+  #plain.on { display: block; }
+  /* The score, small and out of the way: bottom left, clear of the chip at
+     the top and the bar at the bottom right. It never takes a touch, so a
+     finger that lands on it still steers. */
+  /* The death beat's card: the run's peak, in the middle of the screen for
+     a second and a half. Information, not decoration, so reduced flash keeps
+     it. It never takes a touch. */
+  #beat {
+    position: fixed; inset: 0; z-index: 4; pointer-events: none;
+    display: none; align-items: center; justify-content: center;
+    font: 600 84px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #eaf4ff; text-shadow: 0 2px 20px #000c, 0 0 46px #7fe3d0aa;
+    letter-spacing: 0.02em;
+  }
+  #beat.on { display: flex; }
+  /* The board: top ten by current length, top right, clear of the chip on
+     the left and the bar below. Small, and it never takes a touch. */
+  #board {
+    position: fixed; right: 10px; top: 54px; z-index: 3; pointer-events: none;
+    font: 400 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #bcd6e8; text-shadow: 0 1px 3px #000a; text-align: right;
+    letter-spacing: 0.01em;
+  }
+  #board b { font-weight: 600; color: #eaf4ff; }
+  #panel #board { position: static; text-align: left; margin: 0 0 8px; }
+  #len {
+    position: fixed; left: 10px; bottom: 10px; z-index: 3; pointer-events: none;
+    font: 400 12px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #cfe6f5; text-shadow: 0 1px 3px #000a, 0 0 10px #0009;
+    letter-spacing: 0.02em;
+  }
+  /* THE FEEDBACK PAGE: no lab tools unless asked for (body.lab). */
+  body:not(.lab) #chip, body:not(.lab) #panel, body:not(.lab) #bar, body:not(.lab) #plain { display: none !important; }
+  #corner { position: fixed; left: 0; top: 0; width: 48px; height: 48px; z-index: 6; touch-action: none; }
+  #fb {
+    position: fixed; z-index: 5; top: calc(env(safe-area-inset-top, 0px) + 8px);
+    left: calc(env(safe-area-inset-left, 0px) + 52px); right: calc(env(safe-area-inset-right, 0px) + 8px);
+    display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px;
+    font: 500 13px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #dcecf6;
+    pointer-events: none;
+  }
+  #fb > * { pointer-events: auto; }
+  #fb [hidden] { display: none !important; }
+  #fb button, #fb a.btn {
+    font: inherit; font-weight: 600; min-height: 34px; padding: 0 12px; color: #dff6ee; text-decoration: none;
+    display: inline-flex; align-items: center;
+    background: rgba(4,9,18,.6); border: 1px solid rgba(120,190,210,.35); border-radius: 999px;
+  }
+  #fb button:disabled { opacity: .5; }
+  #fb .link { background: none; border: 0; padding: 0 4px; color: #9fd6ea; text-decoration: underline; min-height: 34px; }
+  #fb .row { flex-basis: 100%; display: flex; justify-content: flex-end; gap: 6px; min-width: 0; }
+  #fb .row[hidden] { display: none; }
+  #shareLink { min-width: 0; flex: 1 1 auto; max-width: 280px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #eaf4ff; background: rgba(4,9,18,.7); border: 1px solid rgba(120,190,210,.35); border-radius: 8px; padding: 6px 8px; }
+  #note { text-align: right; color: #ffe2a8; text-shadow: 0 1px 3px #000a; }
+  #privacy { max-width: 420px; margin: 0; padding: 10px 12px; text-align: left; background: rgba(4,9,18,.85);
+    border: 1px solid rgba(120,190,210,.35); border-radius: 10px; font-weight: 400; }
+  #stats {
+    position: fixed; right: calc(env(safe-area-inset-right, 0px) + 10px); bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);   /* a line above #len */
+    z-index: 3; pointer-events: none;
+    font: 400 12px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #cfe6f5; text-shadow: 0 1px 3px #000a, 0 0 10px #0009;
+  }
+  body:not(.lab) #board { top: calc(env(safe-area-inset-top, 0px) + 96px); }
+</style>
+</head>
+<body>
+
+<canvas id="gl"></canvas>
+
+<div id="len" aria-live="off">length 0   peak 0   best 0</div>
+<div id="beat" aria-live="polite"></div>
+<div id="board" aria-live="off"></div>
+
+<div id="corner" aria-hidden="true"></div>
+<div id="fb">
+  <button id="friends" type="button">Play with friends</button>
+  <button id="solo" type="button">Solo</button>
+  <button id="online" type="button" hidden>Play online</button>
+  <button id="privacyLink" type="button" class="link" aria-expanded="false" aria-controls="privacy">Privacy</button>
+  <a id="feedback" class="link" hidden target="_blank" rel="noopener">Feedback</a>
+  <div class="row" id="shareRow" hidden>
+    <input id="shareLink" type="text" readonly aria-label="Link to this room">
+    <button id="copyLink" type="button">Copy</button>
+  </div>
+  <div class="row" id="noteRow" hidden><span id="note"></span></div>
+  <div class="row" id="privacyRow" hidden>
+    <p id="privacy">Manta trains keeps nothing about you. Playing online, your phone sends the room only your
+    steering, the part of the ocean you are looking at and a random key, kept in this tab, that lets you
+    rejoin after a dropped connection. The room gives you a random name and forgets it all when it
+    empties. A private room's code is kept until it has had no players for 24 hours, and the address
+    that asked for it for 10 seconds, to stop floods. No accounts, no cookies, no analytics, nothing
+    from anyone else's servers. The site runs on Cloudflare, which keeps its own short-lived
+    connection logs.</p>
+  </div>
+</div>
+<div id="stats" aria-live="off">runs 0 · best peak 0 · cuts landed 0</div>
+
+<button id="chip" type="button" aria-expanded="false" aria-controls="panel">
+  <span class="dot" aria-hidden="true"></span>
+  <span id="chipBackend">starting…</span>
+  <span class="fps" id="chipFps">—</span>
+</button>
+
+<div id="panel" hidden>
+  <!-- Headline first, then the one line that says what to do about it, then
+       the detail. A stack trace is long, and burying "which backend" under it
+       loses the answer the page exists to give. -->
+  <p id="backend">starting…</p>
+  <p id="sub">loading Three.js from /vendor/three/r186/</p>
+  <div id="err"></div>
+  <label id="reduceRow"><input type="checkbox" id="reduceFlash"> reduced flash and motion</label>
+  <dl id="rows"></dl>
+</div>
+
+<div id="bar" hidden>
+  <!-- The drawer is the first thing in the bar, so it sits low on the screen,
+       appears and disappears with the rest of the expanded panel, and pushes
+       nothing around when it opens. It starts collapsed on purpose. -->
+  <div id="drawer">
+    <button id="drawerToggle" type="button" class="ghost"
+            aria-expanded="false" aria-controls="drawerBody">Tuning</button>
+    <div id="drawerBody" hidden>
+      <div id="drawerList"></div>
+      <div id="drawerActions">
+        <button id="copyValues" type="button" class="ghost">Copy values</button>
+        <button id="resetValues" type="button" class="ghost">Reset</button>
+        <button id="rerollColour" type="button" class="ghost">Reroll</button>
+      </div>
+    </div>
+  </div>
+  <button id="cut" type="button" class="wide">Cut the train</button>
+  <button id="swap" type="button">Switch backend</button>
+  <button id="copy" type="button" class="ghost">Copy report</button>
+  <button id="cold" type="button" class="ghost">Cold load</button>
+  <button id="warm" type="button" class="ghost">Warm load</button>
+</div>
+
+<textarea id="plain" readonly></textarea>
+
+<script>
+/* Classic script, on purpose, and first. It runs before any module is fetched,
+   so a module that fails to parse, fails to resolve through the import map or
+   throws on init still lands in the panel instead of leaving a black screen
+   with nothing on it. */
+(function () {
+  var box = document.getElementById('err');
+  var seen = {}, shown = 0;
+  function open() {
+    /* A failure has to be visible even when the panel is collapsed, because
+       the chip alone cannot carry a stack trace. */
+    document.getElementById('panel').hidden = false;
+    document.getElementById('bar').hidden = false;
+    document.getElementById('chip').setAttribute('aria-expanded', 'true');
+  }
+  window.__labError = function (what, e) {
+    var msg = (e && (e.stack || e.message)) ? (e.stack || e.message) : String(e);
+    var line = what + ': ' + msg;
+    /* A renderer that throws throws every frame. Reporting each one would bury
+       the first, which is the only one that says anything. */
+    if (seen[line]) return;
+    seen[line] = true;
+    if (shown < 4) { box.textContent = (box.textContent ? box.textContent + '\n\n' : '') + line; shown++; }
+    box.className = 'on';
+    var b = document.getElementById('backend');
+    b.textContent = b.dataset.name ? (b.dataset.name + ' · FAILED') : 'FAILED';
+    b.className = 'failed';
+    document.getElementById('chip').className = 'failed';
+    document.getElementById('chipBackend').textContent = 'FAILED';
+    open();
+  };
+  /* A handled failure the page recovered from. Same box, amber, headline left
+     alone: after an automatic fallback the headline names the backend that is
+     drawing, not the one that died. */
+  window.__labNote = function (what, e) {
+    var msg = (e && (e.stack || e.message)) ? (e.stack || e.message) : String(e);
+    var line = what + ': ' + msg;
+    if (seen[line]) return;
+    seen[line] = true;
+    box.textContent = (box.textContent ? box.textContent + '\n\n' : '') + line;
+    if (box.className !== 'on') box.className = 'on note';
+  };
+  /* An uncaught error is not the same thing as a dead page. Headless Chrome
+     153 on SwiftShader throws "Instance dropped in popErrorScope" while the
+     renderer runs at 54 fps, and calling that FAILED buries the one word the
+     page exists to say. So: if a frame has ever been drawn, this is a note
+     and a mark on the chip; if nothing has ever drawn, it is a failure.
+     renderer.js still calls __labError directly when a draw actually dies. */
+  window.__labIssue = function (what, e) {
+    var msg = (e && (e.stack || e.message)) ? (e.stack || e.message) : String(e);
+    if (window.__labDrew === true) { window.__labNote(what, e); window.__labMark(); }
+    else window.__labError(what, e);
+  };
+  window.__labMark = function () {
+    var chip = document.getElementById('chip');
+    if (chip && chip.querySelector('.warn') === null) {
+      var s = document.createElement('span');
+      s.className = 'warn'; s.textContent = '\u26a0'; s.title = 'errors were reported';
+      chip.appendChild(s);
+    }
+  };
+  window.addEventListener('error', function (e) { window.__labIssue('uncaught error', e.error || e.message); });
+  window.addEventListener('unhandledrejection', function (e) { window.__labIssue('unhandled rejection', e.reason); });
+})();
+</script>
+
+<script>
+/* The import map, built here rather than written out, and still the only way
+   Three.js is loaded. A document may have one import map and it has to exist
+   before the first module is fetched, so this is a classic inline script: it
+   blocks the parser, and the module tag below is not reached until the map is
+   in the document.
+
+   ?cold=<stamp> puts a fresh query on the three build files so the browser has
+   to go to the network for them. That turns a cold measurement into one tap
+   instead of an incognito window.
+
+   three.core.js needs a key of its own. three.webgpu.js reaches it by the
+   relative specifier './three.core.js', which never sees a bare-specifier
+   mapping, and a query string is not inherited across relative resolution.
+   Import maps do remap URL-like specifiers, so the resolved path is listed as
+   a key and sent to the stamped copy. Without this line a "cold" load would
+   quietly serve 1.4 MB of the 3.7 MB out of cache and under-report itself.
+
+   This page's own modules sit beside this file and are imported by relative
+   path, so they need no entry here and get none. addons/ is untouched for the
+   same reason: nothing imports from it. */
+(function () {
+  var BASE = '/vendor/three/r186/';
+  var stamp = new URLSearchParams(location.search).get('cold');
+  var q = stamp ? '?cold=' + encodeURIComponent(stamp) : '';
+  var imports = {
+    'three':         BASE + 'three.webgpu.js' + q,
+    'three/webgpu':  BASE + 'three.webgpu.js' + q,
+    'three/tsl':     BASE + 'three.tsl.js' + q,
+    'three/addons/': BASE + 'addons/'
+  };
+  if (q) imports[BASE + 'three.core.js'] = BASE + 'three.core.js' + q;
+  /* The 'three/addons/' prefix mapping cannot carry a query, so a cold load
+     would quietly serve the two addons this page imports out of cache. Import
+     maps prefer the most specific key, so name them. */
+  if (q) for (const a of ['tsl/display/BloomNode.js', 'tsl/display/CRT.js']) {
+    imports['three/addons/' + a] = BASE + 'addons/' + a + q;
+  }
+  var el = document.createElement('script');
+  el.type = 'importmap';
+  el.textContent = JSON.stringify({ imports: imports });
+  document.head.appendChild(el);
+  /* ?preload=1 (3E stage 5), a switch to try on the phone: the modules are
+     otherwise found one import level at a time (main.js, then what it
+     imports, then theirs), which on a 300 ms link spends a round trip per
+     level. With the switch they are all asked for at once, straight after
+     the map: 3D's fastest warm variant, the lab's own modules and the three
+     build. The same URLs the imports resolve to, so nothing new is fetched,
+     and the rooms modules are not named. Without it, not one line here runs
+     and the page asks for exactly what it did before. */
+  if (new URLSearchParams(location.search).get('preload') === '1') {
+    var mods = ['main', 'panel', 'params', 'scene', 'ocean', 'lightmemory', 'seabed', 'caustics', 'shadow',
+      'renderer', 'mantas', 'sim', 'controls', 'debug', 'post', 'cut', 'tiers', 'clock', 'watch', 'drawer',
+      'stamp', 'roll', 'follow', 'lighten', 'palette', 'rules', 'bots', 'motion', 'population', 'simcore',
+      'colours', 'shape', 'movers'].map(function (m) { return '../' + m + '.js'; });
+    mods.push(imports['three'], imports['three/tsl'], imports[BASE + 'three.core.js'] || BASE + 'three.core.js');
+    for (var i = 0; i < mods.length; i++) {
+      var l = document.createElement('link');
+      l.rel = 'modulepreload'; l.href = mods[i];
+      document.head.appendChild(l);
+    }
+  }
+})();
+</script>
+
+<script>
+/* Which game this is, decided before main.js loads: the public room "lobby",
+   a private room from ?room=<code>, or solo with ?solo=1. main.js reads
+   window.MANTA_QUERY in place of the address (the lab never sets it). */
+(function () {
+  var q = new URLSearchParams(location.search);
+  var code = /^[2-9a-hjkmnp-z]{8}$/.test(q.get('room') || '') ? q.get('room') : null;
+  var solo = q.get('solo') === '1';
+  var p = new URLSearchParams(location.search);
+  p.delete('solo'); p.delete('note');
+  if (solo) p.delete('room'); else { p.set('room', code || 'lobby'); p.set('play', '1'); }
+  window.MANTA_QUERY = p.toString();
+  window.__play = { room: solo ? null : (code || 'lobby'), code: solo ? null : code, note: q.get('note') || '' };
+})();
+</script>
+<script type="module" src="../main.js"></script>
+<script>
+(function () {
+  /* Where the Feedback link goes. Empty hides the link. */
+  var FEEDBACK_URL = '';
+
+  var P = window.__play, $ = function (id) { return document.getElementById(id); };
+  var ROOMS = '/lab/manta/rooms/';
+  var NOTES = { slow: 'The room could not be reached within 5 seconds, so this is solo.' };
+  /* Test switches ride along; nothing else does. */
+  function keep (u) { var q = new URLSearchParams(location.search); ['backend', 'tier'].forEach(function (k) { if (q.get(k)) u.searchParams.set(k, q.get(k)); }); return u; }
+  function go (params) { var u = new URL(location.pathname, location.href); for (var k in params) u.searchParams.set(k, params[k]); location.replace(keep(u).href); }
+  function say (text) { $('note').textContent = text; $('noteRow').hidden = !text; }
+  function goSolo (why) { if (P.room) go(why ? { solo: '1', note: why } : { solo: '1' }); }
+
+  if (FEEDBACK_URL) { $('feedback').href = FEEDBACK_URL; $('feedback').hidden = false; }
+  if (NOTES[P.note]) say(NOTES[P.note]);
+  $('solo').hidden = !P.room; $('online').hidden = !!P.room;
+  $('solo').onclick = function () { goSolo(''); };
+  $('online').onclick = function () { go({}); };
+  $('privacyLink').onclick = function () {
+    var open = $('privacyRow').hidden; $('privacyRow').hidden = !open; this.setAttribute('aria-expanded', String(open));
+  };
+
+  /* A private room shows its own link, to copy and send. */
+  if (P.code) {
+    $('shareLink').value = location.origin + location.pathname + '?room=' + P.code;
+    $('shareRow').hidden = false;
+  }
+  $('copyLink').onclick = function () {
+    var b = this, text = $('shareLink').value, done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 2000); };
+    function fallback () { $('shareLink').select(); try { document.execCommand('copy'); done(); } catch (_) { /* selected: copy by hand */ } }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback); else fallback();
+  };
+
+  /* Play with friends: a new private room, then go there. Refused, stay put. */
+  $('friends').onclick = function () {
+    var b = this; b.disabled = true; say('Making a room…');
+    fetch(ROOMS + 'new', { method: 'POST', cache: 'no-store' }).then(function (r) {
+      if (r.ok) return r.json().then(function (j) { go({ room: j.code }); });
+      return r.text().then(function (t) {
+        b.disabled = false;
+        if (r.status === 429) say('One new room every 10 seconds: try again in a moment.');
+        else if (/off/.test(t)) say('Rooms are off just now.');
+        else if (r.status === 503) say(P.room === 'lobby' ? 'Every room is busy just now, so you are still in the public room.' : 'Every room is busy just now.');
+        else say('A room could not be made just now.');
+      });
+    }).catch(function () { b.disabled = false; say('A room could not be made just now.'); });
+  };
+
+  /* Rooms off, a room link that has closed, or a room that will not answer:
+     5 s after the room starts trying, solo, with a note. */
+  if (P.room) {
+    var t0 = null;
+    var wait = setInterval(function () {
+      var R = window.__lab && window.__lab.room;
+      if (!R) return;
+      if (t0 === null) t0 = performance.now();
+      if (R.connected && (R.me || !R.play)) { clearInterval(wait); return; }   // playing, or watching a full room
+      if (performance.now() - t0 > 5000) { clearInterval(wait); goSolo('slow'); }
+    }, 100);
+  }
+
+  /* Runs, best peak and cuts landed. A solo cut names who made it; a room's
+     does not, so there a cut within 40 units of your head is counted. */
+  var runs = 0, best = 0, cuts = 0, wasDead = true, hooked = null;
+  setInterval(function () {
+    var S = window.__sim, you = S && S.you; if (!you) return;
+    if (S.events && hooked !== S.events) {
+      hooked = S.events; var push = S.events.push;
+      S.events.push = function () {
+        for (var i = 0; i < arguments.length; i++) {
+          var e = arguments[i]; if (!e || e.kind !== 'cut' || you.dead > 0) continue;
+          if (e.by !== undefined ? e.by === you.id : e.id === undefined && Math.hypot(e.x - you.x, e.z - you.z) < 40) cuts++;
+        }
+        return push.apply(this, arguments);
+      };
+    }
+    var watching = window.__lab && window.__lab.room && !window.__lab.room.play;
+    var dead = watching || you.dead > 0;
+    if (wasDead && !dead) runs++;
+    wasDead = dead;
+    if (!watching) best = Math.max(best, you.peak || 0, you.lastPeak || 0, you.followers ? you.followers.length : 0);
+    $('stats').textContent = 'runs ' + runs + ' · best peak ' + best + ' · cuts landed ' + cuts;
+  }, 100);
+
+  /* Two seconds on the top-left corner shows the lab's chip and panel. */
+  var hold = null, corner = $('corner');
+  corner.addEventListener('pointerdown', function (e) { e.preventDefault(); clearTimeout(hold); hold = setTimeout(function () { document.body.classList.toggle('lab'); }, 2000); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (t) { corner.addEventListener(t, function () { clearTimeout(hold); }); });
+})();
+</script>
+</body>
+</html>

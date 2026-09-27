@@ -38,7 +38,10 @@ import { createStamper } from './stamp.js';
 import { rollSummary, wildSplit } from './roll.js';
 import { createFollow } from './follow.js';
 
-const query = new URLSearchParams(location.search);
+/* The feedback page (/lab/manta/play/, 3G) picks its room before this loads
+   and says so in window.MANTA_QUERY; the lab itself never sets it, so here
+   the address is read exactly as before. */
+const query = new URLSearchParams(typeof window.MANTA_QUERY === 'string' ? window.MANTA_QUERY : location.search);
 /* ?fx=off builds the page without the light memory, the plankton or anything
    that reads them, so the cost of the look can be measured against the bare
    scene on a real phone rather than guessed at. */
