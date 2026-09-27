@@ -115,7 +115,9 @@ export function createRoomView ({ room, build, params: start, view, play: playin
        (tests: a train of your own to burst with); anywhere else it is a 404
        and the page simply retries. */
     const kind = q.get('stage') === 'cut' ? 'stage/' : 'ocean/';
-    try { s = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/lab/manta/rooms/' + kind + room); }
+    /* ?xb=1 with the staged room (3H, tests only): bot 2 cuts your train. */
+    const extra = kind === 'stage/' && q.get('xb') === '1' ? '?xb=1' : '';
+    try { s = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/lab/manta/rooms/' + kind + room + extra); }
     catch (e) { later(); return; }
     ws = s;
     s.binaryType = 'arraybuffer';
@@ -198,7 +200,7 @@ export function createRoomView ({ room, build, params: start, view, play: playin
     snaps.push({ time: m.time, tr: new Map(m.tr.map(q => [q.id, q])) });
     wildStore.take(m);
     while (snaps.length > 2 && m.time - snaps[1].time > 1) snaps.shift();
-    for (const e of m.ev || []) pending.push({ time: m.time, kind: e.k, x: e.x, z: e.z });
+    for (const e of m.ev || []) pending.push({ time: m.time, kind: e.k, x: e.x, z: e.z, by: e.by });
     /* The board comes only when it changed: the last one stands until then. */
     if (m.bd) {
       board.length = 0;
@@ -314,7 +316,7 @@ export function createRoomView ({ room, build, params: start, view, play: playin
     pending.sort((p, q) => p.time - q.time);
     while (pending.length && pending[0].time <= T) {
       const e = pending.shift();
-      if (e.time >= T - 0.5) events.push({ kind: e.kind, x: e.x, z: e.z });
+      if (e.time >= T - 0.5) events.push({ kind: e.kind, x: e.x, z: e.z, by: e.by });
     }
   }
 

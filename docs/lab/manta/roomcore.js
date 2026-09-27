@@ -37,7 +37,8 @@
  *     i16 z, u8 h, i32 s (1/16 unit), u16 len; if fresh u8 kind, u16 runs;
  *     u16 points; the first i16 x, i16 z, u8 h, i32 s, the rest i16 x,
  *     i16 z, u8 h, u16 ds (1/16 unit since the one before)
- *   u8 events; each: u8 kind (0 crash, 1 cut), i16 x, i16 z
+ *   u8 events; each: u8 kind (0 crash, 1 cut), i16 x, i16 z, u8 by: the
+ *     leader that made the cut, or that crashed (255 none) (3H)
  *   board (flag 1): u8 rows; each u8 id, u16 len, longest first
  *   wild in full (flag 2): u16 count, then records
  *   wild changes (flag 4): u16 count, records; u16 count, slots gone (a
@@ -146,7 +147,8 @@ export function snapFor (sim, phone, n, events, step = 0) {
 
   const evAt = w.at; w.u8(0); let ne = 0;
   for (const e of events) if ((e.kind === 'crash' || e.kind === 'cut') && near(view, e.x, e.z) && ne < 255) {
-    w.u8(e.kind === 'cut' ? 1 : 0); w.i16(e.x - cx); w.i16(e.z - cz); ne++;
+    const by = e.kind === 'cut' ? e.by : e.id;
+    w.u8(e.kind === 'cut' ? 1 : 0); w.i16(e.x - cx); w.i16(e.z - cz); w.u8(Number.isInteger(by) && by >= 0 && by < 255 ? by : 255); ne++;
   }
   w.put8(evAt, ne);
 
@@ -273,7 +275,7 @@ export function decodeSnap (buf) {
     tr.push(q);
   }
   const ev = [];
-  for (let c = u8(); c > 0; c--) { const kind = u8(); ev.push({ k: kind === 1 ? 'cut' : 'crash', x: cx + i16(), z: cz + i16() }); }
+  for (let c = u8(); c > 0; c--) { const kind = u8(); const e = { k: kind === 1 ? 'cut' : 'crash', x: cx + i16(), z: cz + i16() }, by = u8(); e.by = by === 255 ? -1 : by; ev.push(e); }
   const m = { t: 'snap', n, k, time: k / 60, tr, ev };
   if (flags & 1) { m.bd = []; for (let c = u8(); c > 0; c--) { const id = u8(); m.bd.push([id, u16()]); } }
   const rec = () => { const slot = u16(), x = cx + i16(), z = cz + i16(), h = unang(u8()), fl = u8(), col = u8(); return [slot, x, z, h, fl, col === 255 ? -1 : col]; };

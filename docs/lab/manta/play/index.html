@@ -550,8 +550,8 @@
     }, 100);
   }
 
-  /* Runs, best peak and cuts landed. A solo cut names who made it; a room's
-     does not, so there a cut within 40 units of your head is counted. */
+  /* Runs, best peak and cuts landed. Every cut names the leader that made
+     it, solo and in a room alike (3H), and only your own are counted. */
   var runs = 0, best = 0, cuts = 0, wasDead = true, hooked = null;
   setInterval(function () {
     var S = window.__sim, you = S && S.you; if (!you) return;
@@ -559,8 +559,8 @@
       hooked = S.events; var push = S.events.push;
       S.events.push = function () {
         for (var i = 0; i < arguments.length; i++) {
-          var e = arguments[i]; if (!e || e.kind !== 'cut' || you.dead > 0) continue;
-          if (e.by !== undefined ? e.by === you.id : e.id === undefined && Math.hypot(e.x - you.x, e.z - you.z) < 40) cuts++;
+          var e = arguments[i];
+          if (e && e.kind === 'cut' && you.id >= 0 && e.by === you.id) cuts++;
         }
         return push.apply(this, arguments);
       };

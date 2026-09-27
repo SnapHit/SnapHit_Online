@@ -82,6 +82,7 @@ export function createOcean (env, url, opts = {}) {
   const staged = opts.stage === 'cut';
   /* The crossing train's length, 20 unless a test asks (?len=, 2 to 40). */
   const crossLen = Math.round(clamp(url.searchParams.get('len') || 20, 2, 40));
+  const botCuts = staged && url.searchParams.get('xb') === '1';
   let sim = null, build = null, seed = 0;
   let timer = null, last = 0, owed = 0, n = 0, steps = 0;
   const ready = loadDefaults(env, url).then(d => {
@@ -261,6 +262,14 @@ export function createOcean (env, url, opts = {}) {
       for (let d = 40 * sp; d >= 0; d -= sp / 4) t.trail.push({ x: x + Math.sin(head) * d, z: z + Math.cos(head) * d, h: head, s: t.s - d });
     };
     const seated = trainOf(1), cross = trainOf(2);
+    if (botCuts) {
+      /* ?xb=1 (3H): the other way round. The player's train crosses and
+         bot 2 bursts into its body, so the cuts near the player are a bot's. */
+      lay(seated, -60, 0, -Math.PI / 2, crossLen);
+      lay(cross, 0, 260, 0, 12);
+      if (cross) cross.human = { want: 0, burst: true, rewind: 0 };
+      return;
+    }
     lay(seated, 0, 260, 0, 12);                     // heading -z, towards the crossing
     lay(cross, -60, 0, -Math.PI / 2, crossLen);     // heading +x, across the seat's path
     if (cross) cross.human = { want: -Math.PI / 2, burst: false, rewind: 0 };
