@@ -92,7 +92,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   const wild = [];
   /* Where a wild manta goes: a group with room, its own place in it, clear
      of the reef. Used by every spawn and by a relayout. */
-  function placeWild (m, awayFrom) {
+  function placeWild (m, awayFrom, strict = false) {
     /* ON THE EVEN LATTICE (ruling 2). A regrown manta used to appear at a
        random point and swim home, so the ocean refilled wherever the dice
        fell. Now it appears in the group with the most room, at its own place
@@ -104,9 +104,16 @@ export function createSim ({ seed = 1, params = {} } = {}) {
       const q = (start + k) % GROUPS;
       let clear = true;
       for (const L of awayFrom) if (Math.hypot(groups[q].x - L.x, groups[q].z - L.z) < 400) { clear = false; break; }
-      const score = (groupCap[q] - groupUsed[q]) + (clear ? 100 : 0);
+      /* A regrown manta (strict) goes only to a group with room AND clear of
+         every leader, or waits for the next step (3D): with the refill
+         spawning several at once, "clear" outranking "full" overfilled
+         groups, and "room" outranking "clear" put mantas on noses. */
+      const room = groupCap[q] - groupUsed[q];
+      if (strict && !(room > 0 && clear)) continue;
+      const score = (room > 0 ? 1000 : 0) + (clear ? 100 : 0) + room;
       if (score > best) { best = score; g = q; }
     }
+    if (strict && best === -Infinity) return false;
     groupUsed[g]++;
     m.head = next() * TAU; m.group = g;
     const oa = next() * TAU, orr = Math.sqrt(next()) * spreadOf();
@@ -114,15 +121,21 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     m.x = groups[g].x + m.ox; m.z = groups[g].z + m.oz;
     const rr = Math.hypot(m.x, m.z), lim = p.arenaR - 260;  // clear of the reef
     if (rr > lim) { m.x *= lim / rr; m.z *= lim / rr; }
+    /* Strict (regrowth): the spot itself, not only its group's centre, is
+       clear of every leader, or the manta waits for a later step. */
+    if (strict) for (const L of awayFrom) {
+      if (!(L.dead > 0) && Math.hypot(m.x - L.x, m.z - L.z) < 150) { groupUsed[g]--; return false; }
+    }
+    return true;
   }
-  function spawnWild (i, awayFrom) {
+  function spawnWild (i, awayFrom, strict = false) {
     /* A FRESH OBJECT, never the recruited one reused. The one that joined
        your train is a follower now; this is a different animal that happens
        to keep the count at 300. Reusing it made "was it recruited from
        inside the radius" unanswerable, because the recruit was alive again
        by the time anything looked. */
     const m = {};
-    placeWild(m, awayFrom);
+    if (!placeWild(m, awayFrom, strict)) return null;
     m.speed = 40 + next() * 30;
     m.glow = 0;                 // seconds left glowing in an old train's colour
     m.wasColour = -1;           // which train it was in, while it glows

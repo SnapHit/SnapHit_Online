@@ -28,7 +28,7 @@ export const DEF = {
   deathBeat: 1.5,       // seconds before you are swimming again
   restartMin: 800,      // units from the crash, and clear of every train
   wildCount: 120,      // v1.10: 300 with instant respawn never ran dry
-  regrow: 2,           // seconds a manta, up to the count, and never faster
+  regrow: 5,           // the refill time (3C/3D): each missing manta back within it on average
   drain: 3,            // seconds a surplus manta takes to fade out
   bots: 10,            // bot leaders, each on the one brain of 10.2
   wildSize: 20,        // wingspan, against 28 for a follower and 40 for a leader

@@ -31,7 +31,7 @@ export const SPEC = [
      wake's energy goes into sparkle rather than into a smooth ribbon, because
      a smooth glow bright enough to see lifts every pixel around it and a dim
      manta swimming through the wake loses its contrast. */
-  { key: 'sparkle',        label: 'sparkle strength',     def: 7.9,  min: 0,    max: 8,     step: 0.1,   gpu: true  },
+  { key: 'sparkle',        label: 'sparkle strength',     def: 8.0,  min: 0,    max: 8,     step: 0.1,   gpu: true  },
   { key: 'ribbon',         label: 'ribbon strength',      def: 0.25,  min: 0,    max: 1,     step: 0.01,  gpu: true  },
   /* 0 is the committed look, and at 0 the shader mixes by exactly zero, so
      the render is unchanged rather than nearly unchanged. Above 0 the newest,
@@ -127,16 +127,16 @@ export const SPEC = [
      rather than in a test. They are read by sim.js, which has no idea a
      drawer exists. */
   { key: 'cruise',         label: 'cruise speed',         def: 200,   min: 80,   max: 320,   step: 5,     gpu: false },
-  { key: 'burstSpeed',     label: 'burst speed',          def: 340,   min: 120,  max: 520,   step: 5,     gpu: false },
-  { key: 'turnCruise',     label: 'turn rate cruising',   def: 4.0,   min: 1,    max: 6,     step: 0.1,   gpu: false },
+  { key: 'burstSpeed',     label: 'burst speed',          def: 470,   min: 120,  max: 520,   step: 5,     gpu: false },
+  { key: 'turnCruise',     label: 'turn rate cruising',   def: 5.2,   min: 1,    max: 6,     step: 0.1,   gpu: false },
   { key: 'turnBurst',      label: 'turn rate bursting',   def: 4.1,   min: 1,    max: 6,     step: 0.1,   gpu: false },
-  { key: 'recruitR',       label: 'recruit radius',       def: 21,    min: 15,   max: 120,   step: 1,     gpu: false },
+  { key: 'recruitR',       label: 'recruit radius',       def: 30,    min: 15,   max: 120,   step: 1,     gpu: false },
   { key: 'spacing',        label: 'follower spacing',     def: 19,    min: 12,   max: 60,    step: 1,     gpu: false },
-  { key: 'wildCount',      label: 'wild count',           def: 20,   min: 20,   max: 300,   step: 10,    gpu: false },
-  { key: 'regrow',         label: 'regrowth interval',    def: 0.5,     min: 0.2,  max: 8,     step: 0.1,   gpu: false },
+  { key: 'wildCount',      label: 'wild count',           def: 300,  min: 20,   max: 300,   step: 10,    gpu: false },
+  { key: 'regrow',         label: 'refill time',          def: 5,     min: 2,    max: 120,   step: 1,     gpu: false },
   { key: 'wildSize',       label: 'wild size',            def: 28,    min: 10,   max: 28,    step: 1,     gpu: false },
   { key: 'burstCost',      label: 'burst cost interval',  def: 1.0,   min: 0.1,  max: 1.5,   step: 0.05,  gpu: false },
-  { key: 'arenaR',         label: 'arena radius',         def: 4000,  min: 800,  max: 4000,  step: 100,   gpu: false },
+  { key: 'arenaR',         label: 'arena radius',         def: 2000,  min: 800,  max: 4000,  step: 100,   gpu: false },
   { key: 'bloomPull',      label: 'bloom pull',           def: 0.36,  min: 0,    max: 1,     step: 0.02,  gpu: false },
   /* Section 10.2's three touch schemes: 0 is A (steer to your finger,
      double-tap and hold to burst), 1 is B (first finger steers, a second

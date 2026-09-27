@@ -73,17 +73,27 @@ export function createPopulation (ctx) {
     return started;
   }
 
-  /* One every regrow seconds, up to the count, into a dead ambient slot. */
+  /* REGROWTH REFILLS THE GAP (3C, ruling 1). Each missing manta returns on
+     average within the refill time, p.regrow seconds (5 by default), so
+     the ocean refills faster the emptier it is. A fixed one every half
+     second could not keep up with eleven trains at 300 and the ocean fell
+     to about 35. Whole owed mantas spawn on the lattice, into dead slots
+     below the count, away from leaders, as before. */
   function regrowWild (dt) {
-    if (ambientWild() >= p.wildCount) { regrowOwed = 0; return 0; }
-    regrowOwed += dt;
-    if (regrowOwed < p.regrow) return 0;
-    regrowOwed -= p.regrow;
-    for (let i = 0; i < p.wildCount; i++) {
-      const w = wild[i];
-      if (!w || !w.alive) { ctx.spawnWild(i, ctx.trains); return 1; }
+    const gap = p.wildCount - ambientWild();
+    if (gap <= 0) { regrowOwed = 0; return 0; }
+    /* Owed never runs ahead of the gap, so a wait cannot bank a flood. */
+    regrowOwed = Math.min(gap, regrowOwed + gap * dt / p.regrow);
+    let n = 0;
+    while (regrowOwed >= 1) {
+      let slot = -1;
+      for (let i = 0; i < p.wildCount; i++) { const w = wild[i]; if (!w || !w.alive) { slot = i; break; } }
+      if (slot < 0) { regrowOwed = 0; break; }
+      /* No group with room clear of every leader: wait for the next step. */
+      if (!ctx.spawnWild(slot, ctx.trains, true)) break;
+      regrowOwed -= 1; n++;
     }
-    return 0;
+    return n;
   }
 
   return { livingWild, ambientWild, debrisWild, drainSurplus, regrowWild };
