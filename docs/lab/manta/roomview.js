@@ -92,11 +92,20 @@ export function createRoomView ({ room, build, params: start, view, play: playin
      ?lagcomp=0 turns lag compensation off, ?truth=1 asks for the true state. */
   const q = new URLSearchParams(location.search);
   function hello () {
-    const h = { t: 'hello', build, view: viewNow(), watch: watched };
+    /* 3G: every message to the room is at most 64 bytes, so the hello is
+       terse (b the build's digits, p play, k token, a watching, l lag compensation off,
+       g truth) and the view follows in its own message. */
+    const h = { t: 'hi', b: String(build).replace(/\D/g, '').slice(2) };   // '2609270805'
+    if (watched >= 0) h.a = watched;
     if (play) Object.assign(h, play.hello());
-    if (play && q.get('lagcomp') === '0') h.lagComp = false;
-    if (q.get('truth') === '1') h.debug = true;
+    if (play && q.get('lagcomp') === '0') h.l = 0;
+    if (q.get('truth') === '1') h.g = 1;
     return h;
+  }
+  function viewMsg (v) {
+    const m = { t: 'view', x: Math.round(v.x), z: Math.round(v.z), w: Math.round(v.w), h: Math.round(v.h) };
+    if (watched >= 0) m.a = watched;
+    return m;
   }
 
   function connect () {
@@ -110,7 +119,7 @@ export function createRoomView ({ room, build, params: start, view, play: playin
     catch (e) { later(); return; }
     ws = s;
     s.binaryType = 'arraybuffer';
-    s.onopen = () => { everOpen = true; send(hello()); };
+    s.onopen = () => { everOpen = true; send(hello()); send(viewMsg(viewNow())); };
     s.onmessage = e => {
       let m; try { m = typeof e.data === 'string' ? JSON.parse(e.data) : decodeSnap(e.data); } catch (_) { return; }
       if (m && ws === s) receive(m);
@@ -214,10 +223,10 @@ export function createRoomView ({ room, build, params: start, view, play: playin
     const moved = !sentView || Math.abs(v.x - sentView.x) + Math.abs(v.z - sentView.z) > 10 ||
                   Math.abs(v.w - sentView.w) > 1 || Math.abs(v.h - sentView.h) > 1;
     if ((viewDirty || moved) && now - viewAt >= 0.2) {
-      send(Object.assign({ t: 'view' }, v, { watch: watched }));
+      send(viewMsg(v));
       sentView = v; viewAt = now; viewDirty = false;
     }
-    if (now - pingAt >= 1) { send({ t: 'ping', c: performance.now() }); pingAt = now; }
+    if (now - pingAt >= 1) { send({ t: 'ping', c: Math.round(performance.now()) }); pingAt = now; }
   }
 
   /* -------------------------------------------------------- one frame */

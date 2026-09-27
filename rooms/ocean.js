@@ -48,7 +48,9 @@ const simParams = P => ({
   burstCost: P.burstCost, scatterGlow: P.scatterGlow,
 });
 
-const MAX_PLAYERS = 10;
+const MAX_PLAYERS = 10;           // at most 12 (3G); the ocean has ten trains to drive
+const MAX_WATCHERS = 4;
+const MAX_SOCKETS = MAX_PLAYERS + MAX_WATCHERS + 2;   // the rest are still saying hello
 const HOLD_MS = 15000;            // a dropped player's train waits this long for its token
 const REWIND_MAX = 15;            // steps (250 ms); the simulation keeps no more
 const AHEAD_MAX = 120;            // an input stamped further ahead than this is applied at that
@@ -60,6 +62,17 @@ const SECOND = ['fox', 'otter', 'heron', 'comet', 'pebble', 'kelp', 'wave', 'fin
 const hex = n => Array.from(crypto.getRandomValues(new Uint8Array(n)), b => b.toString(16).padStart(2, '0')).join('');
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Number.isFinite(+v) ? +v : lo));
+/* MALFORMED INPUT IS DROPPED, NEVER SIMULATED (3G): wrong types, NaN,
+   infinities and anything out of range, whole message and all. */
+const num = (v, lo, hi) => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi;
+const opt = (v, ok) => v === undefined || ok(v);
+const watchOk = v => Number.isInteger(v) && v >= -1 && v < 1e4;
+const inOk = (m, steps) => Number.isSafeInteger(m.seq) && m.seq > 0 &&
+  opt(m.k, k => Number.isSafeInteger(k) && Math.abs(k - steps) <= 36000) &&
+  opt(m.w, w => w === null || num(w, -7, 7)) && opt(m.b, b => b === 0 || b === 1) && opt(m.d, d => num(d, 0, 600));
+const viewOk = m => num(m.x, -1e6, 1e6) && num(m.z, -1e6, 1e6) && num(m.w, 0, 1e5) && num(m.h, 0, 1e5) && opt(m.a, watchOk);
+const hiOk = m => typeof m.b === 'string' && m.b.length <= 24 && opt(m.k, k => typeof k === 'string' && /^[0-9a-f]{12}$/.test(k)) &&
+  opt(m.p, p => p === 0 || p === 1) && opt(m.a, watchOk) && opt(m.l, l => l === 0) && opt(m.g, g => g === 1);
 const viewOf = m => ({ x: clamp(m && m.x, -1e5, 1e5), z: clamp(m && m.z, -1e5, 1e5),
                        w: clamp(m && m.w, 100, 6000), h: clamp(m && m.h, 100, 6000) });
 
@@ -103,7 +116,7 @@ export function createOcean (env, url, opts = {}) {
     const now = Date.now();
     forgetHeld(now);
     const driven = new Set(players().map(q => q.id));
-    const tok = typeof m.token === 'string' && m.token.length <= 64 ? m.token : '';
+    const tok = typeof m.k === 'string' ? m.k : '';
     let id = -1, name = '', token = '';
     if (tok) {
       /* The same token on a socket still open (a reconnect before the old
@@ -126,12 +139,12 @@ export function createOcean (env, url, opts = {}) {
         if (!soonest) return null;
         held.delete(soonest[0]); t = trainOf(soonest[1].id);
       }
-      id = t.id; name = newName(); token = hex(16);
+      id = t.id; name = newName(); token = hex(6);
     }
     const t = trainOf(id);
     t.human = { want: null, burst: false, rewind: 0 };
     phone.player = { id, name, token, ack: 0, seqIn: 0, queue: [], early: null, earlySeq: 0, late: 0, wish: 0,
-                     lagComp: !(phone.local && m.lagComp === false) };
+                     lagComp: !(phone.local && m.l === 0) };
     phone.me = phone.player;          // snapFor reads {id, ack} from here
     renameAll();
     return phone.player;
@@ -256,29 +269,41 @@ export function createOcean (env, url, opts = {}) {
 
   return {
     join (ws, local) { phones.set(ws, { view: viewOf(null), watch: -1, sent: new Map(), debug: false, local, ready: false }); },
+    get crowded () { return phones.size >= MAX_SOCKETS; },
     leave,
     async message (ws, raw) {
       const phone = phones.get(ws);
       if (!phone) return;
       let m; try { m = JSON.parse(raw); } catch (_) { return; }
-      if (m.t === 'in') { input(phone, m); return; }
-      if (m.t === 'ping') { ws.send(JSON.stringify({ t: 'pong', c: m.c })); return; }
-      if (m.t === 'view') { phone.view = viewOf(m); phone.watch = Number.isInteger(m.watch) ? m.watch : -1; return; }
-      if (m.t !== 'hello') return;
+      if (!m || typeof m !== 'object' || Array.isArray(m)) return;
+      if (m.t === 'in') { if (inOk(m, steps)) input(phone, m); return; }
+      if (m.t === 'ping') { if (num(m.c, 0, 1e12)) ws.send(JSON.stringify({ t: 'pong', c: m.c })); return; }
+      if (m.t === 'view') { if (viewOk(m)) { phone.view = viewOf(m); phone.watch = m.a === undefined ? -1 : m.a; } return; }
+      if (m.t !== 'hi' || !hiOk(m)) return;
       await ready;
       /* A phone on another build is told to reload rather than play. */
-      if (m.build !== build) {
+      if (m.b !== String(build).replace(/\D/g, '').slice(2)) {   // the build's digits: 64 bytes (3G)
         ws.send(JSON.stringify({ t: 'reload', build }));
         try { ws.close(4000, 'new build'); } catch (_) { /* already closed */ }
         leave(ws);
         return;
       }
-      phone.view = viewOf(m.view); phone.watch = Number.isInteger(m.watch) ? m.watch : -1;
-      phone.debug = !!(m.debug && phone.local);   // truth for tests, only under wrangler dev
+      phone.watch = m.a === undefined ? -1 : m.a;   // the view comes in its own message
+      phone.debug = !!(m.g === 1 && phone.local);   // truth for tests, only under wrangler dev
       /* A second hello on the same socket gives its train back first. */
       if (phone.player) unseat(phone);
       let me = null;
-      if (m.play === true) {
+      if (m.p !== 1) {
+        let watching = 0;
+        for (const p of phones.values()) if (p !== phone && p.ready && !p.player) watching++;
+        if (watching >= MAX_WATCHERS) {
+          ws.send(JSON.stringify({ t: 'full' }));
+          try { ws.close(4002, 'room full'); } catch (_) { /* already closed */ }
+          leave(ws);
+          return;
+        }
+      }
+      if (m.p === 1) {
         me = seat(phone, m);
         if (!me) {
           ws.send(JSON.stringify({ t: 'full' }));
@@ -296,6 +321,7 @@ export function createOcean (env, url, opts = {}) {
       start();
     },
     get stepping () { return timer !== null; },
+    get build () { return build; },
     get players () { return players().length; },
     get staged () { return staged; },
     get steps () { return steps; },

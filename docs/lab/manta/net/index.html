@@ -214,7 +214,8 @@ function run () {
     if (typeof m.t !== 'number' || m.i !== r.rtts.length) return;
     r.rtts.push(performance.now() - m.t);
     if (r.rtts.length % 5 === 0) show(r);
-    if (r.rtts.length < PINGS) send(r.rtts.length);
+    /* 40 ms between pings: rooms close a socket sending over 30 a second (3G). */
+    if (r.rtts.length < PINGS) { const i = r.rtts.length; setTimeout(() => { if (!r.done) send(i); }, 40); }
     else finish(r, 'connected · ' + PINGS + ' round trips', 'ok');
   };
   r.ws.onclose = ev => {

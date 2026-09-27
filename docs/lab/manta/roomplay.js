@@ -53,7 +53,9 @@ const r4 = v => Math.round(v * 1e4) / 1e4;
 
 export function createPlay ({ room, params, core, you, input, send, rtt, view, now = () => performance.now() }) {
   const motion = createMotion(params);
-  const KEY = 'manta:room-token:' + room;
+  /* 3G: tokens became twelve hex digits, so the key changed with them and
+     a stale 32-digit token cannot stick. */
+  const KEY = 'manta:room-key:' + room;
   /* The predicted leader. Its trail is the room's path for this train up to
      the last true point, then the points this phone predicted beyond it, so
      placeFollowers lays the whole train along one unbroken path. */
@@ -79,11 +81,11 @@ export function createPlay ({ room, params, core, you, input, send, rtt, view, n
   let est = null, lead = LEAD0, clk = null, pk = -1, settled = true, leadSeq = 0;
   let reports = [], late = 0, reported = 0, leadMoves = 0;
 
-  function readToken () { try { return sessionStorage.getItem(KEY) || undefined; } catch (_) { return undefined; } }
+  function readToken () { try { const t = sessionStorage.getItem(KEY); return /^[0-9a-f]{12}$/.test(t || '') ? t : undefined; } catch (_) { return undefined; } }
   function keepToken (t) { try { if (t) sessionStorage.setItem(KEY, t); } catch (_) { /* play on without it */ } }
 
   /* ------------------------------------------------------------ the wire */
-  const hello = () => { const h = { play: true }, t = readToken(); if (t) h.token = t; return h; };
+  const hello = () => { const h = { p: 1 }, t = readToken(); if (t) h.k = t; return h; };
 
   function onInit (m) {
     /* A new connection resends every path and may be a new room clock, so
