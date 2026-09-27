@@ -10,11 +10,15 @@
  * drawn about 100 ms behind the room, between the two snapshots either side
  * of that moment, and the delay grows with the jitter actually measured.
  *
+ * Snapshots arrive as binary (roomcore.js, 3F). Wild mantas come five
+ * times a second and are smoothed between (createWildStore); trains, paths,
+ * events and the board come twenty times a second.
+ *
  * There is no human manta in a room. `you` is only where the camera looks:
  * the watched bot's leader. That bot is drawn once, with the rivals, and
  * follow.js keeps slot 0 parked while sim.watching is set.
  */
-import { createMirror } from './roomcore.js';
+import { createMirror, createWildStore, decodeSnap } from './roomcore.js';
 import { DEF, zoomFor } from './simcore.js';
 
 const lerp = (a, b, f) => a + (b - a) * f;
@@ -26,7 +30,7 @@ export function createRoomView ({ room, build, params: start, view }) {
      follower sits, so it has to be the one the room placed them with. Filled
      in by init; one object, so the mirror's motion sees the update. */
   const params = Object.assign({}, DEF, start || {});
-  const core = createMirror(params);
+  const core = createMirror(params), wildStore = createWildStore();
   const you = { id: -1, x: 0, z: 0, head: 0, s: 0, followers: [], dead: 0, peak: 0, lastPeak: 0, len: 0, watched: -1 };
   const rivals = [], wild = [], events = [], board = [];
   const drawn = new Map();                 // train id -> what is drawn for it
@@ -77,8 +81,12 @@ export function createRoomView ({ room, build, params: start, view }) {
     try { s = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/lab/manta/rooms/ocean/' + room); }
     catch (e) { later(); return; }
     ws = s;
+    s.binaryType = 'arraybuffer';
     s.onopen = () => { everOpen = true; send({ t: 'hello', build, view: viewNow(), watch: watched }); };
-    s.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (_) { return; } if (ws === s) receive(m); };
+    s.onmessage = e => {
+      let m; try { m = typeof e.data === 'string' ? JSON.parse(e.data) : decodeSnap(e.data); } catch (_) { return; }
+      if (m && ws === s) receive(m);
+    };
     s.onclose = () => { if (ws !== s) return; ws = null; connected = false; showSignal(); later(); };
   }
   /* Half a second, doubling to eight, reset by a good init: a room that is
@@ -94,7 +102,7 @@ export function createRoomView ({ room, build, params: start, view }) {
   /* A new connection is a new phone to the room: it resends every path in
      full, so what this page remembers of the old one is thrown away. */
   function resync () {
-    core.trains.clear(); drawn.clear();
+    core.trains.clear(); drawn.clear(); wildStore.clear();
     snaps.length = 0; pending.length = 0; gaps.length = 0; offsets.length = 0;
     rivals.length = 0; events.length = 0; board.length = 0;
     for (const w of wild) w.alive = false;
@@ -130,7 +138,8 @@ export function createRoomView ({ room, build, params: start, view }) {
        with the run the mirror held when it arrived: interpolating across a
        restart, or placing followers on another run's path, is then visible. */
     for (const q of m.tr) { const c = core.trains.get(q.id); q.run = c ? c.runs : -1; if (c && c.kind) kinds.set(q.id, c.kind); }
-    snaps.push({ time: m.time, tr: new Map(m.tr.map(q => [q.id, q])), wd: new Map(m.wd.map(w => [w[0], w])) });
+    snaps.push({ time: m.time, tr: new Map(m.tr.map(q => [q.id, q])) });
+    wildStore.take(m);
     while (snaps.length > 2 && m.time - snaps[1].time > 1) snaps.shift();
     for (const e of m.ev || []) pending.push({ time: m.time, kind: e.k, x: e.x, z: e.z });
     /* The board comes only when it changed: the last one stands until then. */
@@ -226,19 +235,19 @@ export function createRoomView ({ room, build, params: start, view }) {
     const w0 = B.tr.has(watched) ? drawn.get(watched) : null;
     if (w0 && !w0.dead) { you.x = w0.x; you.z = w0.z; you.head = w0.head; you.s = w0.s; you.len = w0.followers.length; }
 
-    /* Wild mantas by slot. A slot missing from the newer snapshot is gone
-       from view. Glow and sinking arrive as flags, so they count down here. */
+    /* Wild mantas by slot, smoothed between the five-a-second samples
+       (roomcore.js). One that is not in the water at T is gone from view.
+       Glow and sinking arrive as flags, so they count down here. */
     for (const w of wild) w.seen = false;
-    for (const [slot, b] of B.wd) {
-      const a = A.wd.get(slot) || b;
+    wildStore.at(T, (slot, x, z, h, fl, col) => {
       while (wild.length <= slot) wild.push({ x: 0, z: 0, head: 0, alive: false, loose: false, sinking: 0, glow: 0, wasColour: -1, colour: wild.length });
-      const w = wild[slot], g = Math.abs(b[1] - a[1]) + Math.abs(b[2] - a[2]) > JUMP ? 1 : f, n = g < 0.5 ? a : b;
-      w.x = lerp(a[1], b[1], g); w.z = lerp(a[2], b[2], g); w.head = a[3] + wrap(b[3] - a[3]) * g;
-      w.alive = w.seen = true; w.loose = !!(n[4] & 1);
-      w.sinking = n[4] & 2 ? (w.sinking > 0 ? Math.max(0.05, w.sinking - dt) : params.drain) : 0;
-      if (n[5] >= 0) { w.wasColour = n[5]; w.glow = w.glow > 0 ? Math.max(0.05, w.glow - dt) : params.scatterGlow; }
+      const w = wild[slot];
+      w.x = x; w.z = z; w.head = h;
+      w.alive = w.seen = true; w.loose = !!(fl & 1);
+      w.sinking = fl & 2 ? (w.sinking > 0 ? Math.max(0.05, w.sinking - dt) : params.drain) : 0;
+      if (col >= 0) { w.wasColour = col; w.glow = w.glow > 0 ? Math.max(0.05, w.glow - dt) : params.scatterGlow; }
       else w.glow = 0;
-    }
+    });
     for (const w of wild) if (!w.seen) w.alive = false;
 
     /* Events once each, at the render delay, so the burst lands where the

@@ -7,7 +7,8 @@
  * cannot drift), and a seed of its own, when the first phone says hello. It
  * steps at 60 Hz from a timer while at least one phone is here and the
  * timer stops when the last one leaves, so an empty room goes idle. Bots
- * only for now: the human manta is kept out of the water.
+ * only for now: the human manta is kept out of the water. Snapshots go as
+ * binary (3F); everything else, both ways, stays JSON text.
  */
 import { createSim, STEP } from '../docs/lab/manta/sim.js';
 import { snapFor, SNAP_HZ } from '../docs/lab/manta/roomcore.js';
@@ -56,7 +57,10 @@ export function createOcean (env, url) {
     n++;
     for (const [ws, phone] of phones) {
       if (!phone.ready) continue;
-      try { ws.send(JSON.stringify(snapFor(sim, phone, n, events))); } catch (_) { /* gone */ }
+      /* Binary (roomcore.js has the layout); the truth after it only for a
+         debug phone, which only wrangler dev allows. */
+      const { data, truth } = snapFor(sim, phone, n, events, steps);
+      try { ws.send(data); if (truth) ws.send(JSON.stringify({ t: 'truth', n, tr: truth.tr, wd: truth.wd })); } catch (_) { /* gone */ }
     }
   }
   const start = () => { if (timer) return; last = Date.now(); owed = 0; timer = setInterval(tick, 1000 / SNAP_HZ); };
@@ -87,7 +91,7 @@ export function createOcean (env, url) {
       }
       phone.view = viewOf(m.view); phone.watch = Number.isInteger(m.watch) ? m.watch : -1;
       phone.debug = !!(m.debug && phone.local);   // truth for tests, only under wrangler dev
-      phone.sent.clear(); phone.board = null; phone.ready = true;
+      phone.sent.clear(); phone.board = null; phone.wild = null; phone.wildTick = 0; phone.ready = true;
       ws.send(JSON.stringify({ t: 'init', build, seed, params: sim.params, time: sim.time, steps,
         kinds: sim.rivals.map(t => [t.id, t.kind || 'bot']) }));
       start();
