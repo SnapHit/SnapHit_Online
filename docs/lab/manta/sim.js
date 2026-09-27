@@ -185,12 +185,16 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   const you = makeTrain(0, 0, 0);
   /* Seeded straight behind the leader, so the first recruits have a path to
      sit on instead of piling up on the spot until it has swum a train's
-     length. Same trick the spike's rival trains needed after a wrap. */
+     length. Same trick the spike's rival trains needed after a wrap.
+     BEHIND IS +sin, +cos: forward is (-sin, -cos) (motion.js). The x term
+     had its sign flipped (3E), which mirrored the seeded path left to right
+     for every train laid at a heading other than straight up or down: bots
+     as dealt, New ocean, and every restart. */
   function seedTrail (t) {
     t.trail.length = 0;
     const back = 40 * p.spacing;
     for (let d = back; d >= 0; d -= p.spacing * 0.25)
-      t.trail.push({ x: t.x + Math.sin(t.head) * -d, z: t.z + Math.cos(t.head) * d,
+      t.trail.push({ x: t.x + Math.sin(t.head) * d, z: t.z + Math.cos(t.head) * d,
                      h: t.head, s: t.s - d });
   }
   seedTrail(you);
