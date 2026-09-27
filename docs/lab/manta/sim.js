@@ -363,7 +363,41 @@ export function createSim ({ seed = 1, params = {} } = {}) {
      trains array can be finished after they are created. */
   /* Crashes and cuts, once each, with where: the renderer drains this. */
   const events = [];
-  const ruleCtx = { p, next, groupCount: () => GROUPS, wild, scratch, hash, trains, you, blooms, events, now: () => time };
+  /* THE HISTORY RING (rooms, play mode). With p.history set — only a room
+     sets it — every step keeps where each train's leader and followers stood
+     when touches were judged, for the last HIST steps, so a player's touch
+     can be judged against where the other train was on that player's screen
+     (rules.js, lag compensation). Off, nothing is recorded or read, and solo
+     and the Node suites do exactly the work they did before. */
+  const HIST = 16;                  // the current step plus 15 back
+  let histStep = 0;
+  function recordHistory () {
+    histStep++;
+    for (const t of trains) {
+      if (!t.hist) t.hist = [];
+      const slot = histStep % HIST;
+      const e = t.hist[slot] || (t.hist[slot] = { step: 0, runs: 0, dead: true, a: [] });
+      e.step = histStep; e.runs = t.runs; e.dead = t.dead > 0;
+      if (e.dead) continue;
+      const a = e.a, n = t.followers.length;
+      a.length = 2 + n * 2;
+      a[0] = t.x; a[1] = t.z;
+      for (let k = 0; k < n; k++) { a[2 + k * 2] = t.followers[k].x; a[3 + k * 2] = t.followers[k].z; }
+    }
+  }
+  /* Where train t's parts were `back` steps ago, as a flat [x, z, x, z, ...]
+     with the leader first, or null. Never more than 15 back, and never from
+     an earlier run or while it was dead: a train seen through a restart or
+     a death beat is judged at the newest step that was really this run. */
+  function pastOf (t, back) {
+    if (!t.hist) return null;
+    for (let k = Math.min(Math.max(0, back | 0), HIST - 1); k >= 0; k--) {
+      const e = t.hist[(histStep - k) % HIST];
+      if (e && e.step === histStep - k && !e.dead && e.runs === t.runs) return e.a;
+    }
+    return null;
+  }
+  const ruleCtx = { p, next, groupCount: () => GROUPS, wild, scratch, hash, trains, you, blooms, events, now: () => time, pastOf };
   const { scatter, crash, cutAt, resolveTouches, payForBurst, steerRival } = createRules(ruleCtx);
 
   function stepTrain (t, want, dt) {
@@ -458,6 +492,19 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     if (you.followers.length > you.peak) you.peak = you.followers.length;
     for (const t of rivals) {
       if (t.dead > 0) continue;
+      /* A PLAYER'S TRAIN (rooms, play mode): t.human = { want, burst, rewind }
+         is set by the room while a person drives it, and the brain does not
+         think for it; otherwise it is stepped exactly like a bot's. null
+         (never set, in solo) and the brain drives, which is also how a bot
+         holds a dropped player's train. */
+      if (t.human) {
+        t.want = t.human.want;
+        t.bursting = !!t.human.burst && t.followers.length > 0;
+        payForBurst(t, dt);
+        stepTrain(t, t.want, dt);
+        if (t.followers.length > t.peak) t.peak = t.followers.length;
+        continue;
+      }
       const pinned = t.pinBurst ? t.bursting : null;
       brain.think(t, dt);
       /* A test about the head-on rules pins the burst instead of letting the
@@ -489,6 +536,8 @@ export function createSim ({ seed = 1, params = {} } = {}) {
        state that cannot be collected, so it is not in the hash at all. */
     for (const m of wild) if (m.alive && !(m.sinking > 0)) { m.isWild = true; m.train = null; hash.add(m.x, m.z, m); }
 
+    /* What touches are judged on this step, kept for lag compensation. */
+    if (p.history) recordHistory();
     resolveTouches();
     /* EVERY LEADER RECRUITS THE SAME WAY, bots and you alike. The scripted
        rivals capped a rival at its own length unless it had sat empty for
@@ -507,6 +556,8 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     params: p, blooms, you, rivals, bots, botMix, brain, setBotCount, trains, input, step, wild, groups, hash, joinedAt,
     liveWild: livingWild, ambientWild, debrisWild,
     scatter, crash, cutAt, makeTrain, seedTrail, restart, events, newOcean,
+    /* For tests: where a train stood `back` steps ago (null without p.history). */
+    pastOf,
     get length () { return you.followers.length; },
     zoom: () => zoomFor(you.followers.length, p),
     /* For tests and for the panel: the speed actually used this step. */

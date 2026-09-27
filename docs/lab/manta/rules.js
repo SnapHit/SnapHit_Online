@@ -135,6 +135,13 @@ export function createRules (ctx) {
      front of its own train (6.3), and a follower touching anything does
      nothing at all. */
   function contacts (t) {
+    /* LAG COMPENSATION (rooms, play mode): a player's leader is judged
+       against where the other trains were `rewind` steps ago (at most 15),
+       which is where that player saw them. A cut found there lands on the
+       train's CURRENT followers at the index found. rewind 0, no human or no
+       history (solo, the suites): the hash, exactly as before. */
+    const back = t.human && ctx.pastOf ? Math.min(15, t.human.rewind | 0) : 0;
+    if (back > 0) return contactsPast(t, back);
     hash.near(t.x, t.z, scratch);
     let hitTrain = null, hitIndex = 0, hitLeader = false, best = Infinity;
     for (const o of scratch) {
@@ -146,6 +153,25 @@ export function createRules (ctx) {
       const k = p.trainScale || 1;
       if (d > (p.leaderR + (o.isLeader ? p.leaderR : p.followerR)) * k) continue;
       if (d < best) { best = d; hitTrain = o.train; hitIndex = o.index; hitLeader = !!o.isLeader; }
+    }
+    return hitTrain ? { train: hitTrain, index: hitIndex, leader: hitLeader } : null;
+  }
+
+  /* The same test as contacts(), against the history ring instead of the
+     hash: leader first (index 0, a leader touch), then follower k at k. */
+  function contactsPast (t, back) {
+    const k = p.trainScale || 1;
+    let hitTrain = null, hitIndex = 0, hitLeader = false, best = Infinity;
+    for (const o of ctx.trains) {
+      if (o === t || o.dead > 0) continue;
+      const a = ctx.pastOf(o, back);
+      if (!a) continue;
+      for (let i = 0; i < a.length; i += 2) {
+        const leader = i === 0;
+        const d = Math.hypot(a[i] - t.x, a[i + 1] - t.z);
+        if (d > (p.leaderR + (leader ? p.leaderR : p.followerR)) * k) continue;
+        if (d < best) { best = d; hitTrain = o; hitIndex = leader ? 0 : i / 2 - 1; hitLeader = leader; }
+      }
     }
     return hitTrain ? { train: hitTrain, index: hitIndex, leader: hitLeader } : null;
   }
@@ -220,5 +246,5 @@ export function createRules (ctx) {
     if (t.followers.length === 0) { t.rebuild -= dt; } else t.rebuild = 10;
   }
 
-  return { partsOf, scatter, scatterOne, crash, cutAt, contacts, resolveTouches, payForBurst, steerRival };
+  return { partsOf, scatter, scatterOne, crash, cutAt, contacts, contactsPast, resolveTouches, payForBurst, steerRival };
 }

@@ -4,6 +4,15 @@
  *
  * Phone -> room, JSON text:
  *   {t:'hello', build, view:{x,z,w,h}, watch, debug?}   first, after open
+ *   PLAY MODE: hello also carries play:true, token?, lagComp?; then
+ *   {t:'in', seq, k, w, b?, d}: k is the room's simulation step the input
+ *   is for, w the heading wanted (null: straight on), b:1 bursting, d how
+ *   many steps behind k this phone is drawing the other trains.
+ *   init adds me:{id, name, token} and names. A player's snapshots carry
+ *   its own leader and its clock in the binary (flag 8 below); who drives
+ *   what comes as {t:'names', names:[[id, name], ...]} whenever it changed.
+ *   The player's own train is always in the trains. An 11th player gets
+ *   {t:'full'} and is closed.
  *   {t:'view', x, z, w, h, watch}                 when the view moves
  *   watch is the bot the camera follows (-1 for none): the room always
  *   sends that train, wherever it is, so the camera can find it.
@@ -33,6 +42,10 @@
  *   wild in full (flag 2): u16 count, then records
  *   wild changes (flag 4): u16 count, records; u16 count, slots gone (a
  *     slot both gone and in a record has a new manta in it: gone first)
+ *   a player's own (flag 8): u8 f (1 dead, 2 bursting, 4 peak, 8 early,
+ *     16 late, 32 ack), f32 x, f32 z, f32 h, i32 s, u16 len, u16 runs; if
+ *     dead f32 seconds left, i16 crashX, i16 crashZ; if peak u16; if early
+ *     i16 steps x10, u32 seq; if late u16; if ack u32
  *   a wild record: u16 slot, i16 x, i16 z, u8 h, u8 flags (1 loose,
  *     2 sinking), u8 colour it glows in (255 none)
  *
@@ -78,6 +91,7 @@ function writer () {
     i16 (v) { need(2); dv.setInt16(o, i16(v), true); o += 2; },
     i32 (v) { need(4); dv.setInt32(o, v | 0, true); o += 4; },
     u32 (v) { need(4); dv.setUint32(o, v >>> 0, true); o += 4; },
+    f32 (v) { need(4); dv.setFloat32(o, v, true); o += 4; },
     get at () { return o; },
     put8 (at, v) { dv.setUint8(at, v); },
     put16 (at, v) { dv.setUint16(at, v, true); },
@@ -99,8 +113,10 @@ export function snapFor (sim, phone, n, events, step = 0) {
 
   const countAt = w.at; w.u8(0); let count = 0;
   const truth = phone.debug ? { tr: [], wd: [] } : null;
+  /* PLAY MODE: phone.me = the room's player record for a player. */
+  const mine = phone.me ? phone.me.id : -1;
   for (const t of sim.rivals) {
-    let seen = t.id === phone.watch || near(view, t.x, t.z);
+    let seen = t.id === phone.watch || t.id === mine || near(view, t.x, t.z);
     if (!seen && !(t.dead > 0)) for (const f of t.followers) if (near(view, f.x, f.z)) { seen = true; break; }
     if (!seen) continue;
     const had = phone.sent.get(t.id);
@@ -208,6 +224,23 @@ export function snapFor (sim, phone, n, events, step = 0) {
       w.u16(gone.length); for (const i of gone) w.u16(i);
     }
   }
+  /* PLAY MODE (flag 8): the player's own leader, true and unrounded
+     enough to predict from, and its clock: how early its inputs arrived
+     (the worst since the last snapshot, with the newest seq that covers),
+     how many came too late for their step. The wreck's place only while
+     dead, the peak only when it moved, ack only for tests. */
+  const t = phone.me ? sim.rivals.find(o => o.id === mine) : null;
+  if (t) {
+    const q = phone.me, peak = t.peak !== phone.mePeak, early = q.early !== null && q.early !== undefined;
+    flags |= 8;
+    w.u8((t.dead > 0 ? 1 : 0) | (t.bursting ? 2 : 0) | (peak ? 4 : 0) | (early ? 8 : 0) | (q.late ? 16 : 0) | (phone.debug ? 32 : 0));
+    w.f32(t.x); w.f32(t.z); w.f32(t.head); w.i32(s16(t.s)); w.u16(t.followers.length); w.u16(t.runs);
+    if (t.dead > 0) { w.f32(t.dead); w.i16(t.crashX - cx); w.i16(t.crashZ - cz); }
+    if (peak) { w.u16(t.peak); phone.mePeak = t.peak; }
+    if (early) { w.i16(Math.round(q.early * 10)); w.u32(q.earlySeq); q.early = null; }
+    if (q.late) { w.u16(q.late); q.late = 0; }
+    if (phone.debug) w.u32(q.ack);
+  }
   w.put8(flagsAt, flags);
   return { data: w.done(), truth };
 }
@@ -246,6 +279,17 @@ export function decodeSnap (buf) {
   const rec = () => { const slot = u16(), x = cx + i16(), z = cz + i16(), h = unang(u8()), fl = u8(), col = u8(); return [slot, x, z, h, fl, col === 255 ? -1 : col]; };
   if (flags & 2) { m.wd = []; for (let c = u16(); c > 0; c--) m.wd.push(rec()); }
   if (flags & 4) { m.wa = []; for (let c = u16(); c > 0; c--) m.wa.push(rec()); m.wg = []; for (let c = u16(); c > 0; c--) m.wg.push(u16()); }
+  if (flags & 8) {
+    const f32 = () => { const v = dv.getFloat32(o, true); o += 4; return v; };
+    const f = u8(), me = { x: f32(), z: f32(), h: f32(), s: i32() / 16, len: u16(), runs: u16() };
+    if (f & 1) { me.dead = f32(); me.crashX = cx + i16(); me.crashZ = cz + i16(); }
+    if (f & 2) me.b = 1;
+    if (f & 4) me.peak = u16();
+    if (f & 8) { m.e = i16() / 10; m.eq = u32(); }
+    if (f & 16) m.l = u16();
+    if (f & 32) me.ack = u32();
+    m.me = me;
+  }
   return m;
 }
 

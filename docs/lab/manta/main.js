@@ -56,6 +56,10 @@ const VIG = query.has('vig') ? Number(query.get('vig')) : null;
    it (roomview.js). No controls, no local steps, the room's own numbers.
    Without it, every line below runs exactly as it did. */
 const ROOM = /^[a-z0-9-]{1,32}$/.test(query.get('room') || '') ? query.get('room') : null;
+/* ?room=<name>&play=1 is PLAY MODE: the same page as watch mode, plus your
+   own manta, steered with the lab's touch controls and predicted on this
+   phone (roomplay.js). ?room alone is watch mode exactly as before. */
+const PLAY = !!ROOM && query.get('play') === '1';
 
 /* Before anything else builds: a complaint during init is the one most worth
    catching, and console.error is where three makes most of them. */
@@ -122,7 +126,7 @@ if (shadows) shadows.attach(mantas.shadowMesh);
 /* The room modules load only in watch mode (3D): without ?room nothing new
    is fetched, run or connected, and the solo lab is exactly as it was. */
 const createRoomView = ROOM ? (await import('./roomview.js')).createRoomView : null;
-const sim = SPIKE ? null : ROOM ? createRoomView({ room: ROOM, build: panel.BUILD, view }) : createSim({ seed: mantas.seed, params: {
+const sim = SPIKE ? null : ROOM ? createRoomView({ room: ROOM, build: panel.BUILD, view, play: PLAY }) : createSim({ seed: mantas.seed, params: {
   cruise: P.cruise, burst: P.burstSpeed, turnCruise: P.turnCruise, turnBurst: P.turnBurst,
   recruitR: P.recruitR, spacing: P.spacing, wildCount: P.wildCount, regrow: P.regrow,
   wildSize: P.wildSize, bloomPull: P.bloomPull, trainScale: P.trainScale,
@@ -277,7 +281,10 @@ function advance (now, dt) {
   const owed = dbg.takeOwed();                 // and its single step
   if (sim && ROOM) {
     /* Watch mode: no steps and no drawer values. The room's clock is real
-       time, so the mirror lays out its snapshots once a frame on its own. */
+       time, so the mirror lays out its snapshots once a frame on its own.
+       In play mode the controls write sim.input first, from where your
+       leader is drawn, and the mirror steps its prediction at 1/60 itself. */
+    if (controls) controls.apply(sim.you, STEP);
     sim.step(dt, dbg.rate === 0, owed);   // Pause and Step hold what is drawn
     uArenaR.value = sim.params.arenaR;
   } else if (sim) {
@@ -441,7 +448,7 @@ window.__lab.step = (seconds = 1 / 60) => {
 
 lab.start().then(ok => {
   if (!ok) { window.__labReady = true; return; }
-  if (sim && !ROOM) {
+  if (sim && (!ROOM || PLAY)) {
     const canvas = lab.renderer && lab.renderer.domElement;
     if (canvas) controls = createControls(canvas, sim.input, (u, v) => ({
       /* Screen fraction to world, through the same view the ocean uses. */

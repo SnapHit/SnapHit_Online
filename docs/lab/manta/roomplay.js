@@ -1,0 +1,297 @@
+/* Play mode (?room=<name>&play=1): the player's own manta in a room.
+ *
+ * Imported only by roomview.js, and only used when &play=1 is in the URL, so
+ * watch mode and the solo lab never run a line of it. No DOM: the Node tests
+ * drive this same file.
+ *
+ * WHY THE LEADER IS PREDICTED. The room is the truth, but its answer is a
+ * round trip old: steering that waited for it would feel like swimming in
+ * syrup. So the phone steps its own leader the instant the finger moves,
+ * with the simulation's own motion code (motion.js, the same advance, hold
+ * and recordTrail the room's stepTrain uses) at the same fixed 1/60 steps.
+ *
+ * INPUTS ON THE ROOM'S CLOCK (3E). Every step here is numbered on the room's
+ * own count, and every input names the step it is for. The phone runs a
+ * little ahead of the room: its estimate of the step the room will be at
+ * when an input sent now arrives (each snapshot's step plus the measured
+ * round trip) plus a small lead for the jitter, so an input
+ * reaches the room just before its step runs. The room applies it at that
+ * step and says how early it arrived; the lead grows when inputs come too
+ * close and shrinks slowly when they are needlessly early. 3D applied inputs
+ * when they arrived, so the room's steering never lined up with the phone's
+ * and every snapshot corrected the leader by 10 to 20 units.
+ *
+ * WHY IT IS RECONCILED, NOT TRUSTED. Every snapshot carries `me`, the room's
+ * true state of this leader after step k. The prediction restarts from that
+ * truth and replays this phone's own steps k+1 onward with the inputs it
+ * gave them, which are the ones the room will apply. When they arrived in
+ * time the replay lands exactly where the prediction already was; a crash,
+ * the reef or a late input shows as a correction for one snapshot at most.
+ *
+ * WHY IT EASES. A correction drawn as a jump twenty times a second would
+ * shimmer, so the difference is kept as a visual offset that shrinks to
+ * nothing over 150 ms. A difference over 60 units is not a correction but a
+ * different place (a restart, a reconnect, a long stall), and easing across
+ * it would draw a manta swimming through things it never touched, so it
+ * snaps.
+ */
+import { createMotion } from './motion.js';
+
+const STEP = 1 / 60, STEP_MS = 1000 / 60;
+const EASE = 0.15;                 // seconds for a correction to fade out
+const SNAP = 60;                   // units: a bigger correction is drawn at once
+const HIST = 256;                  // numbered local steps remembered (4 s)
+const MAX_REPLAY = 120;            // steps: a longer replay means the clock is lost
+const SEND_MIN = 50, SEND_MAX = 200, WANT_EPS = 0.02;
+const LEAD0 = 3;                   // steps ahead of the room to start with
+const MARGIN = 1;                  // steps early an input should arrive, at worst
+const SLEW = 0.1;                  // steps a frame the clock may be pulled
+const WINDOW = 1500;               // ms of reports the lead is judged on
+const LEAD_MAX = 45;
+const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
+const r4 = v => Math.round(v * 1e4) / 1e4;
+
+export function createPlay ({ room, params, core, you, input, send, rtt, view, now = () => performance.now() }) {
+  const motion = createMotion(params);
+  const KEY = 'manta:room-token:' + room;
+  /* The predicted leader. Its trail is the room's path for this train up to
+     the last true point, then the points this phone predicted beyond it, so
+     placeFollowers lays the whole train along one unbroken path. */
+  const pred = { x: 0, z: 0, head: 0, s: 0, turn: 0, bursting: false, trail: [], followers: [] };
+  const hist = new Map();          // step -> {want, burst}: what this phone gave that step
+  const corrections = [];          // units, one per snapshot with `me` while predicting
+  const off = { x: 0, z: 0, h: 0, f: [], age: EASE };
+  let myId = -1, name = null, me = null, ack = 0, seq = 0, runs = null;
+  let sentWant = null, sentBurst = false, sentAt = -1e9, live = false, fresh = true;
+  /* THE RESTART GAP (3F). An offset may only be taken from a `you` that a
+     frame has drawn from this prediction. At 300 ms and a few frames a
+     second, two snapshots could arrive between frames just after a
+     restart: the first snapped the prediction to the new place, and the
+     second, taking that for a small correction, eased from the leader
+     still drawn where the old run ended (frozen through the death beat,
+     its followers cleared). The leader was then drawn 8 to 26 units away
+     from its own followers, fading over a few frames. shown is set only
+     once frame() has written `you` from pred, and cleared by every snap. */
+  let shown = false;
+  /* The clock: est is the room's step less now/STEP_MS, smoothed; clk is the
+     offset this phone runs on, pulled towards est + lead; pk the last step
+     simulated here. */
+  let est = null, lead = LEAD0, clk = null, pk = -1, settled = true, leadSeq = 0;
+  let reports = [], late = 0, reported = 0, leadMoves = 0;
+
+  function readToken () { try { return sessionStorage.getItem(KEY) || undefined; } catch (_) { return undefined; } }
+  function keepToken (t) { try { if (t) sessionStorage.setItem(KEY, t); } catch (_) { /* play on without it */ } }
+
+  /* ------------------------------------------------------------ the wire */
+  const hello = () => { const h = { play: true }, t = readToken(); if (t) h.token = t; return h; };
+
+  function onInit (m) {
+    /* A new connection resends every path and may be a new room clock, so
+       the next snapshot is a fresh start, not a correction to ease into. */
+    fresh = true; live = false; shown = false; me = null; est = null; clk = null; pk = -1; hist.clear();
+    reports = []; settled = true; leadSeq = seq;
+    if (!m.me) return;
+    myId = m.me.id; name = m.me.name || null; keepToken(m.me.token);
+    you.id = myId; you.watched = myId;
+  }
+
+  /* Only when something changed, never more than every 50 ms, and at least
+     every 200 ms: the room keeps the last input, so silence is not a loss,
+     but the heartbeat keeps the earliness reports and v current. The input
+     is for step k, the first this phone has not simulated yet. */
+  function maybeSend (t, connected, frameMs, k) {
+    if (!connected || myId < 0) return;
+    const since = t - sentAt;
+    if (since < SEND_MIN) return;
+    const w = input.want === null || input.want === undefined ? null : r4(wrap(input.want)), b = !!input.burst;
+    const changed = b !== sentBurst || (w === null) !== (sentWant === null) ||
+                    (w !== null && Math.abs(wrap(w - sentWant)) > WANT_EPS);
+    /* A frame early rather than a frame late: checked once a frame, the
+       heartbeat must not slip past 200 ms waiting for the next one. */
+    if (!changed && since + frameMs <= SEND_MAX) return;
+    seq++; sentWant = w; sentBurst = b; sentAt = t;
+    /* d: how many steps behind this one the other trains are drawn here. */
+    const v = view ? view() : null, m = { t: 'in', seq, k, w };
+    if (b) m.b = 1;
+    if (v !== null && v !== undefined) m.d = Math.max(0, Math.round(k - v));
+    send(m);
+  }
+
+  /* One step of the leader, exactly as the room steps a player's train:
+     burst only with a follower to pay with, steer then swim, the reef
+     holds, the path records. (What a burst costs is the room's business:
+     `len` says.) */
+  function simulate (h) {
+    pred.bursting = h.burst && pred.followers.length > 0;
+    const fx = pred.x, fz = pred.z, s0 = pred.s;
+    const moved = motion.advance(pred, h.want, STEP);
+    motion.hold(pred, fx, fz, s0);
+    motion.recordTrail(pred, moved);
+  }
+  const given = k => hist.get(k) || { want: sentWant, burst: sentBurst };
+
+  /* ------------------------------------------------------------ the clock */
+  function onSnap (m) {
+    if (typeof m.k !== 'number' || myId < 0) return;
+    const t = now(), r = rtt();
+    /* The step an input sent now would arrive at: this snapshot's step,
+       plus the half round trip it took to get here, plus the half an input
+       takes to get back. Not before a round trip is known: a guess of zero
+       would put every input late for its first second. */
+    if (r !== null && r !== undefined) {
+      const sample = m.k + r / STEP_MS - t / STEP_MS;
+      est = est === null ? sample : est + 0.1 * (sample - est);
+    }
+    if (typeof m.e === 'number') { reported++; if (m.eq > leadSeq && settled) reports.push([t, m.e]); }
+    if (m.l) late += m.l;
+    judgeLead(t);
+    if (m.me) reconcile(m.me, m.k);
+  }
+
+  /* The lead: up at once by what the worst input missed the margin by, down
+     by half a step when a whole second of reports was needlessly early.
+     Reports about inputs sent before the clock settled on a new lead are
+     not counted, or one late burst would be answered twice. */
+  function judgeLead (t) {
+    while (reports.length && t - reports[0][0] > WINDOW) reports.shift();
+    if (!reports.length || !settled) return;
+    let lo = Infinity; for (const q of reports) lo = Math.min(lo, q[1]);
+    if (lo < MARGIN) moveLead(Math.min(LEAD_MAX, lead + Math.min(8, MARGIN - lo + 0.5)));
+    else if (lo > MARGIN + 2.5 && t - reports[0][0] > 1000) moveLead(Math.max(0, lead - 0.5));
+  }
+  function moveLead (v) { lead = v; leadMoves++; reports = []; settled = false; }
+
+  /* ----------------------------------------------------- reconciliation */
+  function place () { if (pred.followers.length) motion.placeFollowers(pred); }
+
+  function reconcile (m, K) {
+    me = m;
+    if (m.ack !== undefined) ack = m.ack;
+    const restarted = runs !== null && m.runs !== undefined && m.runs !== runs;
+    if (restarted) you.lastPeak = you.peak;
+    if (m.runs !== undefined) runs = m.runs;
+    if (m.peak !== undefined) you.peak = m.peak;
+    /* DEAD: nothing to predict. The death beat counts down here from the
+       moment the room said so; follow.js holds the wreck and shows the peak. */
+    if (m.dead) {
+      /* me.dead is the room's seconds left in the beat: start from it, then
+         count on this clock so the pull-back is smooth between snapshots. */
+      if (!(you.dead > 0)) you.dead = m.dead > 0 && m.dead <= params.deathBeat ? m.dead : params.deathBeat;
+      you.crashX = typeof m.crashX === 'number' ? m.crashX : m.x;
+      you.crashZ = typeof m.crashZ === 'number' ? m.crashZ : m.z;
+      you.followers.length = 0; pred.followers.length = 0;
+      live = false; fresh = true; shown = false;
+      return;
+    }
+    if (pk < 0) return;                     // the clock has not started yet
+    /* Further ahead of the room than a replay should ever reach: the clock
+       is lost, so start it again from the estimate on the next frame. */
+    if (pk - K > MAX_REPLAY) { clk = null; pk = -1; live = false; fresh = true; shown = false; return; }
+    /* The room ahead of this phone (a stall here, or a lead gone wrong):
+       nothing of ours to replay, so carry on from the truth. */
+    const behind = K > pk;
+    const wasLive = live && shown && !fresh && !restarted && !behind;
+    const bx = pred.x, bz = pred.z;
+    if (behind) pk = K;
+
+    /* Back to the truth after step K. The room's path for this train, up to
+       (not past) the true leader, then the leader itself as the first local
+       point. */
+    pred.x = m.x; pred.z = m.z; pred.head = m.h; pred.s = m.s; pred.turn = 0;
+    const c = core.trains.get(myId), tr = [];
+    if (c && (m.runs === undefined || c.runs === m.runs)) for (const q of c.trail) if (q.s < m.s - 0.01) tr.push(q);
+    tr.push({ x: m.x, z: m.z, h: m.h, s: m.s });
+    pred.trail = tr;
+    const len = m.len || 0;
+    while (pred.followers.length < len) pred.followers.push({ x: m.x, z: m.z, head: m.h });
+    pred.followers.length = len;
+
+    /* The steps since, each with the input this phone gave it: the same
+       inputs the room applies at the same steps, whenever they came in time. */
+    for (let k = K + 1; k <= pk; k++) simulate(given(k));
+
+    const size = wasLive ? Math.hypot(pred.x - bx, pred.z - bz) : 0;
+    if (wasLive) { corrections.push(Math.round(size * 1000) / 1000); if (corrections.length > 6000) corrections.shift(); }
+    place();
+    /* THE OFFSET: from what is drawn now to the new prediction, for the
+       leader and each follower that was drawn, so the whole train eases
+       together and the first follower never parts from the leader. */
+    if (!wasLive || size > SNAP) { off.x = off.z = off.h = 0; off.f.length = 0; off.age = EASE; shown = false; }
+    else {
+      off.x = you.x - pred.x; off.z = you.z - pred.z; off.h = wrap(you.head - pred.head);
+      const n = Math.min(you.followers.length, pred.followers.length);
+      off.f.length = n;
+      for (let k = 0; k < n; k++) off.f[k] = { x: you.followers[k].x - pred.followers[k].x, z: you.followers[k].z - pred.followers[k].z };
+      off.age = 0;
+    }
+    if (you.dead > 0) you.dead = 0;         // back in the water: snap, never ease
+    live = true; fresh = false;
+  }
+
+  /* ---------------------------------------------------------- one frame */
+  function frame (dt, paused, owed, connected) {
+    /* Paused (the debug block), your manta holds; the room does not, so
+       unpausing finds the clock far off and starts again from the truth. */
+    if (paused) return;
+    /* The beat runs on this clock; it holds its last moment until the room
+       says the train is back, so the card never flickers off early. */
+    if (me && me.dead && you.dead > 0) you.dead = Math.max(0.02, you.dead - dt);
+    if (myId < 0 || est === null) return;
+    const t = now();
+    const aim = est + lead;
+    if (clk === null || Math.abs(aim - clk) > 30) { clk = aim; settled = true; leadSeq = seq; }
+    else {
+      clk += Math.max(-SLEW, Math.min(SLEW, aim - clk));
+      if (!settled && Math.abs(aim - clk) < 0.05) { settled = true; leadSeq = seq; }
+    }
+    const target = Math.floor(t / STEP_MS + clk);
+    /* Lost (the first frame, a hidden tab, a long stall): start the count
+       again here and wait for the next snapshot to put the leader back. */
+    if (pk < 0 || target - pk > MAX_REPLAY || pk - target > MAX_REPLAY) {
+      pk = target; hist.clear(); live = false; fresh = true; shown = false;
+    }
+    while (pk < target) {
+      pk++;
+      /* Connected, a step uses exactly what the room was told for it. */
+      const h = connected ? { want: sentWant, burst: sentBurst } : { want: input.want, burst: !!input.burst };
+      hist.set(pk, h); hist.delete(pk - HIST);
+      if (live) simulate(h);
+    }
+    /* AFTER this frame's steps, for the next one. Sent before them, a long
+       frame (a slow phone, a hitch) stamped its input for a step already
+       behind this clock, and it reached the room late by the length of the
+       frame: 40% late in a headless browser at a few frames a second. */
+    maybeSend(t, connected, Math.min(dt, 0.05) * 1000, pk + 1);
+    if (!live) return;
+    place();
+    off.age += dt;
+    const k = Math.max(0, 1 - off.age / EASE);
+    you.x = pred.x + off.x * k; you.z = pred.z + off.z * k; you.head = wrap(pred.head + off.h * k);
+    you.s = pred.s; you.bursting = pred.bursting; you.dead = 0;
+    const f = you.followers, n = pred.followers.length;
+    while (f.length < n) f.push({ x: pred.x, z: pred.z, head: pred.head, from: -1, born: 0 });
+    f.length = n;
+    for (let i = 0; i < n; i++) {
+      /* A follower the offset never saw (just recruited) eases with the
+         last one it did, or with the leader, so the train moves as one. */
+      const p = pred.followers[i], o = i < off.f.length ? off.f[i] : off.f.length ? off.f[off.f.length - 1] : { x: off.x, z: off.z };
+      f[i].x = o ? p.x + o.x * k : p.x; f[i].z = o ? p.z + o.z * k : p.z; f[i].head = p.head;
+    }
+    you.len = n;
+    shown = true;
+  }
+
+  /* If the room is full the page falls back to watching: no inputs sent. */
+  function stop () { live = false; shown = false; me = null; myId = -1; }
+
+  return {
+    hello, onInit, onSnap, frame, stop,
+    get id () { return myId; }, get name () { return name; }, get me () { return me; },
+    get corrections () { return corrections; }, get seq () { return seq; }, get ack () { return ack; },
+    /* The clock, for the panel and the tests: steps ahead of the room, the
+       inputs the room said came too late, and how many reports it sent. */
+    get lead () { return lead; }, get late () { return late; }, get reported () { return reported; },
+    get leadMoves () { return leadMoves; }, get step () { return pk; }, get live () { return live; },
+    get sentBurst () { return sentBurst; },
+  };
+}

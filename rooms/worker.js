@@ -36,10 +36,13 @@ export class Room extends DurableObject {
     const url = new URL(request.url);
     const [client, server] = Object.values(new WebSocketPair());
     /* An ocean room runs the simulation (ocean.js); any other room echoes.
-       Hibernatable either way: an idle room costs nothing while it waits. */
-    if (url.pathname.startsWith(ROOMS + 'ocean/')) {
+       Hibernatable either way: an idle room costs nothing while it waits.
+       A staged room is an ocean set up for the cut test, and only ever
+       under wrangler dev: checked here as well as in the Worker. */
+    const staged = LOCAL.test(url.hostname) && url.pathname.startsWith(ROOMS + 'stage/');
+    if (url.pathname.startsWith(ROOMS + 'ocean/') || staged) {
       this.ctx.acceptWebSocket(server, ['ocean']);
-      if (!this.ocean) this.ocean = createOcean(this.env, url);
+      if (!this.ocean) this.ocean = createOcean(this.env, url, { stage: staged ? 'cut' : null });
       this.ocean.join(server, LOCAL.test(url.hostname));
     } else {
       this.ctx.acceptWebSocket(server);
@@ -90,7 +93,10 @@ export default {
     }
     const room = /^\/lab\/manta\/rooms\/room\/([a-z0-9-]{1,32})$/.exec(path);
     const ocean = /^\/lab\/manta\/rooms\/ocean\/([a-z0-9-]{1,32})$/.exec(path);
-    if (path !== ROOMS + 'echo' && !room && !ocean) return text('no such room', 404);
+    /* The staged cut test's room (3E): under wrangler dev only. Anywhere
+       else this path is not a room at all, and gets the 404 below. */
+    const stage = LOCAL.test(url.hostname) ? /^\/lab\/manta\/rooms\/stage\/([a-z0-9-]{1,32})$/.exec(path) : null;
+    if (path !== ROOMS + 'echo' && !room && !ocean && !stage) return text('no such room', 404);
     if ((request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') {
       return text('expected a websocket', 426);
     }
@@ -100,6 +106,7 @@ export default {
        An ocean of the same name is a different object. */
     if (room) return env.ROOMS.get(env.ROOMS.idFromName(room[1])).fetch(request);
     if (ocean) return env.ROOMS.get(env.ROOMS.idFromName('ocean:' + ocean[1])).fetch(request);
+    if (stage) return env.ROOMS.get(env.ROOMS.idFromName('stage:' + stage[1])).fetch(request);
 
     /* The edge echo, as in step one: no room, just this Worker. */
     const [client, server] = Object.values(new WebSocketPair());

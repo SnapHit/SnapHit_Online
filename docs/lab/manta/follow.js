@@ -53,7 +53,9 @@ export function createFollow (ctx) {
       const mine = t === ctx.sim.you;
       rows.push({
         mine,
-        name: mine ? 'you' : 'bot ' + t.id + ' \u00b7 ' + (t.kind || 'bot'),
+        /* In a room (ctx.sim.room) a train a player drives carries their
+           name; the solo lab has no names and reads exactly as before. */
+        name: mine ? 'you' : ctx.sim.room && t.name ? t.name : 'bot ' + t.id + ' \u00b7 ' + (t.kind || 'bot'),
         len: t.dead > 0 ? 0 : t.followers.length,
       });
     }

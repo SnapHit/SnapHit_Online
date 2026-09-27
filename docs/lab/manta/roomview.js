@@ -17,15 +17,22 @@
  * There is no human manta in a room. `you` is only where the camera looks:
  * the watched bot's leader. That bot is drawn once, with the rivals, and
  * follow.js keeps slot 0 parked while sim.watching is set.
+ *
+ * PLAY MODE (&play=1, roomplay.js) is the exception: `you` is the player's
+ * own train, predicted on this phone and drawn in slot 0 in the player's
+ * colour. Its rivals index stays a parked hole, so it is never drawn twice
+ * and every other train keeps its colour. Everything else is drawn exactly
+ * as in watch mode.
  */
 import { createMirror, createWildStore, decodeSnap } from './roomcore.js';
+import { createPlay } from './roomplay.js';
 import { DEF, zoomFor } from './simcore.js';
 
 const lerp = (a, b, f) => a + (b - a) * f;
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 const JUMP = 300;                          // further than this in one snapshot is a teleport, not a swim
 
-export function createRoomView ({ room, build, params: start, view }) {
+export function createRoomView ({ room, build, params: start, view, play: playing = false }) {
   /* The room's numbers, never the drawer's: spacing decides where every
      follower sits, so it has to be the one the room placed them with. Filled
      in by init; one object, so the mirror's motion sees the update. */
@@ -35,10 +42,13 @@ export function createRoomView ({ room, build, params: start, view }) {
   const rivals = [], wild = [], events = [], board = [];
   const drawn = new Map();                 // train id -> what is drawn for it
   const kinds = new Map();                 // train id -> personality, for the board
+  const names = new Map();                 // train id -> player's name, for trains a player drives
+  const input = { want: null, burst: false };   // written by the touch controls in play mode
   const snaps = [], pending = [], gaps = [], offsets = [];
   let ws = null, retry = 0, backoff = 0.5, stopped = false, connected = false, everOpen = false;
   let rtt = null, delay = 0.1, offset = null, lastArrive = null, lastSnap = null, snapCount = 0;
   let watched = -1, viewDirty = true, sentView = null, viewAt = 0, pingAt = 0;
+  let play = null;                         // play mode (roomplay.js), made once `send` exists
 
   /* ---------------------------------------------------------- the signal */
   const mark = document.createElement('div');
@@ -53,7 +63,7 @@ export function createRoomView ({ room, build, params: start, view }) {
       return;
     }
     mark.style.color = rtt === null ? '#8fa6bb' : rtt < 150 ? '#7fe3d0' : rtt < 400 ? '#ffc46b' : '#ff8a80';
-    mark.textContent = '● ' + (rtt === null ? '…' : Math.round(rtt) + ' ms');
+    mark.textContent = '● ' + (rtt === null ? '…' : Math.round(rtt) + ' ms') + (play && play.name ? '  ' + play.name : '');
   }
   showSignal();
 
@@ -74,15 +84,33 @@ export function createRoomView ({ room, build, params: start, view }) {
   /* ------------------------------------------------------------ the wire */
   const send = m => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
   const viewNow = () => ({ x: you.x, z: you.z, w: view ? view.w : 1000, h: view ? view.h : 1000 });
+  /* The step the other trains are drawn at, on the room's count: what an
+     input tells the room this phone was looking at, for lag compensation. */
+  const viewStep = () => offset === null || !snaps.length ? null : (performance.now() / 1000 - offset - delay) * 60;
+  if (playing) play = createPlay({ room, params, core, you, input, send, rtt: () => rtt, view: viewStep });
+  /* For tests against a local room only (the room ignores both elsewhere):
+     ?lagcomp=0 turns lag compensation off, ?truth=1 asks for the true state. */
+  const q = new URLSearchParams(location.search);
+  function hello () {
+    const h = { t: 'hello', build, view: viewNow(), watch: watched };
+    if (play) Object.assign(h, play.hello());
+    if (play && q.get('lagcomp') === '0') h.lagComp = false;
+    if (q.get('truth') === '1') h.debug = true;
+    return h;
+  }
 
   function connect () {
     if (stopped) return;
     let s;
-    try { s = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/lab/manta/rooms/ocean/' + room); }
+    /* ?stage=cut asks for the staged cut room, which only wrangler dev has
+       (tests: a train of your own to burst with); anywhere else it is a 404
+       and the page simply retries. */
+    const kind = q.get('stage') === 'cut' ? 'stage/' : 'ocean/';
+    try { s = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/lab/manta/rooms/' + kind + room); }
     catch (e) { later(); return; }
     ws = s;
     s.binaryType = 'arraybuffer';
-    s.onopen = () => { everOpen = true; send({ t: 'hello', build, view: viewNow(), watch: watched }); };
+    s.onopen = () => { everOpen = true; send(hello()); };
     s.onmessage = e => {
       let m; try { m = typeof e.data === 'string' ? JSON.parse(e.data) : decodeSnap(e.data); } catch (_) { return; }
       if (m && ws === s) receive(m);
@@ -104,25 +132,41 @@ export function createRoomView ({ room, build, params: start, view }) {
   function resync () {
     core.trains.clear(); drawn.clear(); wildStore.clear();
     snaps.length = 0; pending.length = 0; gaps.length = 0; offsets.length = 0;
-    rivals.length = 0; events.length = 0; board.length = 0;
+    rivals.length = 0; events.length = 0; board.length = 0; names.clear();
     for (const w of wild) w.alive = false;
     offset = null; lastArrive = null; delay = 0.1;
   }
 
   function receive (m) {
     if (m.t === 'reload') { stopped = true; clearTimeout(retry); try { ws.close(); } catch (_) {} ws = null; connected = false; showSignal(); showReload(); return; }
-    if (m.t === 'init') { Object.assign(params, m.params || {}); resync();
+    /* A room with ten players already: watch it instead of playing. */
+    if (m.t === 'full') { if (!play) return; play.stop(); play = null;
+      mirror.watching = true; watched = -1; you.watched = -1; you.followers.length = 0; you.dead = 0; showSignal(); return; }
+    if (m.t === 'init') { Object.assign(params, m.params || {}); resync(); setNames(m.names);
+      if (play) { play.onInit(m); if (play.id >= 0) watched = play.id; }
       /* Every bot's kind, once on joining, so the board says timid, greedy or
          bully for bots that have never been near you (3D). */
       for (const [id, k] of m.kinds || []) kinds.set(id, k); connected = true; backoff = 0.5; viewDirty = true; showSignal(); return; }
     if (m.t === 'pong') { rtt = performance.now() - m.c; showSignal(); return; }
+    if (m.t === 'names') { setNames(m.names); return; }
     if (m.t === 'snap') snap(m);
+  }
+
+  /* Players by name, bots by number and kind: whole, whenever it comes. */
+  function setNames (list) {
+    if (!list) return;
+    names.clear();
+    for (const [id, n] of list) names.set(id, n);
   }
 
   function snap (m) {
     const at = performance.now() / 1000;
     core.apply(m);
     lastSnap = m; snapCount++;
+    setNames(m.names);
+    /* After the mirror took this snapshot's paths: the prediction lays its
+       followers along this train's path, up to the true leader. */
+    if (play) play.onSnap(m);
     /* The room's clock against this one: the fastest recent arrival is the
        one least delayed by the network, so it is the best estimate. */
     offsets.push(at - m.time); if (offsets.length > 40) offsets.shift();
@@ -145,17 +189,19 @@ export function createRoomView ({ room, build, params: start, view }) {
     /* The board comes only when it changed: the last one stands until then. */
     if (m.bd) {
       board.length = 0;
-      for (const [id, len] of m.bd) board.push({ id, kind: kinds.get(id) || 'bot', dead: 0, followers: { length: len } });
-    } else for (const r of board) r.kind = kinds.get(r.id) || r.kind;
+      /* The player's own row is `you`, which the board marks as yours. */
+      for (const [id, len] of m.bd) board.push(play && id === play.id ? you
+        : { id, kind: kinds.get(id) || 'bot', name: names.get(id), dead: 0, followers: { length: len } });
+    } else for (const r of board) if (r !== you) { r.kind = kinds.get(r.id) || r.kind; r.name = names.get(r.id); }
     /* The top bot until the player taps for another. */
-    if (watched < 0 && board.length) watch(board[0].id);
+    if (!play && watched < 0 && board.length) watch(board[0].id);
   }
 
   function watch (id) { watched = id; you.watched = id; viewDirty = true; }
   /* A tap on the water moves to the next bot on the board, wrapping. The
      chip, the panel and the drawer are not the canvas, so they never do. */
   addEventListener('click', e => {
-    if (!e.target || e.target.tagName !== 'CANVAS' || !board.length) return;
+    if (play || !e.target || e.target.tagName !== 'CANVAS' || !board.length) return;   // in play a tap steers
     const i = board.findIndex(b => b.id === watched);
     watch(board[(i + 1) % board.length].id);
   });
@@ -186,6 +232,8 @@ export function createRoomView ({ room, build, params: start, view }) {
     const now = performance.now() / 1000;
     mirror.time = now;                       // monotonic: the board's throttle and the join fade read it
     tick(now);
+    /* Your own leader first, on its own clock: it is not drawn in the past. */
+    if (play && !stopped) play.frame(dt, paused, owed, connected);
     if (!snaps.length || offset === null || stopped) return;
     let T = now - offset - delay;
     if (paused) {
@@ -224,7 +272,7 @@ export function createRoomView ({ room, build, params: start, view }) {
        bot out of view is a parked stand-in. */
     for (let i = 0; i < rivals.length; i++) rivals[i] = hole(i);
     for (const id of B.tr.keys()) {
-      if (!(id >= 1) || !drawn.has(id)) continue;
+      if (!(id >= 1) || !drawn.has(id) || (play && id === play.id)) continue;   // yours is slot 0
       while (rivals.length < id) rivals.push(hole(rivals.length));
       rivals[id - 1] = drawn.get(id);
     }
@@ -232,7 +280,7 @@ export function createRoomView ({ room, build, params: start, view }) {
 
     /* The camera: on the watched leader, and held where it is while that
        train is in its death beat or not yet in the mirror. */
-    const w0 = B.tr.has(watched) ? drawn.get(watched) : null;
+    const w0 = !play && B.tr.has(watched) ? drawn.get(watched) : null;
     if (w0 && !w0.dead) { you.x = w0.x; you.z = w0.z; you.head = w0.head; you.s = w0.s; you.len = w0.followers.length; }
 
     /* Wild mantas by slot, smoothed between the five-a-second samples
@@ -260,8 +308,8 @@ export function createRoomView ({ room, build, params: start, view }) {
   }
 
   const mirror = {
-    watching: true, params, you, rivals, trains: board, wild, events, time: 0,
-    input: { want: null, burst: false }, blooms: [],
+    watching: !play, params, you, rivals, trains: board, wild, events, time: 0,
+    input, blooms: [],
     step,
     zoom: () => zoomFor(you.len, params),
     botMix: () => { const m = {}; for (const r of rivals) if (!r.hole) m[r.kind || 'bot'] = (m[r.kind || 'bot'] || 0) + 1; return m; },
@@ -274,6 +322,15 @@ export function createRoomView ({ room, build, params: start, view }) {
       get connected () { return connected; }, get rtt () { return rtt; }, get delay () { return delay; },
       get snaps () { return snapCount; }, get lastSnap () { return lastSnap; }, get build () { return build; },
       get watched () { return watched; },
+      /* Play mode: the correction sizes (units, one per snapshot) and the
+         input sequence the room has acknowledged. */
+      get play () { return !!play; }, get me () { return play ? play.me : null; },
+      get corrections () { return play ? play.corrections : []; }, get seq () { return play ? play.seq : 0; },
+      get ack () { return play ? play.ack : 0; }, get name () { return play ? play.name : null; },
+      /* Play mode's clock (3E): steps ahead of the room, inputs the room
+         said came too late for their step, and earliness reports received. */
+      get lead () { return play ? play.lead : null; }, get late () { return play ? play.late : 0; },
+      get reported () { return play ? play.reported : 0; }, get id () { return play ? play.id : -1; },
     },
   };
   addEventListener('online', showSignal); addEventListener('offline', showSignal);
