@@ -307,6 +307,30 @@ export function decodeSnap (buf) {
    until it is gone at the drawn moment too, and out() is told which
    occupant (gen) it is drawing, so the page can start a new one's glow
    afresh rather than carry on the last one's. */
+/* WILD MANTAS GLIDE ON SLOW LINKS (3H). A wild manta's whole record comes
+   five times a second and between records it is carried on dead reckoning,
+   so a correction for a moment the page has already drawn past shows as a
+   jump. Wild mantas are therefore drawn far enough back that the next full
+   list is always already here, even arriving as late as any has lately:
+   the gap between full lists, plus the worst lateness seen, plus 50 ms.
+   late: seconds, the latest arrival among recent snapshots relative to the
+   earliest. At most 0.7 s. */
+export const wildDelayFor = late => Math.min(0.7, WILD_EVERY / SNAP_HZ + Math.max(0, late || 0) + 0.05);
+/* And the moment they are drawn at runs on the frame clock, eased towards
+   that target at most 5% faster or slower than real time: the target moves
+   in steps whenever the earliest or latest recent arrival leaves the
+   window, and a 20 ms step at a wild manta's pace is a 1-unit jump. More
+   than half a second out (a new connection, a long stall) it is taken at
+   once. One of these per page; the tests use the same. */
+export function createWildClock () {
+  let tw = null;
+  return (target, dt) => {
+    if (tw === null || !(dt > 0) || Math.abs(target - tw) > 0.5) return (tw = target);
+    tw += dt;
+    tw += Math.max(-0.05 * dt, Math.min(0.05 * dt, target - tw));
+    return tw;
+  };
+}
 export const WILD_KEEP = 1.5;            // seconds of samples kept a manta
 export function createWildStore () {
   const all = new Map();                   // slot -> [{ pts: [[time, x, z, h, flags, colour]], from, to, gen }], oldest first

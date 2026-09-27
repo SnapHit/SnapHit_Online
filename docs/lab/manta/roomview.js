@@ -24,7 +24,7 @@
  * and every other train keeps its colour. Everything else is drawn exactly
  * as in watch mode.
  */
-import { createMirror, createWildStore, decodeSnap, wildLook } from './roomcore.js';
+import { createMirror, createWildStore, decodeSnap, wildLook, wildDelayFor, createWildClock } from './roomcore.js';
 import { createPlay } from './roomplay.js';
 import { DEF, zoomFor } from './simcore.js';
 
@@ -46,7 +46,8 @@ export function createRoomView ({ room, build, params: start, view, play: playin
   const input = { want: null, burst: false };   // written by the touch controls in play mode
   const snaps = [], pending = [], gaps = [], offsets = [];
   let ws = null, retry = 0, backoff = 0.5, stopped = false, connected = false, everOpen = false;
-  let rtt = null, delay = 0.1, offset = null, lastArrive = null, lastSnap = null, snapCount = 0;
+  let rtt = null, delay = 0.1, offset = null, lastArrive = null, lastSnap = null, snapCount = 0, wildLate = 0;
+  const wildClock = createWildClock(); let wildNow = null;
   let watched = -1, viewDirty = true, sentView = null, viewAt = 0, pingAt = 0;
   let play = null;                         // play mode (roomplay.js), made once `send` exists
 
@@ -186,6 +187,7 @@ export function createRoomView ({ room, build, params: start, view, play: playin
        one least delayed by the network, so it is the best estimate. */
     offsets.push(at - m.time); if (offsets.length > 40) offsets.shift();
     offset = Math.min(...offsets);
+    wildLate = Math.max(...offsets) - offset;   // the latest recent arrival, for the wild delay (3H)
     if (lastArrive !== null) { gaps.push(at - lastArrive); if (gaps.length > 40) gaps.shift(); }
     lastArrive = at;
     if (gaps.length > 4) {
@@ -302,7 +304,11 @@ export function createRoomView ({ room, build, params: start, view, play: playin
        (roomcore.js). One that is not in the water at T is gone from view.
        Glow and sinking arrive as flags, so they count down here. */
     for (const w of wild) w.seen = false;
-    wildStore.at(T, (slot, x, z, h, fl, col, gen) => {
+    /* Wild mantas further back than the trains, on their own eased clock
+       (3H, roomcore.js wildDelayFor and createWildClock). */
+    const wdt = paused ? dt : wildNow === null ? 0 : now - wildNow;   // real time: a frame's dt is capped
+    wildNow = now;
+    wildStore.at(wildClock(T - Math.max(0, wildDelayFor(wildLate) - delay), wdt), (slot, x, z, h, fl, col, gen) => {
       while (wild.length <= slot) wild.push({ x: 0, z: 0, head: 0, alive: false, loose: false, sinking: 0, glow: 0, wasColour: -1, colour: wild.length, gen: 0 });
       const w = wild[slot];
       w.x = x; w.z = z; w.head = h;
