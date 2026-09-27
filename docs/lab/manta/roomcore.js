@@ -295,53 +295,79 @@ export function decodeSnap (buf) {
 
 /* The wild mantas a phone knows, smoothed. Full lists come five times a
    second; changes (appearing, sinking, glowing, leaving) at once. Each
-   manta keeps its last few samples; at a moment T it is drawn between the
-   two either side, or carried on from the last two for up to 0.3 s when T
-   is newer than both. It is in the water from its first sample to the
-   moment it was said to be gone, so a recruit leaves the water on the same
-   drawn moment its train grows. */
+   manta keeps its samples from the last 1.5 s; at a moment T it is drawn
+   between the two either side, or carried on from the last two for up to
+   0.3 s when T is newer than both. It is in the water from its first sample
+   to the moment it was said to be gone.
+   3G: ONE ENTRY PER MANTA, NOT PER SLOT. A slot refilled by a new manta
+   used to throw the old one's entry away at once, so the old manta
+   vanished a render delay early; now each occupant keeps its own entry
+   until it is gone at the drawn moment too, and out() is told which
+   occupant (gen) it is drawing, so the page can start a new one's glow
+   afresh rather than carry on the last one's. */
+export const WILD_KEEP = 1.5;            // seconds of samples kept a manta
 export function createWildStore () {
-  const all = new Map();                   // slot -> { pts: [[time, x, z, h, flags, colour]], from, to }
+  const all = new Map();                   // slot -> [{ pts: [[time, x, z, h, flags, colour]], from, to, gen }], oldest first
+  let gens = 0;
   function sample (time, r) {
-    let e = all.get(r[0]);
-    if (!e || e.to <= time) { e = { pts: [], from: time, to: Infinity }; all.set(r[0], e); }
+    let list = all.get(r[0]);
+    if (!list) { list = []; all.set(r[0], list); }
+    let e = list[list.length - 1];
+    if (!e || e.to <= time) { e = { pts: [], from: time, to: Infinity, gen: ++gens }; list.push(e); }
     e.pts.push([time, r[1], r[2], r[3], r[4], r[5]]);
-    if (e.pts.length > 4) e.pts.shift();
+    while (e.pts.length > 2 && time - e.pts[1][0] > WILD_KEEP) e.pts.shift();
   }
+  const live = slot => { const list = all.get(slot); const e = list && list[list.length - 1]; return e && e.to === Infinity ? e : null; };
   function take (m) {
     /* Gone first: a slot gone and appearing in one snapshot is a new manta. */
-    if (m.wg) for (const slot of m.wg) { const e = all.get(slot); if (e && e.to === Infinity) e.to = m.time; }
+    if (m.wg) for (const slot of m.wg) { const e = live(slot); if (e) e.to = m.time; }
     if (m.wd) {
       const listed = new Set();
       for (const r of m.wd) { sample(m.time, r); listed.add(r[0]); }
-      for (const [slot, e] of all) if (!listed.has(slot) && e.to === Infinity) e.to = m.time;
+      for (const slot of all.keys()) if (!listed.has(slot)) { const e = live(slot); if (e) e.to = m.time; }
     }
     if (m.wa) for (const r of m.wa) sample(m.time, r);
   }
-  /* Where each manta is at T: calls out(slot, x, z, h, flags, colour). */
+  /* Where each manta is at T: calls out(slot, x, z, h, flags, colour, gen). */
   function at (T, out) {
-    for (const [slot, e] of all) {
-      if (e.to <= T - 2) { all.delete(slot); continue; }
-      if (T < e.from || T >= e.to) continue;
-      const p = e.pts;
-      let i = p.length - 1; while (i > 0 && p[i][0] > T) i--;
-      const a = p[i], b = p[i + 1];
-      let x = a[1], z = a[2], h = a[3];
-      if (b && b[0] > a[0] && Math.abs(b[1] - a[1]) + Math.abs(b[2] - a[2]) < 300) {
-        const f = Math.max(0, Math.min(1, (T - a[0]) / (b[0] - a[0])));
-        x += (b[1] - a[1]) * f; z += (b[2] - a[2]) * f;
-        h = a[3] + Math.atan2(Math.sin(b[3] - a[3]), Math.cos(b[3] - a[3])) * f;
-      } else if (!b && i > 0) {
-        const o = p[i - 1], dt = a[0] - o[0];
-        if (dt > 0 && dt <= 0.5 && Math.abs(a[1] - o[1]) + Math.abs(a[2] - o[2]) < 300) {
-          const g = Math.min(T - a[0], 0.3) / dt;
-          x += (a[1] - o[1]) * g; z += (a[2] - o[2]) * g;
+    for (const [slot, list] of all) {
+      while (list.length && list[0].to <= T - 2) list.shift();
+      if (!list.length) { all.delete(slot); continue; }
+      for (const e of list) {
+        if (T < e.from || T >= e.to) continue;
+        const p = e.pts;
+        let i = p.length - 1; while (i > 0 && p[i][0] > T) i--;
+        const a = p[i], b = p[i + 1];
+        let x = a[1], z = a[2], h = a[3];
+        if (b && b[0] > a[0] && Math.abs(b[1] - a[1]) + Math.abs(b[2] - a[2]) < 300) {
+          const f = Math.max(0, Math.min(1, (T - a[0]) / (b[0] - a[0])));
+          x += (b[1] - a[1]) * f; z += (b[2] - a[2]) * f;
+          h = a[3] + Math.atan2(Math.sin(b[3] - a[3]), Math.cos(b[3] - a[3])) * f;
+        } else if (!b && i > 0) {
+          const o = p[i - 1], dt = a[0] - o[0];
+          if (dt > 0 && dt <= 0.5 && Math.abs(a[1] - o[1]) + Math.abs(a[2] - o[2]) < 300) {
+            const g = Math.min(T - a[0], 0.3) / dt;
+            x += (a[1] - o[1]) * g; z += (a[2] - o[2]) * g;
+          }
         }
+        out(slot, x, z, h, a[4], a[5], e.gen);
+        break;
       }
-      out(slot, x, z, h, a[4], a[5]);
     }
   }
   return { take, at, clear: () => all.clear(), get size () { return all.size; } };
+}
+
+/* How a drawn wild manta looks this frame: loose, sinking and glowing come
+   as flags and count down here. A new occupant of the slot (a new gen)
+   starts its own glow and sink from the top, never the last one's (3G). */
+export function wildLook (w, fl, col, gen, dt, params) {
+  if (w.gen !== gen) { w.gen = gen; w.glow = 0; w.sinking = 0; w.wasColour = -1; }
+  w.loose = !!(fl & 1);
+  w.sinking = fl & 2 ? (w.sinking > 0 ? Math.max(0.05, w.sinking - dt) : params.drain) : 0;
+  if (col >= 0) { w.wasColour = col; w.glow = w.glow > 0 ? Math.max(0.05, w.glow - dt) : params.scatterGlow; }
+  else w.glow = 0;
+  return w;
 }
 
 /* The phone's side: trains rebuilt from snapshots. */

@@ -80,6 +80,26 @@ export function createPlay ({ room, params, core, you, input, send, rtt, view, n
      simulated here. */
   let est = null, lead = LEAD0, clk = null, pk = -1, settled = true, leadSeq = 0;
   let reports = [], late = 0, reported = 0, leadMoves = 0;
+  /* 3G: round trips seen lately, and the one the clock uses. A single
+     sample far outside their spread (one late pong) is not believed: it
+     moved the clock 30 steps at once, so the manta jumped ahead and later
+     sat still while the clock came back. */
+  const rtts = []; let lastRtt = null, rttUse = null, outliers = 0, rttIgnored = 0;
+  function takeRtt (r) {
+    if (r === null || r === undefined || r === lastRtt) return;
+    lastRtt = r;
+    if (rtts.length >= 3) {
+      const sorted = rtts.slice().sort((a, b) => a - b), med = sorted[sorted.length >> 1];
+      const mad = sorted.map(v => Math.abs(v - med)).sort((a, b) => a - b)[sorted.length >> 1];
+      /* Far outside: past the median by three spreads and 60 ms. Three in a
+         row are the link itself changing, and are believed. */
+      if (Math.abs(r - med) > Math.max(60, 3 * mad) && outliers < 2) { outliers++; rttIgnored++; return; }
+    }
+    outliers = 0;
+    rtts.push(r); if (rtts.length > 9) rtts.shift();
+    const sorted = rtts.slice().sort((a, b) => a - b);
+    rttUse = sorted[sorted.length >> 1];
+  }
 
   function readToken () { try { const t = sessionStorage.getItem(KEY); return /^[0-9a-f]{12}$/.test(t || '') ? t : undefined; } catch (_) { return undefined; } }
   function keepToken (t) { try { if (t) sessionStorage.setItem(KEY, t); } catch (_) { /* play on without it */ } }
@@ -135,7 +155,7 @@ export function createPlay ({ room, params, core, you, input, send, rtt, view, n
   /* ------------------------------------------------------------ the clock */
   function onSnap (m) {
     if (typeof m.k !== 'number' || myId < 0) return;
-    const t = now(), r = rtt();
+    const t = now(); takeRtt(rtt()); const r = rttUse;
     /* The step an input sent now would arrive at: this snapshot's step,
        plus the half round trip it took to get here, plus the half an input
        takes to get back. Not before a round trip is known: a guess of zero
@@ -158,7 +178,9 @@ export function createPlay ({ room, params, core, you, input, send, rtt, view, n
     while (reports.length && t - reports[0][0] > WINDOW) reports.shift();
     if (!reports.length || !settled) return;
     let lo = Infinity; for (const q of reports) lo = Math.min(lo, q[1]);
-    if (lo < MARGIN) moveLead(Math.min(LEAD_MAX, lead + Math.min(8, MARGIN - lo + 0.5)));
+    /* Small steps (3G): a step up at most, a half step down, so the clock
+       is only ever nudged and the manta never visibly hurries or waits. */
+    if (lo < MARGIN) moveLead(Math.min(LEAD_MAX, lead + Math.min(1, MARGIN - lo + 0.5)));
     else if (lo > MARGIN + 2.5 && t - reports[0][0] > 1000) moveLead(Math.max(0, lead - 0.5));
   }
   function moveLead (v) { lead = v; leadMoves++; reports = []; settled = false; }
@@ -241,7 +263,9 @@ export function createPlay ({ room, params, core, you, input, send, rtt, view, n
     if (myId < 0 || est === null) return;
     const t = now();
     const aim = est + lead;
-    if (clk === null || Math.abs(aim - clk) > 30) { clk = aim; settled = true; leadSeq = seq; }
+    /* Set once when the clock starts (or after it was lost); from then on
+       only ever slewed, never jumped (3G). */
+    if (clk === null) { clk = aim; settled = true; leadSeq = seq; }
     else {
       clk += Math.max(-SLEW, Math.min(SLEW, aim - clk));
       if (!settled && Math.abs(aim - clk) < 0.05) { settled = true; leadSeq = seq; }
@@ -295,5 +319,6 @@ export function createPlay ({ room, params, core, you, input, send, rtt, view, n
     get lead () { return lead; }, get late () { return late; }, get reported () { return reported; },
     get leadMoves () { return leadMoves; }, get step () { return pk; }, get live () { return live; },
     get sentBurst () { return sentBurst; },
+    get rttUse () { return rttUse; }, get rttIgnored () { return rttIgnored; },
   };
 }

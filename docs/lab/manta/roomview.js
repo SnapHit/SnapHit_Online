@@ -24,7 +24,7 @@
  * and every other train keeps its colour. Everything else is drawn exactly
  * as in watch mode.
  */
-import { createMirror, createWildStore, decodeSnap } from './roomcore.js';
+import { createMirror, createWildStore, decodeSnap, wildLook } from './roomcore.js';
 import { createPlay } from './roomplay.js';
 import { DEF, zoomFor } from './simcore.js';
 
@@ -158,6 +158,10 @@ export function createRoomView ({ room, build, params: start, view, play: playin
       for (const [id, k] of m.kinds || []) kinds.set(id, k); connected = true; backoff = 0.5; viewDirty = true; showSignal(); return; }
     if (m.t === 'pong') { rtt = performance.now() - m.c; showSignal(); return; }
     if (m.t === 'names') { setNames(m.names); return; }
+    /* The room benched this player (no inputs for 2 s, or the page said it
+       was hidden): rejoin at once if the page is showing, with the token,
+       which takes the manta back while the bot still holds it. */
+    if (m.t === 'benched') { if (play && !document.hidden) send(hello()); return; }
     if (m.t === 'snap') snap(m);
   }
 
@@ -296,14 +300,12 @@ export function createRoomView ({ room, build, params: start, view, play: playin
        (roomcore.js). One that is not in the water at T is gone from view.
        Glow and sinking arrive as flags, so they count down here. */
     for (const w of wild) w.seen = false;
-    wildStore.at(T, (slot, x, z, h, fl, col) => {
-      while (wild.length <= slot) wild.push({ x: 0, z: 0, head: 0, alive: false, loose: false, sinking: 0, glow: 0, wasColour: -1, colour: wild.length });
+    wildStore.at(T, (slot, x, z, h, fl, col, gen) => {
+      while (wild.length <= slot) wild.push({ x: 0, z: 0, head: 0, alive: false, loose: false, sinking: 0, glow: 0, wasColour: -1, colour: wild.length, gen: 0 });
       const w = wild[slot];
       w.x = x; w.z = z; w.head = h;
-      w.alive = w.seen = true; w.loose = !!(fl & 1);
-      w.sinking = fl & 2 ? (w.sinking > 0 ? Math.max(0.05, w.sinking - dt) : params.drain) : 0;
-      if (col >= 0) { w.wasColour = col; w.glow = w.glow > 0 ? Math.max(0.05, w.glow - dt) : params.scatterGlow; }
-      else w.glow = 0;
+      w.alive = w.seen = true;
+      wildLook(w, fl, col, gen, dt, params);
     });
     for (const w of wild) if (!w.seen) w.alive = false;
 
@@ -343,6 +345,13 @@ export function createRoomView ({ room, build, params: start, view, play: playin
     },
   };
   addEventListener('online', showSignal); addEventListener('offline', showSignal);
+  /* PLAY MODE (3G): a hidden page says so, and the room gives the manta to
+     a bot at once rather than letting it swim on the last input; shown
+     again, the page rejoins with its token. */
+  if (play) document.addEventListener('visibilitychange', () => {
+    if (!play) return;
+    if (document.hidden) send({ t: 'away' }); else send(hello());
+  });
   connect();
   return mirror;
 }

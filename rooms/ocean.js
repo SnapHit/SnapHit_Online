@@ -52,6 +52,7 @@ const MAX_PLAYERS = 10;           // at most 12 (3G); the ocean has ten trains t
 const MAX_WATCHERS = 4;
 const MAX_SOCKETS = MAX_PLAYERS + MAX_WATCHERS + 2;   // the rest are still saying hello
 const HOLD_MS = 15000;            // a dropped player's train waits this long for its token
+const AWAY_MS = 2000;             // no inputs this long and a player is away (3G): benched as for a drop
 const REWIND_MAX = 15;            // steps (250 ms); the simulation keeps no more
 const AHEAD_MAX = 120;            // an input stamped further ahead than this is applied at that
 const QUEUE_MAX = 64;             // inputs a player may have waiting
@@ -119,13 +120,11 @@ export function createOcean (env, url, opts = {}) {
     const tok = typeof m.k === 'string' ? m.k : '';
     let id = -1, name = '', token = '';
     if (tok) {
-      /* The same token on a socket still open (a reconnect before the old
-         close arrived): the new socket takes the train over. */
-      for (const [ws, p] of phones) if (p !== phone && p.player && p.player.token === tok) {
-        const q = p.player; p.player = null; p.me = null;
-        driven.delete(q.id); held.set(tok, { id: q.id, name: q.name, until: now + HOLD_MS });
-        try { ws.close(4001, 'replaced'); } catch (_) { /* gone */ }
-      }
+      /* A TOKEN IS ONE LIVE CONNECTION'S (3G). Only a manta the room is
+         holding for it (a drop, or a player benched as away) can be taken
+         back. A second connection with a token still in use, a duplicated
+         tab, gets a manta and a token of its own and never takes the
+         first one's train. */
       const h = held.get(tok);
       if (h && trainOf(h.id) && !driven.has(h.id)) { id = h.id; name = h.name; token = tok; held.delete(tok); }
     }
@@ -143,7 +142,7 @@ export function createOcean (env, url, opts = {}) {
     }
     const t = trainOf(id);
     t.human = { want: null, burst: false, rewind: 0 };
-    phone.player = { id, name, token, ack: 0, seqIn: 0, queue: [], early: null, earlySeq: 0, late: 0, wish: 0,
+    phone.player = { id, name, token, ack: 0, seqIn: 0, queue: [], early: null, earlySeq: 0, late: 0, wish: 0, lastIn: now,
                      lagComp: !(phone.local && m.l === 0) };
     phone.me = phone.player;          // snapFor reads {id, ack} from here
     renameAll();
@@ -160,7 +159,7 @@ export function createOcean (env, url, opts = {}) {
   function input (phone, m) {
     const q = phone.player, t = q && trainOf(q.id);
     if (!t || !t.human || !Number.isInteger(m.seq) || m.seq <= q.seqIn) return;
-    q.seqIn = m.seq;
+    q.seqIn = m.seq; q.lastIn = Date.now();
     const next = steps + 1, clock = steps + (owed + (Date.now() - last) / 1000) / STEP;
     const k = Number.isInteger(m.k) ? m.k : next;
     const early = k - clock;
@@ -189,6 +188,10 @@ export function createOcean (env, url, opts = {}) {
       }
     }
   }
+  function bench (ws, phone) {
+    unseat(phone);
+    try { ws.send(JSON.stringify({ t: 'benched' })); } catch (_) { /* gone */ }
+  }
   /* Dropped: the brain holds the train and the token waits HOLD_MS. */
   function unseat (phone) {
     const q = phone.player;
@@ -213,6 +216,11 @@ export function createOcean (env, url, opts = {}) {
     const events = sim.events.splice(0);
     n++;
     if (held.size) forgetHeld(now);
+    /* AWAY (3G): a player whose inputs have stopped for AWAY_MS (the phone
+       sends one at least every 200 ms) is benched whatever the phone is
+       doing: a bot takes the manta, labelled as a bot, and holds it as for
+       a drop. The phone is told, and rejoins with its token once shown. */
+    for (const [ws, phone] of phones) if (phone.player && now - phone.player.lastIn > AWAY_MS) bench(ws, phone);
     for (const [ws, phone] of phones) {
       if (!phone.ready) continue;
       /* Binary (roomcore.js has the layout, a player's own fields
@@ -277,6 +285,7 @@ export function createOcean (env, url, opts = {}) {
       let m; try { m = JSON.parse(raw); } catch (_) { return; }
       if (!m || typeof m !== 'object' || Array.isArray(m)) return;
       if (m.t === 'in') { if (inOk(m, steps)) input(phone, m); return; }
+      if (m.t === 'away') { if (phone.player) bench(ws, phone); return; }
       if (m.t === 'ping') { if (num(m.c, 0, 1e12)) ws.send(JSON.stringify({ t: 'pong', c: m.c })); return; }
       if (m.t === 'view') { if (viewOk(m)) { phone.view = viewOf(m); phone.watch = m.a === undefined ? -1 : m.a; } return; }
       if (m.t !== 'hi' || !hiOk(m)) return;
