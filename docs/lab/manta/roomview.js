@@ -24,7 +24,7 @@
  * and every other train keeps its colour. Everything else is drawn exactly
  * as in watch mode.
  */
-import { createMirror, createWildStore, decodeSnap, wildLook, wildDelayFor, createWildClock } from './roomcore.js';
+import { createMirror, createWildView, decodeSnap, wildLook } from './roomcore.js';
 import { createPlay } from './roomplay.js';
 import { DEF, zoomFor } from './simcore.js';
 
@@ -37,7 +37,7 @@ export function createRoomView ({ room, build, params: start, view, play: playin
      follower sits, so it has to be the one the room placed them with. Filled
      in by init; one object, so the mirror's motion sees the update. */
   const params = Object.assign({}, DEF, start || {});
-  const core = createMirror(params), wildStore = createWildStore();
+  const core = createMirror(params), wildView = createWildView();
   const you = { id: -1, x: 0, z: 0, head: 0, s: 0, followers: [], dead: 0, peak: 0, lastPeak: 0, len: 0, watched: -1 };
   const rivals = [], wild = [], events = [], board = [];
   const drawn = new Map();                 // train id -> what is drawn for it
@@ -46,8 +46,8 @@ export function createRoomView ({ room, build, params: start, view, play: playin
   const input = { want: null, burst: false };   // written by the touch controls in play mode
   const snaps = [], pending = [], gaps = [], offsets = [];
   let ws = null, retry = 0, backoff = 0.5, stopped = false, connected = false, everOpen = false;
-  let rtt = null, delay = 0.1, offset = null, lastArrive = null, lastSnap = null, snapCount = 0, wildLate = 0;
-  const wildClock = createWildClock(); let wildNow = null;
+  let rtt = null, delay = 0.1, offset = null, lastArrive = null, lastSnap = null, snapCount = 0;
+  let wildNow = null;
   let watched = -1, viewDirty = true, sentView = null, viewAt = 0, pingAt = 0;
   let play = null;                         // play mode (roomplay.js), made once `send` exists
 
@@ -142,7 +142,7 @@ export function createRoomView ({ room, build, params: start, view, play: playin
   /* A new connection is a new phone to the room: it resends every path in
      full, so what this page remembers of the old one is thrown away. */
   function resync () {
-    core.trains.clear(); drawn.clear(); wildStore.clear();
+    core.trains.clear(); drawn.clear(); wildView.clear();
     snaps.length = 0; pending.length = 0; gaps.length = 0; offsets.length = 0;
     rivals.length = 0; events.length = 0; board.length = 0; names.clear();
     for (const w of wild) w.alive = false;
@@ -187,7 +187,6 @@ export function createRoomView ({ room, build, params: start, view, play: playin
        one least delayed by the network, so it is the best estimate. */
     offsets.push(at - m.time); if (offsets.length > 40) offsets.shift();
     offset = Math.min(...offsets);
-    wildLate = Math.max(...offsets) - offset;   // the latest recent arrival, for the wild delay (3H)
     if (lastArrive !== null) { gaps.push(at - lastArrive); if (gaps.length > 40) gaps.shift(); }
     lastArrive = at;
     if (gaps.length > 4) {
@@ -200,7 +199,7 @@ export function createRoomView ({ room, build, params: start, view, play: playin
        restart, or placing followers on another run's path, is then visible. */
     for (const q of m.tr) { const c = core.trains.get(q.id); q.run = c ? c.runs : -1; if (c && c.kind) kinds.set(q.id, c.kind); }
     snaps.push({ time: m.time, tr: new Map(m.tr.map(q => [q.id, q])) });
-    wildStore.take(m);
+    wildView.take(m);
     while (snaps.length > 2 && m.time - snaps[1].time > 1) snaps.shift();
     for (const e of m.ev || []) pending.push({ time: m.time, kind: e.k, x: e.x, z: e.z, by: e.by });
     /* The board comes only when it changed: the last one stands until then. */
@@ -304,17 +303,17 @@ export function createRoomView ({ room, build, params: start, view, play: playin
        (roomcore.js). One that is not in the water at T is gone from view.
        Glow and sinking arrive as flags, so they count down here. */
     for (const w of wild) w.seen = false;
-    /* Wild mantas further back than the trains, on their own eased clock
-       (3H, roomcore.js wildDelayFor and createWildClock). */
+    /* Wild mantas where they are now, not in the past with the trains
+       (3I, roomcore.js createWildView). Paused, they hold with the rest. */
     const wdt = paused ? dt : wildNow === null ? 0 : now - wildNow;   // real time: a frame's dt is capped
     wildNow = now;
-    wildStore.at(wildClock(T - Math.max(0, wildDelayFor(wildLate) - delay), wdt), (slot, x, z, h, fl, col, gen) => {
+    wildView.at(now, offset, rtt, wdt, (slot, x, z, h, fl, col, gen) => {
       while (wild.length <= slot) wild.push({ x: 0, z: 0, head: 0, alive: false, loose: false, sinking: 0, glow: 0, wasColour: -1, colour: wild.length, gen: 0 });
       const w = wild[slot];
       w.x = x; w.z = z; w.head = h;
       w.alive = w.seen = true;
       wildLook(w, fl, col, gen, dt, params);
-    });
+    }, paused);
     for (const w of wild) if (!w.seen) w.alive = false;
 
     /* Events once each, at the render delay, so the burst lands where the

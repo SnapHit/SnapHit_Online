@@ -235,7 +235,7 @@ export function createOcean (env, url, opts = {}) {
         if (truth) {
           const q = phone.player, t = q && trainOf(q.id);
           if (q) truth.rw = [t && t.human ? t.human.rewind : 0, Math.round(q.wish * 10) / 10];
-          ws.send(JSON.stringify({ t: 'truth', n, ...truth }));
+          ws.send(JSON.stringify({ t: 'truth', n, w: Date.now(), ...truth }));   // w: the room's wall clock (3I tests)
         }
       } catch (_) { /* gone */ }
     }

@@ -331,7 +331,8 @@ export function createWildClock () {
     return tw;
   };
 }
-export const WILD_KEEP = 1.5;            // seconds of samples kept a manta
+export const WILD_KEEP = 1.5;
+const PROJECT_MAX = 0.6;               // seconds a manta is carried past its last record (3I; 0.3 before)            // seconds of samples kept a manta
 export function createWildStore () {
   const all = new Map();                   // slot -> [{ pts: [[time, x, z, h, flags, colour]], from, to, gen }], oldest first
   let gens = 0;
@@ -372,16 +373,78 @@ export function createWildStore () {
         } else if (!b && i > 0) {
           const o = p[i - 1], dt = a[0] - o[0];
           if (dt > 0 && dt <= 0.5 && Math.abs(a[1] - o[1]) + Math.abs(a[2] - o[2]) < 300) {
-            const g = Math.min(T - a[0], 0.3) / dt;
-            x += (a[1] - o[1]) * g; z += (a[2] - o[2]) * g;
+            const tau = Math.min(T - a[0], PROJECT_MAX), vx = (a[1] - o[1]) / dt, vz = (a[2] - o[2]) / dt;
+            /* Along the manta's own curve (3I): a straight line put turning
+               mantas several units to the side at 300 ms. The turn rate is
+               from its headings over at least 0.1 s (one heading step is
+               1.4 degrees); loose debris keeps the straight line. The
+               velocity is the chord's, so it is turned by half its own span
+               plus half the way ahead. Forward is (-sin h, -cos h). */
+            let w = 0;
+            if (!(a[4] & 1)) {
+              let j = i - 1; while (j > 0 && a[0] - p[j][0] < 0.1) j--;
+              const q = p[j], span = a[0] - q[0];
+              if (span >= 0.1 && span <= 1) w = Math.max(-3, Math.min(3, Math.atan2(Math.sin(a[3] - q[3]), Math.cos(a[3] - q[3])) / span));
+            }
+            const d = w * (dt + tau) / 2, c = Math.cos(d), s = Math.sin(d);
+            x += (vx * c + vz * s) * tau; z += (vz * c - vx * s) * tau;
           }
         }
-        out(slot, x, z, h, a[4], a[5], e.gen);
+        out(slot, x, z, h, a[4], a[5], e.gen, p[p.length - 1][0], p.length, e.from);
         break;
       }
     }
   }
   return { take, at, clear: () => all.clear(), get size () { return all.size; } };
+}
+
+/* WILD MANTAS DRAWN WHERE THEY ARE NOW (3I, design doc 10.6). Not a
+   fraction of a second in the past: at the room's present, each manta
+   projected forward from its last two records by their velocity. The room
+   resends a manta the moment it strays a unit from that same line
+   (WILD_TOL), so the projection is where the room has it, give or take
+   what is still on its way. The room's present is the fastest arrival's
+   clock plus half the shortest recent round trip, on the eased clock of
+   3H, so it never steps. A new record that moves a projection is eased
+   into (EASE_WILD), never jumped to: the drawn manta carries on at its
+   own pace and the difference fades. Page and tests share this. */
+export const EASE_WILD = 0.15;            // seconds: a correction's time constant
+export function createWildView () {
+  const store = createWildStore(), clock = createWildClock(), eased = new Map(), rtts = [];
+  let lastRtt = null, T = null;
+  /* nowS: the page's clock in seconds; offset: its fastest-arrival offset;
+     rtt: the latest round trip in ms (or null); dt: real seconds since the
+     last call; hold: paused, so the time moves only by dt (Step). */
+  function at (nowS, offset, rtt, dt, out, hold = false) {
+    if (Number.isFinite(rtt) && rtt !== lastRtt) { lastRtt = rtt; rtts.push(rtt); if (rtts.length > 10) rtts.shift(); }
+    const target = nowS - offset + (rtts.length ? Math.min(...rtts) / 2000 : 0);
+    T = hold && T !== null ? T + dt : clock(target, dt);
+    const k0 = dt > 0 ? Math.exp(-dt / EASE_WILD) : 1;
+    for (const e of eased.values()) e.seen = false;
+    store.at(T, (slot, x, z, h, fl, col, gen, ver, pts, from) => {
+      /* A manta with one record so far has no pace to carry it on: it is
+         drawn from its second (a snapshot later, as a rule), or once that
+         one record is a quarter second old and standing still is right.
+         Drawn at once, it stood for a few frames and then set off. */
+      if (pts < 2 && T - from < 0.25) return;
+      const key = slot + ':' + gen;
+      let e = eased.get(key);
+      if (!e) { e = { x, z, vx: 0, vz: 0, ox: 0, oz: 0, ver, seen: false }; eased.set(key, e); }
+      else if (ver !== e.ver) {
+        /* A new record: carry on from where it was drawn, at its pace, and
+           let the difference fade. Far out (a resync) it is taken at once. */
+        e.ver = ver; e.ox = e.x + e.vx * dt - x; e.oz = e.z + e.vz * dt - z;
+        if (Math.hypot(e.ox, e.oz) > 40) e.ox = e.oz = 0;
+      } else { e.ox *= k0; e.oz *= k0; }
+      const nx = x + e.ox, nz = z + e.oz;
+      if (dt > 0) { e.vx = (nx - e.x) / dt; e.vz = (nz - e.z) / dt; }
+      e.x = nx; e.z = nz; e.seen = true;
+      out(slot, nx, nz, h, fl, col, gen);
+    });
+    for (const [key, e] of eased) if (!e.seen) eased.delete(key);
+    return T;
+  }
+  return { take: m => store.take(m), at, clear () { store.clear(); eased.clear(); }, get time () { return T; } };
 }
 
 /* How a drawn wild manta looks this frame: loose, sinking and glowing come
