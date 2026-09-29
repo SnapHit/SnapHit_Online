@@ -8,6 +8,7 @@
  * the light memory and the shadow pass are built after this is created.
  */
 import { joinMix, looseMix, sizeFor, leaderSize } from './sim.js';
+import { createLabels, savedName, PALE } from './labels.js';
 
 export function createFollow (ctx) {
   const { mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS, PARKED,
@@ -63,6 +64,30 @@ export function createFollow (ctx) {
     el.innerHTML = rows.slice(0, 10).map((r, i) =>
       (r.mine ? '<b>' : '') + (i + 1) + '. ' + r.name + '  ' + r.len + (r.mine ? '</b>' : '')
     ).join('<br>');
+  }
+
+  /* A label over every leader on screen (3J, labels.js). In a room the
+     page names the players (nameOf) and you (youName); watching, the
+     watched train is labelled as the others are. Timed, for the tests. */
+  const labels = createLabels(), list = [];
+  const perf = window.__labLabels = { ms: 0, frames: 0, total: 0, count: 0, shown: labels.shown };
+  let mineHex = null, mineCss = PALE;
+  function drawLabels () {
+    const t0 = performance.now(), sim = ctx.sim, v = ctx.view, P = sim.params || {};
+    const ppu = v.pxPerUnit, W = v.w * ppu, H = v.h * ppu;
+    const lift = ((P.spacing || 31) + (P.followerR || 10) * (P.trainScale || 1) + 2) * ppu + 3;
+    const mine = mantas.colours && mantas.colours.mine;
+    if (mine && mine.hex !== mineHex) { mineHex = mine.hex; mineCss = '#' + (mine.hex >>> 0).toString(16).padStart(6, '0'); }
+    list.length = 0;
+    const you = sim.you;
+    if (you && !sim.watching && !(you.dead > 0)) list.push({ x: you.x, z: you.z, text: (sim.youName && sim.youName()) || savedName() || 'you', colour: mineCss });
+    for (const t of sim.rivals || []) {
+      if (!t || t.hole || t.dead > 0) continue;
+      list.push({ x: t.x, z: t.z, text: (sim.nameOf && sim.nameOf(t.id)) || 'bot', colour: PALE });
+    }
+    perf.count = labels.draw(list, camera.position, ppu, W, H, lift);
+    const ms = performance.now() - t0;
+    perf.ms = ms; perf.frames++; perf.total += ms;
   }
 
   function followCamera (dt) {
@@ -267,6 +292,7 @@ export function createFollow (ctx) {
     if (el) el.textContent = watching ? 'watching bot ' + you.watched + '   length ' + you.len + '   tap for the next'
                                       : 'length ' + f.length + '   peak ' + peakLength + '   best ' + bestPeak;
     drawBoard(ctx.sim.time);
+    drawLabels();
   const card = document.getElementById('beat');
     if (card) {
       if (dying && !beatShown) {

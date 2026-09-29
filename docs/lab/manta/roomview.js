@@ -346,6 +346,9 @@ export function createRoomView ({ room, build, params: start, view, play: playin
     liveWild: () => wild.filter(w => w.alive),
     ambientWild: () => wild.filter(w => w.alive && !w.loose),
     debrisWild: () => wild.filter(w => w.alive && w.loose),
+    /* Labels (3J): a player's name by train id, and your own. */
+    nameOf: id => names.get(id) || null,
+    youName: () => (play && play.name) || null,
     /* For the browser checks: window.__lab.room. */
     room: {
       get connected () { return connected; }, get rtt () { return rtt; }, get delay () { return delay; },
