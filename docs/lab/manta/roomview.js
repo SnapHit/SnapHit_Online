@@ -24,7 +24,7 @@
  * and every other train keeps its colour. Everything else is drawn exactly
  * as in watch mode.
  */
-import { createMirror, createWildView, decodeSnap, wildLook } from './roomcore.js';
+import { createMirror, createWildView, createPickups, decodeSnap, wildLook } from './roomcore.js';
 import { createPlay } from './roomplay.js';
 import { DEF, zoomFor } from './simcore.js';
 
@@ -48,6 +48,10 @@ export function createRoomView ({ room, build, params: start, view, play: playin
   let ws = null, retry = 0, backoff = 0.5, stopped = false, connected = false, everOpen = false;
   let rtt = null, delay = 0.1, offset = null, lastArrive = null, lastSnap = null, snapCount = 0;
   let wildNow = null;
+  /* Predicted pickups (3I): play mode only. The limit is your round trip
+     (the longest of the last five) plus 100 ms. */
+  const pickups = playing ? createPickups() : null, rtts5 = [];
+  const pickupLimit = () => (rtts5.length ? Math.max(...rtts5) : 300) + 100;
   let watched = -1, viewDirty = true, sentView = null, viewAt = 0, pingAt = 0;
   let play = null;                         // play mode (roomplay.js), made once `send` exists
 
@@ -154,12 +158,12 @@ export function createRoomView ({ room, build, params: start, view, play: playin
     /* A room with ten players already: watch it instead of playing. */
     if (m.t === 'full') { if (!play) return; play.stop(); play = null;
       mirror.watching = true; watched = -1; you.watched = -1; you.followers.length = 0; you.dead = 0; showSignal(); return; }
-    if (m.t === 'init') { Object.assign(params, m.params || {}); resync(); setNames(m.names);
+    if (m.t === 'init') { Object.assign(params, m.params || {}); resync(); setNames(m.names); if (pickups) pickups.reset();
       if (play) { play.onInit(m); if (play.id >= 0) watched = play.id; }
       /* Every bot's kind, once on joining, so the board says timid, greedy or
          bully for bots that have never been near you (3D). */
       for (const [id, k] of m.kinds || []) kinds.set(id, k); connected = true; backoff = 0.5; viewDirty = true; showSignal(); return; }
-    if (m.t === 'pong') { rtt = performance.now() - m.c; showSignal(); return; }
+    if (m.t === 'pong') { rtt = performance.now() - m.c; rtts5.push(rtt); if (rtts5.length > 5) rtts5.shift(); showSignal(); return; }
     if (m.t === 'names') { setNames(m.names); return; }
     /* The room benched this player (no inputs for 2 s, or the page said it
        was hidden): rejoin at once if the page is showing, with the token,
@@ -183,6 +187,7 @@ export function createRoomView ({ room, build, params: start, view, play: playin
     /* After the mirror took this snapshot's paths: the prediction lays its
        followers along this train's path, up to the true leader. */
     if (play) play.onSnap(m);
+    if (play && pickups && m.me) { if (m.me.dead) pickups.reset(); else pickups.confirm(m.me.len || 0, wildView.ended, performance.now(), pickupLimit()); }
     /* The room's clock against this one: the fastest recent arrival is the
        one least delayed by the network, so it is the best estimate. */
     offsets.push(at - m.time); if (offsets.length > 40) offsets.shift();
@@ -307,7 +312,12 @@ export function createRoomView ({ room, build, params: start, view, play: playin
        (3I, roomcore.js createWildView). Paused, they hold with the rest. */
     const wdt = paused ? dt : wildNow === null ? 0 : now - wildNow;   // real time: a frame's dt is capped
     wildNow = now;
+    /* Pickups are judged on what you see: your leader as drawn against
+       each wild manta as drawn. Loose debris is left to the room. */
+    const wl = pickups && play && play.live && !paused ? [] : null;
     wildView.at(now, offset, rtt, wdt, (slot, x, z, h, fl, col, gen) => {
+      if (pickups && pickups.hides(slot, gen)) return;
+      if (wl && !(fl & 1)) wl.push([slot, gen, x, z]);
       while (wild.length <= slot) wild.push({ x: 0, z: 0, head: 0, alive: false, loose: false, sinking: 0, glow: 0, wasColour: -1, colour: wild.length, gen: 0 });
       const w = wild[slot];
       w.x = x; w.z = z; w.head = h;
@@ -315,6 +325,7 @@ export function createRoomView ({ room, build, params: start, view, play: playin
       wildLook(w, fl, col, gen, dt, params);
     }, paused);
     for (const w of wild) if (!w.seen) w.alive = false;
+    if (wl) { const t = performance.now(); pickups.touch(you, wl, params.recruitR, t); pickups.tidy(t); play.setExtra(pickups.held, pickups.leaving(t)); }
 
     /* Events once each, at the render delay, so the burst lands where the
        drawn trains are. Stale ones (a hidden tab) are dropped, not replayed. */

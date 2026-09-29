@@ -229,6 +229,7 @@ export function createPlay ({ room, params, core, you, input, send, rtt, view, n
     const len = m.len || 0;
     while (pred.followers.length < len) pred.followers.push({ x: m.x, z: m.z, head: m.h });
     pred.followers.length = len;
+    baseLen = len;
 
     /* The steps since, each with the input this phone gave it: the same
        inputs the room applies at the same steps, whenever they came in time. */
@@ -289,8 +290,20 @@ export function createPlay ({ room, params, core, you, input, send, rtt, view, n
        frame: 40% late in a headless browser at a few frames a second. */
     maybeSend(t, connected, Math.min(dt, 0.05) * 1000, pk + 1);
     if (!live) return;
-    place();
     off.age += dt;
+    layout();
+    shown = true;
+  }
+
+  /* Your train as drawn: the room's followers, then any pickups this phone
+     predicted (3I), then any refused ones easing back into the follower
+     ahead. Also run straight after a pickup, so it shows the same frame. */
+  let baseLen = 0, extra = 0, leave = [];
+  function layout () {
+    const want = baseLen + extra + leave.length;
+    while (pred.followers.length < want) { const l = pred.followers[pred.followers.length - 1] || pred; pred.followers.push({ x: l.x, z: l.z, head: l.head }); }
+    pred.followers.length = want;
+    place();
     const k = Math.max(0, 1 - off.age / EASE);
     you.x = pred.x + off.x * k; you.z = pred.z + off.z * k; you.head = wrap(pred.head + off.h * k);
     you.s = pred.s; you.bursting = pred.bursting; you.dead = 0;
@@ -302,16 +315,24 @@ export function createPlay ({ room, params, core, you, input, send, rtt, view, n
          last one it did, or with the leader, so the train moves as one. */
       const p = pred.followers[i], o = i < off.f.length ? off.f[i] : off.f.length ? off.f[off.f.length - 1] : { x: off.x, z: off.z };
       f[i].x = o ? p.x + o.x * k : p.x; f[i].z = o ? p.z + o.z * k : p.z; f[i].head = p.head;
+      f[i].unconfirmed = i >= baseLen && i < baseLen + extra;
     }
-    you.len = n;
-    shown = true;
+    for (let j = 0; j < leave.length; j++) {
+      const i = n - leave.length + j, a = f[i], b = i > 0 ? f[i - 1] : you, g = leave[j];
+      a.x += (b.x - a.x) * g; a.z += (b.z - a.z) * g; a.unconfirmed = true;
+    }
+    you.len = baseLen + extra;
   }
+  /* Newest refusal first, right behind the held ones, the older (further
+     eased) behind it: then a new refusal never reorders the tail, and each
+     one only ever slides into the one ahead. */
+  function setExtra (n, fracs) { extra = n; leave = fracs.slice().sort((a, b) => a - b); if (live && shown) layout(); }
 
   /* If the room is full the page falls back to watching: no inputs sent. */
   function stop () { live = false; shown = false; me = null; myId = -1; }
 
   return {
-    hello, onInit, onSnap, frame, stop,
+    hello, onInit, onSnap, frame, stop, setExtra,
     get id () { return myId; }, get name () { return name; }, get me () { return me; },
     get corrections () { return corrections; }, get seq () { return seq; }, get ack () { return ack; },
     /* The clock, for the panel and the tests: steps ahead of the room, the

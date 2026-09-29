@@ -83,6 +83,7 @@ export function createOcean (env, url, opts = {}) {
   /* The crossing train's length, 20 unless a test asks (?len=, 2 to 40). */
   const crossLen = Math.round(clamp(url.searchParams.get('len') || 20, 2, 40));
   const botCuts = staged && url.searchParams.get('xb') === '1';
+  const race = staged && url.searchParams.get('xb') === '2';
   let sim = null, build = null, seed = 0;
   let timer = null, last = 0, owed = 0, n = 0, steps = 0;
   const ready = loadDefaults(env, url).then(d => {
@@ -211,6 +212,7 @@ export function createOcean (env, url, opts = {}) {
     while (owed >= STEP && k < 12) {
       applyInputs(steps + 1);
       if (staged && (steps + 1) % CYCLE === 0) putBack();
+      if (race && (steps + 1) % CYCLE === 55) cluster();
       sim.step(); owed -= STEP; k++; steps++;
     }
     if (owed > STEP * 12) owed = 0;               // a stall is not caught up
@@ -247,6 +249,13 @@ export function createOcean (env, url, opts = {}) {
     for (const t of sim.rivals) if (t.id > 2) { t.dead = 1e9; t.followers.length = 0; }
     putBack();
   }
+  function cluster () {
+    let n = 0;
+    for (const m of sim.wild) {
+      if (!m || !m.alive || m.loose || n >= 16) continue;
+      m.x = ((n % 4) - 1.5) * 12; m.z = (Math.floor(n / 4) - 1.5) * 12; n++;
+    }
+  }
   function putBack () {
     const lay = (t, x, z, head, count) => {
       if (!t) return;
@@ -262,6 +271,16 @@ export function createOcean (env, url, opts = {}) {
       for (let d = 40 * sp; d >= 0; d -= sp / 4) t.trail.push({ x: x + Math.sin(head) * d, z: z + Math.cos(head) * d, h: head, s: t.s - d });
     };
     const seated = trainOf(1), cross = trainOf(2);
+    if (race) {
+      /* ?xb=2 (3I, tests only): the player and bot 2 swim head on, 50
+         apart, through a cluster of 16 wild mantas laid at the middle as
+         they close in (cluster(), 0.9 s after this); the bot starts 30
+         nearer, so some the player's phone reaches for are the bot's. */
+      lay(seated, -25, 260, 0, 12);
+      lay(cross, 25, -230, Math.PI, 12);
+      if (cross) cross.human = { want: Math.PI, burst: false, rewind: 0 };
+      return;
+    }
     if (botCuts) {
       /* ?xb=1 (3H): the other way round. The player's train crosses and
          bot 2 bursts into its body, so the cuts near the player are a bot's. */

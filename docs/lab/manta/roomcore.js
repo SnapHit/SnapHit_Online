@@ -395,7 +395,9 @@ export function createWildStore () {
       }
     }
   }
-  return { take, at, clear: () => all.clear(), get size () { return all.size; } };
+  /* Has this occupant of the slot left the water (or been forgotten)? */
+  function ended (slot, gen) { const list = all.get(slot); if (!list) return true; const e = list.find(q => q.gen === gen); return !e || e.to !== Infinity; }
+  return { take, at, ended, clear: () => all.clear(), get size () { return all.size; } };
 }
 
 /* WILD MANTAS DRAWN WHERE THEY ARE NOW (3I, design doc 10.6). Not a
@@ -439,12 +441,55 @@ export function createWildView () {
       const nx = x + e.ox, nz = z + e.oz;
       if (dt > 0) { e.vx = (nx - e.x) / dt; e.vz = (nz - e.z) / dt; }
       e.x = nx; e.z = nz; e.seen = true;
-      out(slot, nx, nz, h, fl, col, gen);
+      out(slot, nx, nz, h, fl, col, gen, e.vx, e.vz);
     });
     for (const [key, e] of eased) if (!e.seen) eased.delete(key);
     return T;
   }
-  return { take: m => store.take(m), at, clear () { store.clear(); eased.clear(); }, get time () { return T; } };
+  return { take: m => store.take(m), at, ended: store.ended, clear () { store.clear(); eased.clear(); }, get time () { return T; } };
+}
+
+/* PREDICTED PICKUPS (3I, design doc 10.6). When your leader as drawn swims
+   within recruit radius of a wild manta as drawn, the phone shows it in
+   your train at once, unconfirmed (held). The room's snapshot that takes
+   the manta out of the water and makes your train longer confirms it, and
+   nothing visible changes. A manta that leaves the water without your
+   train growing (someone else took it), or is not confirmed within your
+   round trip plus 100 ms, is refused: the tail eases back into the
+   follower ahead over PICKUP_EASE, and the wild manta is drawn again
+   where it swims. A cut or crash refuses whatever was held. */
+export const PICKUP_EASE = 0.15;
+export function createPickups () {
+  const pend = [];                           // { slot, gen, t, state: 1 held | 2 leaving, t1 }
+  let lastLen = null, refused = 0, confirmed = 0;
+  const find = (slot, gen) => pend.find(p => p.slot === slot && p.gen === gen);
+  const refuse = (p, nowMs) => { p.state = 2; p.t1 = nowMs; refused++; };
+  return {
+    get held () { let n = 0; for (const p of pend) if (p.state === 1) n++; return n; },
+    /* 0..1 per leaving pickup, how far back into the train it has eased */
+    leaving (nowMs) { const out = []; for (const p of pend) if (p.state === 2) out.push(Math.min(1, (nowMs - p.t1) / (PICKUP_EASE * 1000))); return out; },
+    hides: (slot, gen) => !!find(slot, gen),
+    get refused () { return refused; }, get confirmed () { return confirmed; }, get list () { return pend; },
+    /* you: the drawn leader; wild: [[slot, gen, x, z]] as drawn; R: recruit radius */
+    touch (you, wild, R, nowMs) {
+      let n = 0;
+      if (you.dead > 0) return 0;
+      for (const w of wild) if (!find(w[0], w[1]) && Math.hypot(w[2] - you.x, w[3] - you.z) <= R) { pend.push({ slot: w[0], gen: w[1], t: nowMs, state: 1 }); n++; }
+      return n;
+    },
+    /* After each snapshot: len, your train's length in it; ended(slot, gen) */
+    confirm (len, ended, nowMs, limitMs) {
+      let gain = lastLen === null ? 0 : len - lastLen;
+      lastLen = len;
+      if (gain < 0) { for (const p of pend) if (p.state === 1) refuse(p, nowMs); gain = 0; }
+      for (const p of pend) if (p.state === 1 && ended(p.slot, p.gen)) { if (gain > 0) { gain--; p.state = 0; confirmed++; } else refuse(p, nowMs); }
+      for (const p of pend) if (p.state === 1 && nowMs - p.t > limitMs) refuse(p, nowMs);
+      for (let i = pend.length - 1; i >= 0; i--) if (pend[i].state === 0) pend.splice(i, 1);
+    },
+    /* Leaving pickups that have eased all the way back are forgotten. */
+    tidy (nowMs) { for (let i = pend.length - 1; i >= 0; i--) if (pend[i].state === 2 && nowMs - pend[i].t1 >= PICKUP_EASE * 1000) pend.splice(i, 1); },
+    reset () { pend.length = 0; lastLen = null; },
+  };
 }
 
 /* How a drawn wild manta looks this frame: loose, sinking and glowing come
