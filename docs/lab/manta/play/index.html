@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="robots" content="noindex, nofollow">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Manta trains</title>
 <!-- An empty data URL, so the browser never asks for /favicon.ico. A data:
      URL is not a request; a missing favicon is a 404 in the log. -->
@@ -265,6 +265,30 @@
     color: #cfe6f5; text-shadow: 0 1px 3px #000a, 0 0 10px #0009;
   }
   body:not(.lab) #board { top: calc(env(safe-area-inset-top, 0px) + 96px); }
+  /* The signal mark and your name (with its pencil) sit below the play bar,
+     clear of a private room's link box. */
+  body:not(.lab) #signal { top: calc(env(safe-area-inset-top, 0px) + 96px) !important; }
+  /* THE NAME PANEL (3J): the first visit, over the live ocean. Centred in
+     what the keyboard leaves (interactive-widget=resizes-content). */
+  #namePanel {
+    position: fixed; z-index: 6; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: min(340px, calc(100vw - 32px)); max-height: calc(100dvh - 16px); overflow: auto;
+    display: flex; flex-direction: column; gap: 10px; padding: 16px;
+    font: 500 15px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #dcecf6;
+    background: rgba(4, 9, 18, .82); border: 1px solid rgba(120, 190, 210, .35); border-radius: 16px;
+  }
+  #namePanel[hidden] { display: none; }
+  #namePanel label { font-weight: 600; }
+  #nameBox { font: 17px system-ui, sans-serif; color: #eaf4ff; background: rgba(0, 0, 0, .35);
+    border: 1px solid rgba(120, 190, 210, .5); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+  #playBtn { font: 700 20px/1 system-ui, sans-serif; color: #04121a; background: #7fe3d0; border: 0;
+    border-radius: 999px; min-height: 52px; cursor: pointer; }
+  @media (max-height: 260px) {
+    #namePanel { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 8px 12px; gap: 8px; }
+    #namePanel label { flex-basis: 100%; font-size: 13px; }
+    #nameBox { flex: 1 1 150px; padding: 6px 10px; }
+    #playBtn { min-height: 40px; padding: 0 22px; font-size: 17px; }
+  }
 </style>
 </head>
 <body>
@@ -296,6 +320,11 @@
     from anyone else's servers. The site runs on Cloudflare, which keeps its own short-lived
     connection logs.</p>
   </div>
+</div>
+<div id="namePanel" hidden>
+  <label for="nameBox">Your name</label>
+  <input id="nameBox" type="text" maxlength="64" autocomplete="nickname" enterkeyhint="go" spellcheck="false">
+  <button id="playBtn" type="button">Play</button>
 </div>
 <div id="stats" aria-live="off">runs 0 · best peak 0 · cuts landed 0</div>
 
@@ -480,11 +509,18 @@
   var q = new URLSearchParams(location.search);
   var code = /^[2-9a-hjkmnp-z]{8}$/.test(q.get('room') || '') ? q.get('room') : null;
   var solo = q.get('solo') === '1';
+  /* A name: saved on this phone, or (storage blocked) carried in the
+     address for this one load and taken straight back out of it. */
+  var saved = null; try { saved = localStorage.getItem('manta:name'); } catch (e) { saved = null; }
+  var carried = q.get('n');
+  if (carried) { window.MANTA_NAME = carried; var u = new URL(location.href); u.searchParams.delete('n'); history.replaceState(null, '', u.href); }
+  /* FIRST VISIT (3J): no name yet, so watch lobby under the name panel. */
+  var naming = !solo && !saved && !carried;
   var p = new URLSearchParams(location.search);
-  p.delete('solo'); p.delete('note');
-  if (solo) p.delete('room'); else { p.set('room', code || 'lobby'); p.set('play', '1'); }
+  p.delete('solo'); p.delete('note'); p.delete('n');
+  if (solo) p.delete('room'); else { p.set('room', code || 'lobby'); if (!naming) p.set('play', '1'); }
   window.MANTA_QUERY = p.toString();
-  window.__play = { room: solo ? null : (code || 'lobby'), code: solo ? null : code, note: q.get('note') || '' };
+  window.__play = { room: solo ? null : (code || 'lobby'), code: solo ? null : code, note: q.get('note') || '', naming: naming };
 })();
 </script>
 <script type="module" src="../main.js"></script>
@@ -503,6 +539,30 @@
   function goSolo (why) { if (P.room) go(why ? { solo: '1', note: why } : { solo: '1' }); }
 
   if (FEEDBACK_URL) { $('feedback').href = FEEDBACK_URL; $('feedback').hidden = false; }
+
+  /* THE NAME PANEL (3J). The placeholder is a name made here; Play (or
+     Enter) takes what was typed, cleaned as the room cleans it, or the
+     placeholder, keeps it on this phone and swims at once. */
+  if (P.naming) {
+    var A = ['amber', 'blue', 'bright', 'coral', 'deep', 'misty', 'quiet', 'silver', 'sunny', 'swift', 'lucky', 'salty'];
+    var B = ['comet', 'drift', 'finch', 'fox', 'heron', 'kelp', 'lantern', 'moth', 'pebble', 'tide', 'wave', 'reef'];
+    var r = new Uint32Array(2); try { crypto.getRandomValues(r); } catch (e) { r[0] = Date.now(); r[1] = r[0] >> 3; }
+    var box = $('nameBox'), start = false;
+    box.placeholder = A[r[0] % A.length] + ' ' + B[r[1] % B.length];
+    $('namePanel').hidden = false;
+    var startPlay = function () {
+      if (start) return; start = true;
+      import('../roomcore.js').then(function (m) {
+        var n = m.cleanName(box.value) || box.placeholder, kept = false;
+        try { localStorage.setItem('manta:name', n); kept = localStorage.getItem('manta:name') === n; } catch (e) { kept = false; }
+        var params = P.code ? { room: P.code } : {};
+        if (!kept) params.n = n;
+        go(params);
+      }).catch(function () { start = false; });
+    };
+    $('playBtn').onclick = startPlay;
+    box.addEventListener('keydown', function (e) { if (e.key === 'Enter') startPlay(); });
+  }
   if (NOTES[P.note]) say(NOTES[P.note]);
   $('solo').hidden = !P.room; $('online').hidden = !!P.room;
   $('solo').onclick = function () { goSolo(''); };
@@ -545,7 +605,7 @@
       var R = window.__lab && window.__lab.room;
       if (!R) return;
       if (t0 === null) t0 = performance.now();
-      if (R.connected && (R.me || !R.play)) { clearInterval(wait); return; }   // playing, or watching a full room
+      if (R.connected && (R.me || !R.play)) { clearInterval(wait); return; }   // playing, or watching (a full room, or the name panel)
       if (performance.now() - t0 > 5000) { clearInterval(wait); goSolo('slow'); }
     }, 100);
   }

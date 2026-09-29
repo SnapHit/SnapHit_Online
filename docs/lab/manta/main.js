@@ -37,6 +37,7 @@ import { createDrawer } from './drawer.js';
 import { createStamper } from './stamp.js';
 import { rollSummary, wildSplit } from './roll.js';
 import { createFollow } from './follow.js';
+import { savedName } from './labels.js';
 
 /* The feedback page (/lab/manta/play/, 3G) picks its room before this loads
    and says so in window.MANTA_QUERY; the lab itself never sets it, so here
@@ -129,7 +130,7 @@ if (shadows) shadows.attach(mantas.shadowMesh);
 /* The room modules load only in watch mode (3D): without ?room nothing new
    is fetched, run or connected, and the solo lab is exactly as it was. */
 const createRoomView = ROOM ? (await import('./roomview.js')).createRoomView : null;
-const sim = SPIKE ? null : ROOM ? createRoomView({ room: ROOM, build: panel.BUILD, view, play: PLAY }) : createSim({ seed: mantas.seed, params: {
+const sim = SPIKE ? null : ROOM ? createRoomView({ room: ROOM, build: panel.BUILD, view, play: PLAY, name: () => window.MANTA_NAME || savedName() }) : createSim({ seed: mantas.seed, params: {
   cruise: P.cruise, burst: P.burstSpeed, turnCruise: P.turnCruise, turnBurst: P.turnBurst,
   recruitR: P.recruitR, spacing: P.spacing, wildCount: P.wildCount, regrow: P.regrow,
   wildSize: P.wildSize, bloomPull: P.bloomPull, trainScale: P.trainScale,

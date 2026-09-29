@@ -61,9 +61,15 @@ export function createFollow (ctx) {
       });
     }
     rows.sort((a, b) => b.len - a.len || (a.mine ? -1 : b.mine ? 1 : 0));
-    el.innerHTML = rows.slice(0, 10).map((r, i) =>
-      (r.mine ? '<b>' : '') + (i + 1) + '. ' + r.name + '  ' + r.len + (r.mine ? '</b>' : '')
-    ).join('<br>');
+    /* Names are typed by strangers (3J): every row is plain text, built as
+       elements, never as markup. */
+    el.textContent = '';
+    rows.slice(0, 10).forEach((r, i) => {
+      if (i) el.appendChild(document.createElement('br'));
+      const line = document.createElement(r.mine ? 'b' : 'span');
+      line.textContent = (i + 1) + '. ' + r.name + '  ' + r.len;
+      el.appendChild(line);
+    });
   }
 
   /* A label over every leader on screen (3J, labels.js). In a room the

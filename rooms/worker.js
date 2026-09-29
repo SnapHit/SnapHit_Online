@@ -34,6 +34,7 @@ const CODE_TTL_MS = 24 * 3600e3;  // a code with no players for this long is gon
 const LIVE_FOR_MS = 150000;       // a live room reports every minute; silence ends it
 const MSG_MAX = 64;               // bytes in one incoming message
 const MSG_RATE = 30;              // incoming messages a second; over it, closed
+const NAME_MSG_MAX = 256;         // bytes, for a typed name's own message only (3J)
 const newCode = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), b => ALPHABET[b % ALPHABET.length]).join('');
 const SITE = 'https://snap-hit.online';
 const LOCAL = /^(localhost|127\.0\.0\.1)$/;
@@ -80,8 +81,9 @@ export class Room extends DurableObject {
     /* Every socket, echo and ocean alike: at most 64 bytes a message and
        30 messages a second. Too big or too many and the socket is closed. */
     const now = Date.now(), ocean = this.ocean && this.ctx.getTags(ws).includes('ocean');
-    const bytes = typeof message === 'string' ? (message.length > MSG_MAX ? MSG_MAX + 1 : new TextEncoder().encode(message).length) : message.byteLength;
-    if (bytes > MSG_MAX) {
+    const limit = ocean && typeof message === 'string' && message.startsWith('{"t":"nm"') ? NAME_MSG_MAX : MSG_MAX;
+    const bytes = typeof message === 'string' ? (message.length > limit ? limit + 1 : new TextEncoder().encode(message).length) : message.byteLength;
+    if (bytes > limit) {
       /* A phone on an older build says a longer hello: tell it to reload. */
       if (ocean && this.ocean.build && typeof message === 'string' && message.length < 1024 && message.includes('"hello"')) {
         try { ws.send(JSON.stringify({ t: 'reload', build: this.ocean.build })); } catch (_) { /* gone */ }

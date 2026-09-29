@@ -24,7 +24,8 @@
  * and every other train keeps its colour. Everything else is drawn exactly
  * as in watch mode.
  */
-import { createMirror, createWildView, createPickups, decodeSnap, wildLook } from './roomcore.js';
+import { createMirror, createWildView, createPickups, decodeSnap, wildLook, cleanName } from './roomcore.js';
+import { NAME_KEY } from './labels.js';
 import { createPlay } from './roomplay.js';
 import { DEF, zoomFor } from './simcore.js';
 
@@ -32,7 +33,7 @@ const lerp = (a, b, f) => a + (b - a) * f;
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 const JUMP = 300;                          // further than this in one snapshot is a teleport, not a swim
 
-export function createRoomView ({ room, build, params: start, view, play: playing = false }) {
+export function createRoomView ({ room, build, params: start, view, name: nameNow = () => null, play: playing = false }) {
   /* The room's numbers, never the drawer's: spacing decides where every
      follower sits, so it has to be the one the room placed them with. Filled
      in by init; one object, so the mirror's motion sees the update. */
@@ -56,19 +57,72 @@ export function createRoomView ({ room, build, params: start, view, play: playin
   let play = null;                         // play mode (roomplay.js), made once `send` exists
 
   /* ---------------------------------------------------------- the signal */
-  const mark = document.createElement('div');
-  mark.style.cssText = 'position:fixed;z-index:3;pointer-events:none;' +
+  const mark = document.createElement('div'), sig = document.createElement('span');
+  mark.id = 'signal';
+  mark.style.cssText = 'position:fixed;z-index:3;pointer-events:none;display:flex;align-items:center;gap:6px;' +
     'top:calc(env(safe-area-inset-top,0px) + 50px);left:calc(env(safe-area-inset-left,0px) + 14px);' +
     'font:600 11px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;text-shadow:0 1px 3px #000a';
+  sig.style.whiteSpace = 'pre';
+  mark.appendChild(sig);
   document.body.appendChild(mark);
+  /* Your name as the room has it (a typed one once the room took it). */
+  const myName = () => play ? (names.get(play.id) || play.name || null) : null;
   function showSignal () {
+    if (pencil) pencil.hidden = !(connected && play && play.id >= 0);
     if (!connected) {
       mark.style.color = '#ff8a80';
-      mark.textContent = '● ' + (navigator.onLine === false ? 'offline' : everOpen ? 'reconnecting…' : 'connecting…');
+      sig.textContent = '● ' + (navigator.onLine === false ? 'offline' : everOpen ? 'reconnecting…' : 'connecting…');
       return;
     }
     mark.style.color = rtt === null ? '#8fa6bb' : rtt < 150 ? '#7fe3d0' : rtt < 400 ? '#ffc46b' : '#ff8a80';
-    mark.textContent = '● ' + (rtt === null ? '…' : Math.round(rtt) + ' ms') + (play && play.name ? '  ' + play.name : '');
+    sig.textContent = '● ' + (rtt === null ? '…' : Math.round(rtt) + ' ms') + (myName() ? '  ' + myName() : '');
+  }
+
+  /* THE PENCIL (3J): by your name in play, it opens a text field with Done
+     and Cancel. The name is cleaned here as the room cleans it, sent in its
+     own message, kept on this phone, and changed at most once every 5 s. */
+  let pencil = null, editor = null, namedAt = -1e9;
+  const btn = 'font:600 13px/1 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#dff6ee;min-height:30px;padding:0 12px;' +
+    'background:rgba(4,9,18,.75);border:1px solid rgba(120,190,210,.4);border-radius:999px;cursor:pointer';
+  function sendName (n) { if (n) send({ t: 'nm', n }); }
+  function setName (raw) {
+    const n = cleanName(raw);
+    if (!n) return 'empty';
+    if (performance.now() - namedAt < 5000) return 'soon';
+    namedAt = performance.now();
+    try { localStorage.setItem(NAME_KEY, n); } catch (_) { /* this visit only */ }
+    typedName = n; sendName(n);
+    return 'ok';
+  }
+  let typedName = null;
+  if (playing) {
+    pencil = document.createElement('button');
+    pencil.type = 'button'; pencil.textContent = '\u270e'; pencil.hidden = true;
+    pencil.setAttribute('aria-label', 'Change your name');
+    pencil.style.cssText = btn + ';pointer-events:auto;min-height:26px;padding:0 8px;font-size:14px';
+    mark.appendChild(pencil);
+    pencil.addEventListener('click', () => {
+      if (editor) return;
+      editor = document.createElement('div');
+      editor.style.cssText = 'position:fixed;z-index:7;pointer-events:auto;display:flex;flex-wrap:wrap;gap:6px;align-items:center;' +
+        'top:calc(env(safe-area-inset-top,0px) + 74px);left:calc(env(safe-area-inset-left,0px) + 10px);max-width:calc(100vw - 20px);' +
+        'padding:8px;background:rgba(4,9,18,.9);border:1px solid rgba(120,190,210,.35);border-radius:12px';
+      const box = document.createElement('input'), done = document.createElement('button'), cancel = document.createElement('button'), note = document.createElement('div');
+      box.type = 'text'; box.maxLength = 64; box.value = myName() || ''; box.setAttribute('aria-label', 'Your name'); box.setAttribute('enterkeyhint', 'done');
+      box.style.cssText = 'flex:1 1 140px;min-width:0;font:16px system-ui,sans-serif;color:#eaf4ff;background:rgba(0,0,0,.35);border:1px solid rgba(120,190,210,.45);border-radius:8px;padding:6px 8px';
+      done.type = 'button'; done.textContent = 'Done'; done.style.cssText = btn;
+      cancel.type = 'button'; cancel.textContent = 'Cancel'; cancel.style.cssText = btn;
+      note.style.cssText = 'flex-basis:100%;font:12px system-ui,sans-serif;color:#ffe2a8'; note.hidden = true;
+      const close = () => { if (editor) { editor.remove(); editor = null; } };
+      const ok = () => { const r = setName(box.value);
+        if (r === 'soon') { note.textContent = 'One change every 5 seconds: try again in a moment.'; note.hidden = false; return; }
+        close(); showSignal(); };
+      done.addEventListener('click', ok); cancel.addEventListener('click', close);
+      box.addEventListener('keydown', e => { if (e.key === 'Enter') ok(); });
+      editor.append(box, done, cancel, note);
+      document.body.appendChild(editor);
+      box.focus(); box.select();
+    });
   }
   showSignal();
 
@@ -126,7 +180,7 @@ export function createRoomView ({ room, build, params: start, view, play: playin
     catch (e) { later(); return; }
     ws = s;
     s.binaryType = 'arraybuffer';
-    s.onopen = () => { everOpen = true; send(hello()); send(viewMsg(viewNow())); };
+    s.onopen = () => { everOpen = true; send(hello()); send(viewMsg(viewNow())); if (play) sendName(typedName || cleanName(nameNow() || '')); };
     s.onmessage = e => {
       let m; try { m = typeof e.data === 'string' ? JSON.parse(e.data) : decodeSnap(e.data); } catch (_) { return; }
       if (m && ws === s) receive(m);
@@ -348,7 +402,9 @@ export function createRoomView ({ room, build, params: start, view, play: playin
     debrisWild: () => wild.filter(w => w.alive && w.loose),
     /* Labels (3J): a player's name by train id, and your own. */
     nameOf: id => names.get(id) || null,
-    youName: () => (play && play.name) || null,
+    youName: () => myName(),
+    /* For the tests: change your name as the pencil does. */
+    setName,
     /* For the browser checks: window.__lab.room. */
     room: {
       get connected () { return connected; }, get rtt () { return rtt; }, get delay () { return delay; },

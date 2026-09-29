@@ -27,7 +27,7 @@
  * a test can make a cut attempt every couple of seconds.
  */
 import { createSim, STEP } from '../docs/lab/manta/sim.js';
-import { snapFor, SNAP_HZ } from '../docs/lab/manta/roomcore.js';
+import { snapFor, SNAP_HZ, cleanName } from '../docs/lab/manta/roomcore.js';
 
 /* The committed defaults and the build stamp, from the deployed files. */
 async function loadDefaults (env, url) {
@@ -128,7 +128,7 @@ export function createOcean (env, url, opts = {}) {
          tab, gets a manta and a token of its own and never takes the
          first one's train. */
       const h = held.get(tok);
-      if (h && trainOf(h.id) && !driven.has(h.id)) { id = h.id; name = h.name; token = tok; held.delete(tok); }
+      if (h && trainOf(h.id) && !driven.has(h.id)) { id = h.id; name = phone.wantName || h.name; token = tok; held.delete(tok); }
     }
     if (id < 0) {
       if (driven.size >= MAX_PLAYERS) return null;
@@ -140,7 +140,7 @@ export function createOcean (env, url, opts = {}) {
         if (!soonest) return null;
         held.delete(soonest[0]); t = trainOf(soonest[1].id);
       }
-      id = t.id; name = newName(); token = hex(6);
+      id = t.id; name = phone.wantName || newName(); token = hex(6);
     }
     const t = trainOf(id);
     t.human = { want: null, burst: false, rewind: 0 };
@@ -189,6 +189,18 @@ export function createOcean (env, url, opts = {}) {
         t.human.want = e.want; t.human.burst = e.burst; t.human.rewind = e.rewind; q.ack = e.seq;
       }
     }
+  }
+  /* A TYPED NAME (3J): cleaned as the phone cleans it (roomcore.js
+     cleanName), at most one change every 5 s, kept with the reconnect token
+     (held keeps the player's name), and on every board and label with the
+     next snapshot (renameAll). Empty keeps the generated name. */
+  function nameIt (phone, raw) {
+    const now = Date.now();
+    if (phone.nameAt && now - phone.nameAt < 5000) return;
+    const n = cleanName(raw);
+    if (!n) return;
+    phone.nameAt = now; phone.wantName = n;
+    if (phone.player) { phone.player.name = n; renameAll(); }
   }
   function bench (ws, phone) {
     unseat(phone);
@@ -314,6 +326,7 @@ export function createOcean (env, url, opts = {}) {
       if (!m || typeof m !== 'object' || Array.isArray(m)) return;
       if (m.t === 'in') { if (inOk(m, steps)) input(phone, m); return; }
       if (m.t === 'away') { if (phone.player) bench(ws, phone); return; }
+      if (m.t === 'nm') { if (typeof m.n === 'string') nameIt(phone, m.n); return; }
       if (m.t === 'ping') { if (num(m.c, 0, 1e12)) ws.send(JSON.stringify({ t: 'pong', c: m.c })); return; }
       if (m.t === 'view') { if (viewOk(m)) { phone.view = viewOf(m); phone.watch = m.a === undefined ? -1 : m.a; } return; }
       if (m.t !== 'hi' || !hiOk(m)) return;
