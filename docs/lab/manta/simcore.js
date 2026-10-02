@@ -55,17 +55,48 @@ export const DEF = {
   followerSize: 28,
   leaderSize: 40,
   blooms: 4,
-  zoomFar: 0.55,        // at length 300
-  zoomLen: 300,
+  zoomNear: 1.5,        // the camera at length 0 (3L, design doc 10.2)
+  zoomFar: 0.4,         // never further out than this
+  zoomHalf: 50,         // the length that doubles the visible area
+  zoomEase: 1,          // seconds, the ease towards a wider view; twice that back in
 };
 
-/* The camera's zoom, eased so a train growing past 300 does not keep pulling
-   the world away. Pure, so the area rule can be checked at any length
-   without running a frame. */
+/* THE CLOSE-UP CAMERA (3L, design doc 10.2): near / sqrt(1 + length / half),
+   never below far. The visible area grows in proportion to 1 + length /
+   half, so a long train fills about the same share of the screen however
+   long it gets; the floor arrives near length 650 at the defaults. Pure, so
+   the area rule can be checked at any length without running a frame. The
+   easing over time is the camera's (follow.js). */
 export function zoomFor (length, p = DEF) {
-  const t = Math.min(Math.max(length / p.zoomLen, 0), 1);
-  const e = t * t * (3 - 2 * t);
-  return 1 + (p.zoomFar - 1) * e;
+  const n = p.zoomNear ?? 1.5, f = p.zoomFar ?? 0.4, h = p.zoomHalf ?? 50;
+  return Math.max(f, n / Math.sqrt(1 + Math.max(0, length) / h));
+}
+
+/* FOR TESTS ONLY: a train of `count` followers laid at once, its path an
+   Archimedean spiral out from the arena's centre (pitch 120 units) with the
+   leader at the outer end, so a 650-long train fits inside the reef. The
+   solo lab's ?train=N and the staged room's ?mine=N use it. */
+export function layLong (t, count, p) {
+  const sp = p.spacing, step = sp / 4, total = (count + 40) * sp, b = 120 / TAU, pts = [];
+  let th = 1, l = 0, x = b * th * Math.cos(th), z = b * th * Math.sin(th);
+  pts.push({ x, z, l });
+  while (l < total) {
+    th += step / (b * Math.sqrt(1 + th * th));
+    const nx = b * th * Math.cos(th), nz = b * th * Math.sin(th);
+    l += Math.hypot(nx - x, nz - z); x = nx; z = nz;
+    pts.push({ x, z, l });
+  }
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[Math.max(0, i - 1)], c = pts[Math.min(pts.length - 1, i + 1)];
+    pts[i].h = Math.atan2(-(c.x - a.x), -(c.z - a.z));   // forward is (-sin h, -cos h)
+  }
+  t.trail.length = 0;
+  for (const q of pts) t.trail.push({ x: q.x, z: q.z, h: q.h, s: t.s - (total - q.l) });
+  const last = pts[pts.length - 1];
+  t.x = last.x; t.z = last.z; t.head = last.h;
+  t.followers.length = 0;
+  for (let k = 0; k < count; k++) t.followers.push({ x: last.x, z: last.z, head: last.h, born: -100, from: -1 });
+  return t;
 }
 
 /* THE SAME-AREA RULE AT EVERY ZOOM. At zoom 1 every screen sees the same

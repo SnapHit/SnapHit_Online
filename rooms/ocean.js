@@ -29,6 +29,7 @@
 import { createSim, STEP } from '../docs/lab/manta/sim.js';
 import { snapFor, SNAP_HZ, cleanName } from '../docs/lab/manta/roomcore.js';
 import { RADAR_RES } from '../docs/lab/manta/radar.js';   // the radar's starting paths (3L); the live channel rides in the snapshot
+import { layLong } from '../docs/lab/manta/simcore.js';
 
 /* The committed defaults and the build stamp, from the deployed files. */
 async function loadDefaults (env, url) {
@@ -85,6 +86,8 @@ export function createOcean (env, url, opts = {}) {
   const crossLen = Math.round(clamp(url.searchParams.get('len') || 20, 2, 40));
   const botCuts = staged && url.searchParams.get('xb') === '1';
   const race = staged && url.searchParams.get('xb') === '2';
+  /* ?mine=N (3L, tests only): the seated train laid at N at once, no put-backs. */
+  const mine = staged ? Math.round(clamp(url.searchParams.get('mine') || 0, 0, 650)) : 0;
   let sim = null, build = null, seed = 0;
   let timer = null, last = 0, owed = 0, n = 0, steps = 0;
   const ready = loadDefaults(env, url).then(d => {
@@ -224,7 +227,7 @@ export function createOcean (env, url, opts = {}) {
     let k = 0;
     while (owed >= STEP && k < 12) {
       applyInputs(steps + 1);
-      if (staged && (steps + 1) % CYCLE === 0) putBack();
+      if (staged && !mine && (steps + 1) % CYCLE === 0) putBack();
       if (race && (steps + 1) % CYCLE === 55) cluster();
       sim.step(); owed -= STEP; k++; steps++;
     }
@@ -261,6 +264,7 @@ export function createOcean (env, url, opts = {}) {
   function stage () {
     for (const t of sim.rivals) if (t.id > 2) { t.dead = 1e9; t.followers.length = 0; }
     putBack();
+    if (mine) layLong(trainOf(1), mine, sim.params);
   }
   function cluster () {
     let n = 0;

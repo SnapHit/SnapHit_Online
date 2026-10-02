@@ -106,8 +106,13 @@ function writer () {
 export function snapFor (sim, phone, n, events, step = 0) {
   const view = phone.view, w = writer();
   const cx = Math.round(view.x), cz = Math.round(view.z);
+  /* A WIDE VIEW (3L): zoomed out, a phone sees several times the mantas and
+     a unit on its screen is a fraction of a pixel. So the full list comes
+     half as often (the phone carries a manta 0.6 s past its last record)
+     and a manta is resent only once it strays a screen pixel's worth. */
+  const wide = phone.view.w > 600, tol = WILD_TOL * Math.max(1, phone.view.w / 385);
   let full = !phone.wild || phone.wildTick <= 0;
-  if (full) phone.wildTick = WILD_EVERY;
+  if (full) phone.wildTick = wide ? WILD_EVERY * 2 : WILD_EVERY;
   phone.wildTick--;
   w.u8(1); const flagsAt = w.at; w.u8(0); w.u32(n); w.u32(step); w.i32(cx); w.i32(cz);
   let flags = 0;
@@ -215,7 +220,7 @@ export function snapFor (sim, phone, n, events, step = 0) {
       if (e && e.obj !== r[0]) { gone.push(i); phone.wild.delete(i); }
       const k = phone.wild.get(i);
       let send = !k || k.fc !== is;
-      if (!send) { const [x, z] = carried(k); send = Math.hypot(x - r[0].x, z - r[0].z) > WILD_TOL; }
+      if (!send) { const [x, z] = carried(k); send = Math.hypot(x - r[0].x, z - r[0].z) > tol; }
       if (send) { changed.push(i); keep(i, is, r[0]); }
     }
     for (const i of phone.wild.keys()) if (!now.has(i)) gone.push(i);

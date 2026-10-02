@@ -30,7 +30,7 @@ import {
 } from 'three';
 import {
   Fn, uv, vec3, vec4, float, texture, uniform, uniformArray,
-  clamp, dot, length, max, smoothstep,
+  clamp, dot, length, max, smoothstep, step,
 } from 'three/tsl';
 
 export const LM_SIZE_DEFAULT = 512;
@@ -151,8 +151,50 @@ export function createLightMemory (count) {
   }
 
   /* The covered square follows the view, so the same patch of water is
-     covered whichever way the phone is held. */
-  function setView (view) { uHalf.value = Math.max(view.w, view.h) * COVER * 0.5; }
+     covered whichever way the phone is held. IT STEPS, NEVER SLIDES (3L):
+     the zoom eases a little every frame, and re-covering the memory each
+     frame would resample its own resampling and smear every wake into a
+     cloud. So the square changes only when the view needs more than it
+     covers, or less than three quarters of it, and then by a step with a tenth
+     of headroom; and the old memory is drawn into the new square at the
+     same patch of water (scaled about the shared centre, black beyond its
+     edge), so a wake stays where it was laid. A step is one bilinear
+     resample; a few happen across the whole zoom range. */
+  const uScale = uniform(1);
+  const rescaleMat = new NodeMaterial();
+  rescaleMat.name = 'manta_lightmemory_rescale';
+  rescaleMat.fragmentNode = Fn(() => {
+    const q = uv().sub(0.5).mul(uScale).add(0.5);
+    const d = q.sub(0.5).abs().mul(2.0);
+    const inside = step(d.x, float(1.0)).mul(step(d.y, float(1.0)));
+    /* Read through the pass's own texture node: a second node on the same
+       target initialised its texture twice on WebGPU (3L). */
+    return vec4(texture(uPrev, q).rgb.mul(inside), 1.0);
+  })();
+  let resteps = 0, rendered = false;
+  function setView (view, renderer) {
+    const need = Math.max(view.w, view.h) * COVER * 0.5, cur = uHalf.value;
+    if (cur > 0 && need <= cur && need > cur / 1.3) return false;
+    const next = need * 1.1;
+    /* Only once the memory has been rendered to: before that there is
+       nothing to keep, and on WebGPU drawing into a target that has never
+       been rendered to, from one that has only been sampled, initialised
+       its texture twice ('Texture already initialized', 3M). */
+    if (renderer && cur > 0 && rendered) {
+      uPrev.value = rtA.texture; uScale.value = next / cur;
+      rendererState = RendererUtils.resetRendererState(renderer, rendererState);
+      renderer.setRenderTarget(rtB);
+      quad.material = rescaleMat;
+      quad.render(renderer);
+      renderer.setRenderTarget(null);
+      RendererUtils.restoreRendererState(renderer, rendererState);
+      const t = rtA; rtA = rtB; rtB = t;
+      out.value = rtA.texture;
+      resteps++;
+    }
+    uHalf.value = next;
+    return true;
+  }
 
   /* Re-centre on the camera, but only ever by a whole texel, and tell the
      pass how far it moved so it can read the previous frame back at the same
@@ -195,6 +237,7 @@ export function createLightMemory (count) {
     RendererUtils.restoreRendererState(renderer, rendererState);
     const t = rtA; rtA = rtB; rtB = t;      // the finished frame is now rtA
     out.value = rtA.texture;
+    rendered = true;
   }
 
   let uFadeBase = 0.985;
@@ -209,7 +252,7 @@ export function createLightMemory (count) {
   return {
     attach, setSize, setView, stamp, clearStamps, render, setFade, dispose,
     out, uHalf, uCentre, setCentre,
-    get size () { return size; },
+    get size () { return size; }, get resteps () { return resteps; }, get target () { return rtA; },   // target: for the tests' pixel reads
     get note () { return note; },
     get enabled () { return enabled; },
     set enabled (v) { enabled = v; },

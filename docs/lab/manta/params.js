@@ -144,6 +144,13 @@ export const SPEC = [
   { key: 'radarSize',      label: 'radar size (% of short side)', def: 28, min: 15, max: 40,  step: 1,     gpu: false },
   { key: 'radarOpacity',   label: 'radar opacity',        def: 0.4,   min: 0.1,  max: 0.9,   step: 0.05,  gpu: false },
   { key: 'radarRange',     label: 'radar range for smaller trains', def: 0, min: 0, max: 2000, step: 50,  gpu: false },
+  /* The close-up camera (3L, 10.2): zoom = close / sqrt(1 + length / half),
+     never below far, eased over `ease` seconds towards a wider view and
+     twice that back in. Read by follow.js from this page's values. */
+  { key: 'zoomNear',       label: 'zoom close',           def: 1.5,   min: 1.0,  max: 2.5,   step: 0.05,  gpu: false },
+  { key: 'zoomFar',        label: 'zoom far',             def: 0.4,   min: 0.25, max: 1.0,   step: 0.05,  gpu: false },
+  { key: 'zoomHalf',       label: 'zoom half length',     def: 50,    min: 10,   max: 200,   step: 5,     gpu: false },
+  { key: 'zoomEase',       label: 'zoom ease (s)',        def: 1,     min: 0.2,  max: 4,     step: 0.1,   gpu: false },
   /* Section 10.2's three touch schemes: 0 is A (steer to your finger,
      double-tap and hold to burst), 1 is B (first finger steers, a second
      anywhere bursts), 2 is C (a joystick on the left half, a burst button on

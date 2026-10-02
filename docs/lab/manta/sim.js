@@ -18,7 +18,7 @@ import { createMotion } from './motion.js';
 import { createPopulation } from './population.js';
 
 import { STEP, DEF, FADE, zoomFor, viewFor, joinMix, looseMix, sizeFor, leaderSize,
-         createHash, TAU, wrapAngle } from './simcore.js';
+         createHash, TAU, wrapAngle, layLong } from './simcore.js';
 /* Re-exported, so everything that imported these from sim.js still does. */
 export { STEP, DEF, FADE, zoomFor, viewFor, joinMix, looseMix, sizeFor, leaderSize, createHash };
 
@@ -560,6 +560,8 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     pastOf,
     get length () { return you.followers.length; },
     zoom: () => zoomFor(you.followers.length, p),
+    /* For tests: your train laid at `n` at once (simcore.js layLong). */
+    lay: n => { layLong(you, Math.max(0, Math.min(650, n | 0)), p); return you.followers.length; },
     /* For tests and for the panel: the speed actually used this step. */
     speedOf, turnRateOf,
   };

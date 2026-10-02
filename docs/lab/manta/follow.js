@@ -39,6 +39,7 @@ export function createFollow (ctx) {
   let spillDeal = null, drawnRivals = 0;
   const SPILL_BASE = mantas.SPILL_BASE;
   let bestPeak = 0, beatShown = false, boardAt = 0, offScreen = 0;
+  let zoomNow = null, wasDying = false, lastRuns = undefined;   // the eased camera (3L)
 
   /* THE BOARD. Top ten by current length, and every bot says it is a bot:
      nobody should ever wonder whether they were beaten by a person. Twice a
@@ -141,9 +142,31 @@ export function createFollow (ctx) {
     const watching = !!ctx.sim.watching;
     const beat = dying ? 1 - you.dead / ctx.sim.params.deathBeat : 0;
     const at = dying ? { x: you.crashX, z: you.crashZ } : you;
-    const z = dying ? Math.max(0.55, zoomFor(peakLength, ctx.sim.params) * (1 - 0.35 * beat))
-                    : zoomFor(watching ? you.len : you.followers.length, ctx.sim.params);
-    if (setZoom(z)) applyView(ctx.view);
+    /* THE CLOSE-UP CAMERA (3L). The target follows the curve (simcore.js
+       zoomFor) of your drawn length, predicted pickups included; dying, it
+       pulls back by the same proportion as before, never past the far zoom.
+       The zoom then EASES, never jumps: towards a wider view over zoomEase
+       seconds as the train grows, half as fast back in as it shrinks, so a
+       cut does not yank the view; and never more than 2% per sixtieth of a
+       second of frame time (2% a frame at 60 fps), so the ease cannot jump
+       and a slow phone still keeps pace. A restart starts at the curve's
+       value for the new spot, with no easing across the cut. */
+    const ZP = ctx.P || ctx.sim.params;
+    const target = dying ? Math.max(ZP.zoomFar ?? 0.4, zoomFor(peakLength, ZP) * (1 - 0.35 * beat))
+                         : zoomFor(watching ? you.len : you.followers.length, ZP);
+    const restarted = (wasDying && !dying) || (you.runs !== undefined && you.runs !== lastRuns);
+    wasDying = dying; lastRuns = you.runs;
+    /* On the scene clock, like everything drawn: a zero-second step moves
+       nothing, and the tests drive it with the injectable clock. */
+    const edt = Math.max(0, Math.min(0.25, dt));
+    if (zoomNow === null || restarted) zoomNow = target;
+    else {
+      const tau = Math.max(0.05, (ZP.zoomEase || 1) * (target < zoomNow ? 1 : 2));
+      let z = zoomNow + (target - zoomNow) * (1 - Math.exp(-edt / tau));
+      const cap = 0.02 * Math.max(1, edt * 60);
+      zoomNow = Math.max(zoomNow * (1 - cap), Math.min(zoomNow * (1 + cap), z));
+    }
+    if (setZoom(zoomNow)) applyView(ctx.view);
     uCam.value.set(at.x, at.z);
     camera.position.set(at.x, 1000, at.z);
     camera.lookAt(at.x, 0, at.z);
@@ -342,6 +365,6 @@ export function createFollow (ctx) {
   }
 
 
-  return { followCamera, get peak () { return peakLength; }, get offScreen () { return offScreen; },
+  return { followCamera, get peak () { return peakLength; }, get offScreen () { return offScreen; }, get zoom () { return zoomNow; },
            spillSlotOf: g => spillSlot.get(g) };
 }

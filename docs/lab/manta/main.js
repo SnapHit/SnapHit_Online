@@ -130,6 +130,8 @@ if (shadows) shadows.attach(mantas.shadowMesh);
 /* The room modules load only in watch mode (3D): without ?room nothing new
    is fetched, run or connected, and the solo lab is exactly as it was. */
 const createRoomView = ROOM ? (await import('./roomview.js')).createRoomView : null;
+/* ?bots=N (solo, tests only): the bot count from the address. */
+if (!ROOM && query.get('bots') !== null) P.bots = Math.max(0, Math.min(20, +query.get('bots') || 0));
 const sim = SPIKE ? null : ROOM ? createRoomView({ room: ROOM, build: panel.BUILD, view, play: PLAY, name: () => window.MANTA_NAME || savedName() }) : createSim({ seed: mantas.seed, params: {
   cruise: P.cruise, burst: P.burstSpeed, turnCruise: P.turnCruise, turnBurst: P.turnBurst,
   recruitR: P.recruitR, spacing: P.spacing, wildCount: P.wildCount, regrow: P.regrow,
@@ -256,12 +258,13 @@ function applyQuality (renderer) {
 /* Everything that has to be told the view changed, in one place, because a
    zoom change is a view change and a resize is a view change and they used
    to be told in different ways. */
+let viewRenderer = null;   // the renderer, once it exists: the light memory re-covers itself through it (3L)
 function applyView (v) {
   mantas.setBounds(v);
   uViewW.value = v.w; uViewH.value = v.h;
-  if (lm) lm.setView(v);
+  if (lm) lm.setView(v, viewRenderer);
   if (shadows) shadows.setView(v);
-  if (lmSlow) lmSlow.setView(v);
+  if (lmSlow) lmSlow.setView(v, viewRenderer);
   panel.set('view', describeView(v));
   panel.set('viewport', panel.describeViewport());
 }
@@ -273,6 +276,7 @@ const follower = createFollow({ mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_B
                                 get lm () { return lm; }, get lmSlow () { return lmSlow; },
                                 get shadows () { return shadows; } });
 const followCamera = dt => follower.followCamera(dt);
+window.__lab.zoom = () => follower.zoom;   // the eased camera zoom (3L), for the tests
 window.__lab.follower = follower;              // events skipped off screen, for the checks
 
 /* Hoisted out of the hooks so the step hook below can drive it. The cut owns
@@ -461,6 +465,10 @@ function makeControls () {
 }
 lab.start().then(ok => {
   if (!ok) { window.__labReady = true; return; }
+  viewRenderer = lab.renderer || null;
+  window.__lab.renderer = viewRenderer;   // for the tests' pixel reads (3M)
+  /* ?train=N (solo, tests only): your train laid at N at once. */
+  { const n = +query.get('train'); if (sim && !ROOM && n > 0 && sim.lay) sim.lay(n); }
   if (sim && (!ROOM || PLAY)) makeControls();
   /* The feedback page's first visit watches, then plays in place (3K). */
   if (sim && ROOM && !PLAY && sim.startPlaying) window.__lab.startPlaying = name => { const ok = sim.startPlaying(name); if (ok) makeControls(); return ok; };
