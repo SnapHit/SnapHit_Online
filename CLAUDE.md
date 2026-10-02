@@ -110,6 +110,8 @@ falls back to WebGL2. Every lab page shows which backend is running and accepts
 `?backend=webgl2` to force the fallback. A change verified on one backend is
 not verified.
 
+**Test harnesses live in the repo.** Every harness, runner, test client and Node suite for Manta trains lives in `tests/manta/`, outside `docs/`, so it is never served or deployed. Commit a new or changed harness in the same commit as the change it verifies. Never keep a harness only in a scratchpad: a container can be reclaimed without warning, and its harnesses go with it. Their output (screenshots, logs, downloaded tools) goes to the scratchpad, never into the repo, and there is still no `package.json`: `tests/manta/README.md` says which tools to install, at which versions, and how.
+
 ---
 
 ## Cost control, which matters here
@@ -148,6 +150,7 @@ docs/lab/manta/          Manta trains prototype. Unlinked, noindex.
 docs/vendor/three/r186/  Three.js, vendored unmodified. Do not edit.
 wrangler.jsonc           deploy config. One main: the rooms Worker. Do not add another.
 rooms/                   Manta trains' rooms Worker. Not served.
+tests/manta/             Manta trains' test harnesses. Not served.
 NOTES.md                 the build record
 manta-trains-design.md   Manta trains: rules, look, build plan. Not served.
 ```
