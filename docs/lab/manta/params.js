@@ -138,6 +138,12 @@ export const SPEC = [
   { key: 'burstCost',      label: 'burst cost interval',  def: 1.0,   min: 0.1,  max: 1.5,   step: 0.05,  gpu: false },
   { key: 'arenaR',         label: 'arena radius',         def: 2000,  min: 800,  max: 4000,  step: 100,   gpu: false },
   { key: 'bloomPull',      label: 'bloom pull',           def: 0.36,  min: 0,    max: 1,     step: 0.02,  gpu: false },
+  /* The radar (3L, 7.1): its size as a share of the screen's short side,
+     its disc's opacity, and the range within which trains shorter than
+     yours show (0: everywhere). Read by follow.js from this page's values. */
+  { key: 'radarSize',      label: 'radar size (% of short side)', def: 28, min: 15, max: 40,  step: 1,     gpu: false },
+  { key: 'radarOpacity',   label: 'radar opacity',        def: 0.4,   min: 0.1,  max: 0.9,   step: 0.05,  gpu: false },
+  { key: 'radarRange',     label: 'radar range for smaller trains', def: 0, min: 0, max: 2000, step: 50,  gpu: false },
   /* Section 10.2's three touch schemes: 0 is A (steer to your finger,
      double-tap and hold to burst), 1 is B (first finger steers, a second
      anywhere bursts), 2 is C (a joystick on the left half, a burst button on

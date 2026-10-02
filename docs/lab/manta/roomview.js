@@ -26,6 +26,7 @@
  */
 import { createMirror, createWildView, createPickups, createHits, decodeSnap, wildLook, cleanName } from './roomcore.js';
 import { NAME_KEY } from './labels.js';
+import { createRadarModel } from './radar.js';
 import { createPlay } from './roomplay.js';
 import { DEF, zoomFor } from './simcore.js';
 
@@ -39,6 +40,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
      in by init; one object, so the mirror's motion sees the update. */
   const params = Object.assign({}, DEF, start || {});
   const core = createMirror(params), wildView = createWildView();
+  const radar = createRadarModel();        // the radar's trains (3L), fed by the room's channel
   const you = { id: -1, x: 0, z: 0, head: 0, s: 0, followers: [], dead: 0, peak: 0, lastPeak: 0, len: 0, watched: -1 };
   const rivals = [], wild = [], events = [], board = [];
   const drawn = new Map();                 // train id -> what is drawn for it
@@ -215,7 +217,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     /* A room with ten players already: watch it instead of playing. */
     if (m.t === 'full') { if (!play) return; play.stop(); play = null;
       mirror.watching = true; watched = -1; you.watched = -1; you.followers.length = 0; you.dead = 0; showSignal(); return; }
-    if (m.t === 'init') { Object.assign(params, m.params || {}); resync(); setNames(m.names); if (pickups) pickups.reset(); if (hits) hits.reset();
+    if (m.t === 'init') { Object.assign(params, m.params || {}); resync(); setNames(m.names); radar.trains.clear(); for (const r of m.rp || []) if (Array.isArray(r) && r.length === 3) radar.setPath(r[0], r[1], r[2]); if (pickups) pickups.reset(); if (hits) hits.reset();
       if (play) { play.onInit(m); if (play.id >= 0) watched = play.id; }
       /* Every bot's kind, once on joining, so the board says timid, greedy or
          bully for bots that have never been near you (3D). */
@@ -240,6 +242,9 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     const at = performance.now() / 1000;
     core.apply(m);
     lastSnap = m; snapCount++;
+    /* The radar's channel (3L): every train, five times a second; your own
+       train comes from your own leader each frame in play (follow.js). */
+    if (m.rd) { const nowMs = performance.now(), sp = params.spacing || 19; for (const r of m.rd) if (!(play && r[0] === play.id)) radar.update(r[0], r[1], r[2], r[3], r[5], r[4], nowMs, sp); }
     setNames(m.names);
     /* After the mirror took this snapshot's paths: the prediction lays its
        followers along this train's path, up to the true leader. */
@@ -413,7 +418,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   }
 
   const mirror = {
-    watching: !play, params, you, rivals, trains: board, wild, events, time: 0,
+    watching: !play, params, you, rivals, trains: board, wild, events, time: 0, radar,
     input, blooms: [],
     step,
     zoom: () => zoomFor(you.len, params),

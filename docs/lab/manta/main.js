@@ -269,7 +269,7 @@ function applyView (v) {
 /* The camera and every instance live in follow.js. */
 const follower = createFollow({ mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS,
                                 PARKED, camera, zoomFor, setZoom, applyView, uCam, cut,
-                                get view () { return view; }, get sim () { return sim; },
+                                get view () { return view; }, get sim () { return sim; }, get P () { return P; },
                                 get lm () { return lm; }, get lmSlow () { return lmSlow; },
                                 get shadows () { return shadows; } });
 const followCamera = dt => follower.followCamera(dt);

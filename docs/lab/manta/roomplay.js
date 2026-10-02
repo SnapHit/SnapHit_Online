@@ -194,6 +194,7 @@ export function createPlay ({ room, params, core, you, input, send, rtt, view, n
     const restarted = runs !== null && m.runs !== undefined && m.runs !== runs;
     if (restarted) you.lastPeak = you.peak;
     if (m.runs !== undefined) runs = m.runs;
+    you.runs = runs;   // the radar (3L) starts a new line on a new run
     if (m.peak !== undefined) you.peak = m.peak;
     /* DEAD: nothing to predict. The death beat counts down here from the
        moment the room said so; follow.js holds the wreck and shows the peak. */

@@ -28,6 +28,7 @@
  */
 import { createSim, STEP } from '../docs/lab/manta/sim.js';
 import { snapFor, SNAP_HZ, cleanName } from '../docs/lab/manta/roomcore.js';
+import { RADAR_RES } from '../docs/lab/manta/radar.js';   // the radar's starting paths (3L); the live channel rides in the snapshot
 
 /* The committed defaults and the build stamp, from the deployed files. */
 async function loadDefaults (env, url) {
@@ -367,6 +368,13 @@ export function createOcean (env, url, opts = {}) {
       const init = { t: 'init', build, seed, params: sim.params, time: sim.time, steps,
         kinds: sim.rivals.map(t => [t.id, t.kind || 'bot']) };
       if (me) { init.me = { id: me.id, name: me.name, token: me.token }; init.names = names; }
+      /* The radar's starting paths (3L): each train's trail at RADAR_RES units
+         a point, newest first, back to its length. */
+      init.rp = sim.rivals.map(t => {
+        const pts = [], sp = sim.params.spacing || 19; let need = t.s;
+        for (let i = t.trail.length - 1; i >= 0; i--) { const q = t.trail[i]; if (t.s - q.s > t.followers.length * sp + RADAR_RES) break; if (q.s <= need) { pts.push(Math.round(q.x), Math.round(q.z)); need -= RADAR_RES; } }
+        return [t.id, t.runs, pts];
+      });
       ws.send(JSON.stringify(init));
       start();
     },

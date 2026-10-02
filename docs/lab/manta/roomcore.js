@@ -226,6 +226,14 @@ export function snapFor (sim, phone, n, events, step = 0) {
       w.u16(gone.length); for (const i of gone) w.u16(i);
     }
   }
+  /* THE RADAR (flag 16, 3L): every train's leader in whole units, length,
+     run and alive, five times a second (with the full wild list), whatever
+     the phone's view. Nine bytes a train. */
+  if (full) {
+    flags |= 16;
+    w.u8(Math.min(255, sim.rivals.length));
+    for (const r of sim.rivals.slice(0, 255)) { w.u8(r.id & 255); w.i16(r.x - cx); w.i16(r.z - cz); w.u16(r.followers.length); w.u16(r.runs); w.u8(r.dead > 0 ? 0 : 1); }
+  }
   /* PLAY MODE (flag 8): the player's own leader, true and unrounded
      enough to predict from, and its clock: how early its inputs arrived
      (the worst since the last snapshot, with the newest seq that covers),
@@ -281,6 +289,7 @@ export function decodeSnap (buf) {
   const rec = () => { const slot = u16(), x = cx + i16(), z = cz + i16(), h = unang(u8()), fl = u8(), col = u8(); return [slot, x, z, h, fl, col === 255 ? -1 : col]; };
   if (flags & 2) { m.wd = []; for (let c = u16(); c > 0; c--) m.wd.push(rec()); }
   if (flags & 4) { m.wa = []; for (let c = u16(); c > 0; c--) m.wa.push(rec()); m.wg = []; for (let c = u16(); c > 0; c--) m.wg.push(u16()); }
+  if (flags & 16) { m.rd = []; for (let c = u8(); c > 0; c--) m.rd.push([u8(), cx + i16(), cz + i16(), u16(), u16(), u8()]); }   // [id, x, z, len, runs, alive]
   if (flags & 8) {
     const f32 = () => { const v = dv.getFloat32(o, true); o += 4; return v; };
     const f = u8(), me = { x: f32(), z: f32(), h: f32(), s: i32() / 16, len: u16(), runs: u16() };

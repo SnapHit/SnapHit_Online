@@ -9,6 +9,7 @@
  */
 import { joinMix, looseMix, sizeFor, leaderSize } from './sim.js';
 import { createLabels, savedName, PALE } from './labels.js';
+import { createRadar, createRadarModel } from './radar.js';
 
 export function createFollow (ctx) {
   const { mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS, PARKED,
@@ -94,6 +95,35 @@ export function createFollow (ctx) {
     perf.count = labels.draw(list, camera.position, ppu, W, H, lift);
     const ms = performance.now() - t0;
     perf.ms = ms; perf.frames++; perf.total += ms;
+  }
+
+  /* THE RADAR (3L, radar.js). Solo: every train's line straight from the
+     simulation's trail, every frame. In a room: the model the room's channel
+     feeds (roomview.js), plus your own leader each frame in play. Colours
+     are the trains' identity colours on this page, by id. */
+  const radarUI = createRadar(), radarSolo = createRadarModel();
+  const perf2 = window.__radar = { ui: radarUI, last: null, get model () { return ctx.sim && ctx.sim.radar ? ctx.sim.radar : radarSolo; } };
+  const colourCache = new Map();
+  function radarColour (id) {
+    const dealt = mantas.colours; if (!dealt || !dealt.mine) return PALE;
+    const you = ctx.sim && ctx.sim.you, mineId = you ? (you.watched !== undefined && you.watched >= 0 && ctx.sim.room ? you.watched : you.id) : -1;
+    const hex = id === mineId && !(ctx.sim && ctx.sim.watching) ? dealt.mine.hex : (dealt.rivals[(Math.max(1, id) - 1) % dealt.rivals.length] || dealt.mine).hex;
+    let c = colourCache.get(hex); if (!c) { c = '#' + (hex >>> 0).toString(16).padStart(6, '0'); colourCache.set(hex, c); }
+    return c;
+  }
+  function drawRadar () {
+    const sim = ctx.sim; if (!sim) return;
+    const P = ctx.P || sim.params, now = performance.now(), sp = sim.params.spacing || P.spacing || 19;
+    const model = sim.radar || radarSolo, you = sim.you;
+    if (!sim.radar) {
+      for (const t of sim.trains) model.update(t.id, t.x, t.z, t.followers.length, !(t.dead > 0), t.runs, now, sp, true), model.pathFromTrail(t.id, t.trail, t.followers.length, sp);
+    } else if (!sim.watching && you && you.watched >= 0 && !(you.dead > 0)) {
+      model.update(you.watched, you.x, you.z, you.followers.length, true, you.runs, now, sp, true);
+    }
+    const short = Math.min(innerWidth, innerHeight), size = Math.round(Math.max(96, Math.min(160, short * (P.radarSize || 28) / 100)));
+    const mine = you && you.watched >= 0 ? you.watched : (you ? you.id : -1);
+    perf2.last = radarUI.draw(model, { size, opacity: P.radarOpacity ?? 0.4, arenaR: sim.params.arenaR || P.arenaR || 2000, range: P.radarRange || 0,
+      you: you ? { id: mine, x: you.x, z: you.z, len: sim.watching ? you.len : you.followers.length } : null, view: ctx.view, colourOf: radarColour }, now);
   }
 
   function followCamera (dt) {
@@ -300,6 +330,7 @@ export function createFollow (ctx) {
                                       : 'length ' + f.length + '   peak ' + peakLength + '   best ' + bestPeak;
     drawBoard(ctx.sim.time);
     drawLabels();
+    drawRadar();
   const card = document.getElementById('beat');
     if (card) {
       if (dying && !beatShown) {
