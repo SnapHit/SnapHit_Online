@@ -51,9 +51,9 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   let wildNow = null;
   /* Predicted pickups (3I): play mode only. The limit is your round trip
      (the longest of the last five) plus 100 ms. */
-  const pickups = playing ? createPickups() : null, rtts5 = [];
+  let pickups = playing ? createPickups() : null; const rtts5 = [];
   /* Your own hits, played at once (3K, roomcore.js createHits). */
-  const hits = playing ? createHits() : null;
+  let hits = playing ? createHits() : null;
   const pickupLimit = () => (rtts5.length ? Math.max(...rtts5) : 300) + 100;
   let watched = -1, viewDirty = true, sentView = null, viewAt = 0, pingAt = 0;
   let play = null;                         // play mode (roomplay.js), made once `send` exists
@@ -97,7 +97,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     return 'ok';
   }
   let typedName = null;
-  if (playing) {
+  function makePencil () {
     pencil = document.createElement('button');
     pencil.type = 'button'; pencil.textContent = '\u270e'; pencil.hidden = true;
     pencil.setAttribute('aria-label', 'Change your name');
@@ -126,6 +126,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
       box.focus(); box.select();
     });
   }
+  if (playing) makePencil();
   showSignal();
 
   /* A different build in the room means this page is stale: say so and stop,
@@ -448,10 +449,27 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   /* PLAY MODE (3G): a hidden page says so, and the room gives the manta to
      a bot at once rather than letting it swim on the last input; shown
      again, the page rejoins with its token. */
-  if (play) document.addEventListener('visibilitychange', () => {
+  document.addEventListener('visibilitychange', () => {
     if (!play) return;
     if (document.hidden) send({ t: 'away' }); else send(hello());
   });
+  /* WATCHING TO PLAYING IN PLACE (3K): the first visit's Play joins as a
+     player on the open connection, no reload. A second hello on the same
+     socket seats it (rooms/ocean.js); your name follows in its message. */
+  function startPlaying (name) {
+    if (play || stopped) return false;
+    playing = true;
+    play = createPlay({ room, params, core, you, input, send, rtt: () => rtt, view: viewStep });
+    pickups = createPickups(); hits = createHits();
+    if (!pencil) makePencil();
+    mirror.watching = false; watched = -1; you.watched = -1; you.followers.length = 0; you.dead = 0;
+    const n = cleanName(name || '');
+    if (n) { typedName = n; try { localStorage.setItem(NAME_KEY, n); } catch (_) { /* this visit only */ } }
+    send(hello()); send(viewMsg(viewNow())); sendName(typedName || cleanName(nameNow() || ''));
+    showSignal();
+    return true;
+  }
+  mirror.startPlaying = startPlaying;
   connect();
   return mirror;
 }

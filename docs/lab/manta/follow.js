@@ -295,7 +295,8 @@ export function createFollow (ctx) {
     if (you.lastPeak > bestPeak) bestPeak = you.lastPeak;
     if (peakLength > bestPeak) bestPeak = peakLength;
     const el = document.getElementById('len');
-    if (el) el.textContent = watching ? 'watching bot ' + you.watched + '   length ' + you.len + '   tap for the next'
+    /* The feedback page (window.MANTA_QUERY) shows players no lab wording (3K). */
+    if (el) el.textContent = watching ? (typeof window.MANTA_QUERY === 'string' ? '' : 'watching bot ' + you.watched + '   length ' + you.len + '   tap for the next')
                                       : 'length ' + f.length + '   peak ' + peakLength + '   best ' + bestPeak;
     drawBoard(ctx.sim.time);
     drawLabels();

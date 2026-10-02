@@ -450,16 +450,20 @@ window.__lab.step = (seconds = 1 / 60) => {
   return simTime;
 };
 
+function makeControls () {
+  if (controls) return;
+  const canvas = lab.renderer && lab.renderer.domElement;
+  if (canvas) controls = createControls(canvas, sim.input, (u, v) => ({
+    /* Screen fraction to world, through the same view the ocean uses. */
+    x: sim.you.x + (u - 0.5) * view.w,
+    z: sim.you.z + (v - 0.5) * view.h,
+  }), () => P.scheme);
+}
 lab.start().then(ok => {
   if (!ok) { window.__labReady = true; return; }
-  if (sim && (!ROOM || PLAY)) {
-    const canvas = lab.renderer && lab.renderer.domElement;
-    if (canvas) controls = createControls(canvas, sim.input, (u, v) => ({
-      /* Screen fraction to world, through the same view the ocean uses. */
-      x: sim.you.x + (u - 0.5) * view.w,
-      z: sim.you.z + (v - 0.5) * view.h,
-    }), () => P.scheme);
-  }
+  if (sim && (!ROOM || PLAY)) makeControls();
+  /* The feedback page's first visit watches, then plays in place (3K). */
+  if (sim && ROOM && !PLAY && sim.startPlaying) window.__lab.startPlaying = name => { const ok = sim.startPlaying(name); if (ok) makeControls(); return ok; };
   window.__labReady = true;
 });
 

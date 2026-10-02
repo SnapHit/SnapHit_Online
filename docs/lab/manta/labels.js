@@ -50,7 +50,7 @@ export function createLabels () {
     for (let i = 0; i < list.length; i++) {
       const L = list[i];
       const sx = W / 2 + (L.x - cam.x) * ppu, sy = H / 2 + (L.z - cam.z) * ppu - lift;
-      if (sx < -80 || sx > W + 80 || sy < -20 || sy > H + lift + 20) continue;
+      if (sx < -80 || sx > W + 80 || sy < -20 || sy + lift > H + 20) continue;   // the leader itself off screen
       const e = slot(n++);
       if (e._t !== L.text) { e.textContent = L.text; e._t = L.text; }
       if (e._c !== L.colour) { e.style.color = L.colour; e._c = L.colour; }

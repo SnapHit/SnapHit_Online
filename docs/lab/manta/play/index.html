@@ -283,6 +283,9 @@
     border: 1px solid rgba(120, 190, 210, .5); border-radius: 10px; padding: 10px 12px; min-width: 0; }
   #playBtn { font: 700 20px/1 system-ui, sans-serif; color: #04121a; background: #7fe3d0; border: 0;
     border-radius: 999px; min-height: 52px; cursor: pointer; }
+  /* Too short for the board under the play bar (landscape with the keyboard
+     up): the board steps aside rather than run into the stats line (3K). */
+  @media (max-height: 330px) { body:not(.lab) #board { display: none; } }
   @media (max-height: 260px) {
     #namePanel { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 8px 12px; gap: 8px; }
     #namePanel label { flex-basis: 100%; font-size: 13px; }
@@ -555,6 +558,10 @@
       import('../roomcore.js').then(function (m) {
         var n = m.cleanName(box.value) || box.placeholder, kept = false;
         try { localStorage.setItem('manta:name', n); kept = localStorage.getItem('manta:name') === n; } catch (e) { kept = false; }
+        /* Watching to playing in place, no reload (3K); the reload only
+           if the page cannot (it never should). */
+        if (!kept) window.MANTA_NAME = n;
+        if (window.__lab && window.__lab.startPlaying && window.__lab.startPlaying(n)) { $('namePanel').hidden = true; P.naming = false; return; }
         var params = P.code ? { room: P.code } : {};
         if (!kept) params.n = n;
         go(params);
