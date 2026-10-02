@@ -118,6 +118,7 @@ One line each: what it checks, how to run it, roughly how long.
 - `rows.mjs`: the wild and mantas rows and the ordinary wild count. About 40 s.
 - `newocean.mjs`: New ocean in the page. About 40 s.
 - `zoom.mjs`: the close-up camera: zoom against length, labels and radar at both ends, a wake through a zoom step, the ease after a cut, a restart's first frame. About 80 s.
+- `camera.mjs`: the close-up camera's restart and cut, with no rival trains and a train swimming straight so nothing can crash it: a restart's first frame at the curve for its length, read on that frame; after a cut that halves the train, the view eases back in. About 30 s.
 - `watch.mjs`: the WebGPU error watch: the page's errors and error-watch rows. Run with `CHROME=$CHROME153`; `BACK=gl` for the WebGL2 side. About 30 s.
 - `gpu.mjs`: the WebGPU sweep 0 to 650 and a cut to 150, zero page errors. `TIER` env; run with `CHROME=$CHROME153`. About 60 s.
 - `wgpu.mjs`: does headless WebGPU draw at all; puppeteer, so `CHROME` is optional. About 30 s.
