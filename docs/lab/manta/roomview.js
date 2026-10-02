@@ -24,7 +24,7 @@
  * and every other train keeps its colour. Everything else is drawn exactly
  * as in watch mode.
  */
-import { createMirror, createWildView, createPickups, decodeSnap, wildLook, cleanName } from './roomcore.js';
+import { createMirror, createWildView, createPickups, createHits, decodeSnap, wildLook, cleanName } from './roomcore.js';
 import { NAME_KEY } from './labels.js';
 import { createPlay } from './roomplay.js';
 import { DEF, zoomFor } from './simcore.js';
@@ -52,6 +52,8 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   /* Predicted pickups (3I): play mode only. The limit is your round trip
      (the longest of the last five) plus 100 ms. */
   const pickups = playing ? createPickups() : null, rtts5 = [];
+  /* Your own hits, played at once (3K, roomcore.js createHits). */
+  const hits = playing ? createHits() : null;
   const pickupLimit = () => (rtts5.length ? Math.max(...rtts5) : 300) + 100;
   let watched = -1, viewDirty = true, sentView = null, viewAt = 0, pingAt = 0;
   let play = null;                         // play mode (roomplay.js), made once `send` exists
@@ -212,7 +214,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     /* A room with ten players already: watch it instead of playing. */
     if (m.t === 'full') { if (!play) return; play.stop(); play = null;
       mirror.watching = true; watched = -1; you.watched = -1; you.followers.length = 0; you.dead = 0; showSignal(); return; }
-    if (m.t === 'init') { Object.assign(params, m.params || {}); resync(); setNames(m.names); if (pickups) pickups.reset();
+    if (m.t === 'init') { Object.assign(params, m.params || {}); resync(); setNames(m.names); if (pickups) pickups.reset(); if (hits) hits.reset();
       if (play) { play.onInit(m); if (play.id >= 0) watched = play.id; }
       /* Every bot's kind, once on joining, so the board says timid, greedy or
          bully for bots that have never been near you (3D). */
@@ -260,7 +262,18 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     snaps.push({ time: m.time, tr: new Map(m.tr.map(q => [q.id, q])) });
     wildView.take(m);
     while (snaps.length > 2 && m.time - snaps[1].time > 1) snaps.shift();
-    for (const e of m.ev || []) pending.push({ time: m.time, kind: e.k, x: e.x, z: e.z, by: e.by });
+    /* Events naming your leader are about your train, which is drawn now,
+       not in the past: they are not held to the render delay (3K). One that
+       confirms a hit already played plays nothing more; any other (the reef,
+       a hit not predicted) plays now, a crash with your camera's shake.
+       Everyone else's are held so they land where their trains are drawn. */
+    for (const e of m.ev || []) {
+      if (hits && play && play.id >= 0 && e.by === play.id) {
+        if (!hits.confirm({ kind: e.k, x: e.x, z: e.z })) events.push({ kind: e.k, x: e.x, z: e.z, by: e.by, id: e.k === 'crash' ? you.id : undefined });
+        continue;
+      }
+      pending.push({ time: m.time, kind: e.k, x: e.x, z: e.z, by: e.by });
+    }
     /* The board comes only when it changed: the last one stands until then. */
     if (m.bd) {
       board.length = 0;
@@ -380,6 +393,14 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     }, paused);
     for (const w of wild) if (!w.seen) w.alive = false;
     if (wl) { const t = performance.now(); pickups.touch(you, wl, params.recruitR, t); pickups.tidy(t); play.setExtra(pickups.held, pickups.leaving(t)); }
+    /* Your own hit, the frame your drawn leader touches a drawn train (3K):
+       its flash, shockwave and (a crash) shake play now, where you saw it. */
+    if (hits && play && play.live && !paused) {
+      const t = performance.now();
+      hits.expire(t, (rtts5.length ? Math.max(...rtts5) : 300) + 150, !(you.dead > 0));
+      const h = hits.detect(you, rivals, params, t);
+      if (h) events.push({ kind: h.kind, x: h.x, z: h.z, by: play.id, id: h.kind === 'crash' ? you.id : undefined, predicted: true });
+    }
 
     /* Events once each, at the render delay, so the burst lands where the
        drawn trains are. Stale ones (a hidden tab) are dropped, not replayed. */
@@ -405,6 +426,8 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     youName: () => myName(),
     /* For the tests: change your name as the pencil does. */
     setName,
+    /* For the tests: your predicted hits so far (3K). */
+    get hitStats () { return hits ? hits.stats : null; },
     /* For the browser checks: window.__lab.room. */
     room: {
       get connected () { return connected; }, get rtt () { return rtt; }, get delay () { return delay; },

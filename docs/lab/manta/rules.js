@@ -114,9 +114,12 @@ export function createRules (ctx) {
      follower behind the contact point goes wild; the rest of that train,
      including its leader, carries on. Touching its leader cuts at the front,
      so the whole train goes. */
-  function cutAt (t, index, by = null) {
+  function cutAt (t, index, by = null, px = null, pz = null) {
     const at = t.followers[index] || t;           // where it was touched
-    const x = at.x, z = at.z;
+    /* Judged with lag compensation (contactsPast), the cut is recorded where
+       the touch was judged, where the cutter's phone showed the train (3K):
+       the phone has already played it there. Otherwise, as before. */
+    const x = px !== null ? px : at.x, z = pz !== null ? pz : at.z;
     /* The cut train may not take its own loose followers back in the same
        step: they go into the hash at once now, and its leader sits one
        spacing from the first of them. One step, as before. */
@@ -161,7 +164,7 @@ export function createRules (ctx) {
      hash: leader first (index 0, a leader touch), then follower k at k. */
   function contactsPast (t, back) {
     const k = p.trainScale || 1;
-    let hitTrain = null, hitIndex = 0, hitLeader = false, best = Infinity;
+    let hitTrain = null, hitIndex = 0, hitLeader = false, best = Infinity, hx = null, hz = null;
     for (const o of ctx.trains) {
       if (o === t || o.dead > 0) continue;
       const a = ctx.pastOf(o, back);
@@ -170,10 +173,10 @@ export function createRules (ctx) {
         const leader = i === 0;
         const d = Math.hypot(a[i] - t.x, a[i + 1] - t.z);
         if (d > (p.leaderR + (leader ? p.leaderR : p.followerR)) * k) continue;
-        if (d < best) { best = d; hitTrain = o; hitIndex = leader ? 0 : i / 2 - 1; hitLeader = leader; }
+        if (d < best) { best = d; hitTrain = o; hitIndex = leader ? 0 : i / 2 - 1; hitLeader = leader; hx = a[i]; hz = a[i + 1]; }
       }
     }
-    return hitTrain ? { train: hitTrain, index: hitIndex, leader: hitLeader } : null;
+    return hitTrain ? { train: hitTrain, index: hitIndex, leader: hitLeader, x: hx, z: hz } : null;
   }
 
   function resolveTouches () {
@@ -194,15 +197,15 @@ export function createRules (ctx) {
       /* HEAD ON. Both crash unless exactly one is bursting; the one that is
          cuts the other instead, and two bursting leaders both crash. */
       const other = h.train, a = t.bursting, b = other.bursting;
-      if (a && !b) cutAt(other, h.index, t);
-      else if (b && !a) cutAt(t, hits[back].index, other);
+      if (a && !b) cutAt(other, h.index, t, h.x ?? null, h.z ?? null);
+      else if (b && !a) cutAt(t, hits[back].index, other, hits[back].x ?? null, hits[back].z ?? null);
       else { crash(t, other, 'head-on'); crash(other, t, 'head-on'); }
       done.add(t); done.add(other);
     }
     for (let i = 0; i < ctx.trains.length; i++) {
       const t = ctx.trains[i], h = hits[i];
       if (!h || done.has(t) || done.has(h.train)) continue;
-      if (t.bursting) cutAt(h.train, h.index, t);
+      if (t.bursting) cutAt(h.train, h.index, t, h.x ?? null, h.z ?? null);
       else crash(t, h.train, h.leader ? 'leader' : 'body');
       done.add(t);
     }

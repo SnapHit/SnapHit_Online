@@ -366,6 +366,64 @@ export function cleanName (s) {
   while (g.length && enc.encode(g.join('')).length > NAME_BYTES) g.pop();
   return g.join('').trim();
 }
+/* YOUR OWN HITS PLAY AT ONCE (3K, design doc 10.6). When your leader as
+   drawn touches a train as drawn, by the room's own test (rules.js:
+   leader radius plus the other's, scaled with the train), the hit is
+   played there and then: bursting, a cut at the manta touched; otherwise a
+   crash where your leader is. Only the flash, shockwave and shake: the
+   outcome (freed mantas, your train breaking up, the death beat) still
+   waits for the room. The room's event naming your leader confirms it if
+   it is the same kind within HIT_MATCH units, and then plays nothing more;
+   one that never comes (your round trip plus 150 ms) leaves the flash to
+   fade. One cut per train per crossing, as the room counts them
+   (CROSSING); after a predicted crash nothing more until it is settled. */
+export const HIT_MATCH = 60, HIT_CROSSING = 350;
+export function createHits () {
+  const pend = [], lastOn = new Map();
+  let crashLock = false, predicted = 0, confirmed = 0, unconfirmed = 0, unpredicted = 0;
+  return {
+    get pending () { return pend; },
+    get stats () { return { predicted, confirmed, unconfirmed, unpredicted }; },
+    /* you: your drawn leader; trains: the drawn rival trains; P: params */
+    detect (you, trains, P, nowMs) {
+      if (!you || you.dead > 0 || crashLock) return null;
+      const k = P.trainScale || 1, LR = P.leaderR || 14, FR = P.followerR || 10;
+      let best = null, bd = Infinity;
+      for (const r of trains) {
+        if (!r || r.hole || r.dead > 0 || r === you) continue;
+        let d = Math.hypot(r.x - you.x, r.z - you.z);
+        if (d <= (LR + LR) * k && d < bd) { bd = d; best = { r, x: r.x, z: r.z }; }
+        for (const f of r.followers || []) {
+          d = Math.hypot(f.x - you.x, f.z - you.z);
+          if (d <= (LR + FR) * k && d < bd) { bd = d; best = { r, x: f.x, z: f.z }; }
+        }
+      }
+      if (!best) return null;
+      const kind = you.bursting ? 'cut' : 'crash';
+      /* As the room counts them: still touching the same train within the
+         crossing window is the same cut, and keeps the window open. */
+      const prev = lastOn.get(best.r.id);
+      lastOn.set(best.r.id, nowMs);
+      if (kind === 'cut' && prev !== undefined && nowMs - prev < HIT_CROSSING) return null;
+      const hit = { kind, x: kind === 'cut' ? best.x : you.x, z: kind === 'cut' ? best.z : you.z, t: nowMs, on: best.r.id };
+      if (kind === 'crash') crashLock = true;
+      pend.push(hit); predicted++;
+      return hit;
+    },
+    /* A room event naming your leader: true when it confirms a predicted hit. */
+    confirm (e) {
+      const i = pend.findIndex(h => h.kind === e.kind && Math.hypot(h.x - e.x, h.z - e.z) <= HIT_MATCH);
+      if (i < 0) { unpredicted++; return false; }
+      pend.splice(i, 1); confirmed++;
+      return true;
+    },
+    expire (nowMs, limitMs, alive) {
+      for (let i = pend.length - 1; i >= 0; i--) if (nowMs - pend[i].t > limitMs) { pend.splice(i, 1); unconfirmed++; }
+      if (crashLock && !pend.some(h => h.kind === 'crash') && alive) crashLock = false;
+    },
+    reset () { pend.length = 0; lastOn.clear(); crashLock = false; },
+  };
+}
 export const WILD_KEEP = 1.5;
 const PROJECT_MAX = 0.6;               // seconds a manta is carried past its last record (3I; 0.3 before)            // seconds of samples kept a manta
 export function createWildStore () {
