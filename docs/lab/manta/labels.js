@@ -22,7 +22,7 @@ const STYLE = 'position:absolute;left:0;top:0;white-space:nowrap;pointer-events:
 export const PALE = '#e6f1fb';
 /* Your typed name, kept on this phone (3J stage 2 writes it). */
 export const NAME_KEY = 'manta:name';
-export function savedName () { try { const v = localStorage.getItem(NAME_KEY); return v && v.length ? v : null; } catch (_) { return null; } }
+export function savedName () { if (typeof window !== 'undefined' && window.MANTA_PORTAL) return null; try { const v = localStorage.getItem(NAME_KEY); return v && v.length ? v : null; } catch (_) { return null; } }
 
 export function createLabels () {
   const root = document.createElement('div');

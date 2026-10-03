@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-<title>Manta trains</title>
+<title></title>
 <!-- An empty data URL, so the browser never asks for /favicon.ico. A data:
      URL is not a request; a missing favicon is a 404 in the log. -->
 <link rel="icon" href="data:,">
@@ -235,6 +235,8 @@
   /* THE FEEDBACK PAGE: no lab tools unless asked for (body.lab). */
   body:not(.lab) #chip, body:not(.lab) #panel, body:not(.lab) #bar, body:not(.lab) #plain { display: none !important; }
   #corner { position: fixed; left: 0; top: 0; width: 48px; height: 48px; z-index: 6; touch-action: none; }
+  /* The portal package (3O): solo only, so none of the room's buttons and no corner press. */
+  body.portal #friends, body.portal #solo, body.portal #online, body.portal #corner { display: none !important; }
   #fb {
     position: fixed; z-index: 5; top: calc(env(safe-area-inset-top, 0px) + 8px);
     left: calc(env(safe-area-inset-left, 0px) + 52px); right: calc(env(safe-area-inset-right, 0px) + 8px);
@@ -320,13 +322,15 @@
   </div>
   <div class="row" id="noteRow" hidden><span id="note"></span></div>
   <div class="row" id="privacyRow" hidden>
-    <p id="privacy">Manta trains keeps nothing about you. Playing online, your phone sends the room only your
+    <p id="privacy"><span class="gameName"></span> keeps nothing about you. Playing online, your phone sends the room only your
     steering, the part of the ocean you are looking at and a random key, kept in this tab, that lets you
     rejoin after a dropped connection. The room gives you a random name and forgets it all when it
     empties. A private room's code is kept until it has had no players for 24 hours, and the address
     that asked for it for 10 seconds, to stop floods. No accounts, no cookies, no analytics, nothing
     from anyone else's servers. The site runs on Cloudflare, which keeps its own short-lived
     connection logs.</p>
+    <p id="privacyPortal" hidden><span class="gameName"></span> stores nothing on this device and contacts no
+    server: it plays entirely from the files in this package. No accounts, no cookies, no analytics.</p>
   </div>
 </div>
 <div id="namePanel" hidden>
@@ -465,8 +469,15 @@
    This page's own modules sit beside this file and are imported by relative
    path, so they need no entry here and get none. addons/ is untouched for the
    same reason: nothing imports from it. */
+/* WHERE THIS PAGE IS (3O). On the site it is /lab/manta/play/; anywhere else
+   it is the root index.html of the portal package (tools/manta/), with the lab
+   modules in lab/manta/ and Three.js in vendor/three/r186/ beside it. Every
+   path below is relative to this page, so the same file works in both. */
+window.MANTA_PORTAL = !/\/lab\/manta\/play\/(index\.html)?$/.test(location.pathname);
+window.MANTA_ROOT = window.MANTA_PORTAL ? './' : '../../../';
+window.MANTA_LAB = window.MANTA_ROOT + 'lab/manta/';
 (function () {
-  var BASE = '/vendor/three/r186/';
+  var BASE = window.MANTA_ROOT + 'vendor/three/r186/';
   var stamp = new URLSearchParams(location.search).get('cold');
   var q = stamp ? '?cold=' + encodeURIComponent(stamp) : '';
   var imports = {
@@ -498,7 +509,7 @@
     var mods = ['main', 'panel', 'params', 'scene', 'ocean', 'lightmemory', 'seabed', 'caustics', 'shadow',
       'renderer', 'mantas', 'sim', 'controls', 'debug', 'post', 'cut', 'tiers', 'clock', 'watch', 'drawer',
       'stamp', 'roll', 'follow', 'lighten', 'palette', 'rules', 'bots', 'motion', 'population', 'simcore',
-      'colours', 'shape', 'movers'].map(function (m) { return '../' + m + '.js'; });
+      'colours', 'shape', 'movers'].map(function (m) { return window.MANTA_LAB + m + '.js'; });
     mods.push(imports['three'], imports['three/tsl'], imports[BASE + 'three.core.js'] || BASE + 'three.core.js');
     for (var i = 0; i < mods.length; i++) {
       var l = document.createElement('link');
@@ -516,7 +527,8 @@
 (function () {
   var q = new URLSearchParams(location.search);
   var code = /^[2-9a-hjkmnp-z]{8}$/.test(q.get('room') || '') ? q.get('room') : null;
-  var solo = q.get('solo') === '1';
+  var portal = window.MANTA_PORTAL;   // the portal package: solo against bots, always
+  var solo = portal || q.get('solo') === '1';
   /* A name: saved on this phone, or (storage blocked) carried in the
      address for this one load and taken straight back out of it. */
   var saved = null; try { saved = localStorage.getItem('manta:name'); } catch (e) { saved = null; }
@@ -526,12 +538,17 @@
   var naming = !solo && !saved && !carried;
   var p = new URLSearchParams(location.search);
   p.delete('solo'); p.delete('note'); p.delete('n');
+  if (portal) { p.delete('play'); p.delete('stage'); }
   if (solo) p.delete('room'); else { p.set('room', code || 'lobby'); if (!naming) p.set('play', '1'); }
   window.MANTA_QUERY = p.toString();
-  window.__play = { room: solo ? null : (code || 'lobby'), code: solo ? null : code, note: q.get('note') || '', naming: naming };
+  window.__play = { room: solo ? null : (code || 'lobby'), code: solo ? null : code, note: portal ? '' : (q.get('note') || ''), naming: naming, portal: portal };
+  /* main.js, by the same relative root (a module script: deferred, as ever). */
+  /* main.js, by the same relative root, written in where the tag always was:
+     parser-inserted, so deferred and in order exactly as a static tag (an
+     appended script is async, and measured half a second slower to start). */
+  document.write('<script type="module" src="' + window.MANTA_LAB + 'main.js"><\/script>');
 })();
 </script>
-<script type="module" src="../main.js"></script>
 <script>
 (function () {
   /* Where the Feedback link goes. Empty hides the link. */
@@ -547,7 +564,13 @@
   function say (text) { $('note').textContent = text; $('noteRow').hidden = !text; }
   function goSolo (why) { if (P.room) go(why ? { solo: '1', note: why } : { solo: '1' }); }
 
-  if (FEEDBACK_URL) { $('feedback').href = FEEDBACK_URL; $('feedback').hidden = false; }
+  if (FEEDBACK_URL && !P.portal) { $('feedback').href = FEEDBACK_URL; $('feedback').hidden = false; }
+  /* THE PORTAL PACKAGE (3O): solo against bots and nothing else. No rooms,
+     no Play with friends, no lab chip or corner press, no name box. */
+  if (P.portal) {
+    document.body.classList.add('portal');
+    $('privacy').hidden = true; $('privacyPortal').hidden = false;
+  }
 
   /* THE NAME PANEL (3J). The placeholder is a name made here; Play (or
      Enter) takes what was typed, cleaned as the room cleans it, or the
@@ -649,8 +672,8 @@
 
   /* Two seconds on the top-left corner shows the lab's chip and panel. */
   var hold = null, corner = $('corner');
-  corner.addEventListener('pointerdown', function (e) { e.preventDefault(); clearTimeout(hold); hold = setTimeout(function () { document.body.classList.toggle('lab'); }, 2000); });
-  ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (t) { corner.addEventListener(t, function () { clearTimeout(hold); }); });
+  if (!P.portal) corner.addEventListener('pointerdown', function (e) { e.preventDefault(); clearTimeout(hold); hold = setTimeout(function () { document.body.classList.toggle('lab'); }, 2000); });
+  if (!P.portal) ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (t) { corner.addEventListener(t, function () { clearTimeout(hold); }); });
 })();
 </script>
 </body>

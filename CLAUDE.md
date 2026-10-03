@@ -112,6 +112,8 @@ not verified.
 
 **Test harnesses live in the repo.** Every harness, runner, test client and Node suite for Manta trains lives in `tests/manta/`, outside `docs/`, so it is never served or deployed. Commit a new or changed harness in the same commit as the change it verifies. Never keep a harness only in a scratchpad: a container can be reclaimed without warning, and its harnesses go with it. Their output (screenshots, logs, downloaded tools) goes to the scratchpad, never into the repo, and there is still no `package.json`: `tests/manta/README.md` says which tools to install, at which versions, and how.
 
+**Game portals get a copied package, never a build.** `tools/manta/` holds a script that copies the feedback page, the lab modules it needs and the vendored library into a zip for game portals such as Poki and CrazyGames: solo against bots, relative paths only, and no requests outside its own files. It never changes `docs/`, the site itself still has no build step, and the zip is never committed: it is published as a GitHub release asset.
+
 ---
 
 ## Cost control, which matters here
@@ -151,6 +153,7 @@ docs/vendor/three/r186/  Three.js, vendored unmodified. Do not edit.
 wrangler.jsonc           deploy config. One main: the rooms Worker. Do not add another.
 rooms/                   Manta trains' rooms Worker. Not served.
 tests/manta/             Manta trains' test harnesses. Not served.
+tools/manta/             Manta trains' portal packaging. Not served.
 NOTES.md                 the build record
 manta-trains-design.md   Manta trains: rules, look, build plan. Not served.
 ```

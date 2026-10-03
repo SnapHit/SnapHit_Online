@@ -38,6 +38,11 @@ import { createStamper } from './stamp.js';
 import { rollSummary, wildSplit } from './roll.js';
 import { createFollow } from './follow.js';
 import { savedName } from './labels.js';
+import { GAME_NAME } from './game.js';
+/* The game's name (3O), from its one constant: the title, plus the page's
+   own suffix (<html data-title>), and every .gameName on the page. */
+document.title = GAME_NAME + (document.documentElement.dataset.title || '');
+for (const el of document.querySelectorAll('.gameName')) el.textContent = GAME_NAME;
 
 /* The feedback page (/lab/manta/play/, 3G) picks its room before this loads
    and says so in window.MANTA_QUERY; the lab itself never sets it, so here

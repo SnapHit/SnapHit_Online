@@ -147,6 +147,7 @@ One line each: what it checks, how to run it, roughly how long.
 - `room-radar/room.mjs`: the radar in a room through the proxy. `NAMES=1`. About 90 s.
 - `room-radar/page.mjs`: the radar on the feedback page. `DIRECT=1`. About 60 s.
 - `room-overflow/overflow.mjs`: overflow rooms: 25 joiners land 10, 10 and 5; a leaver's seat goes to the next joiner; the feedback page and a first visit's Play swim in the fullest room with a seat; the cap holds; every room full, the feedback page goes solo with its note. `DIRECT=1 VARS="--var LIVE_CAP:4"` (the cap lowered so a few dozen phones reach it). About 60 s.
+- `portal/portal.mjs`: the portal package (`node tools/manta/package.mjs`), unzipped and served gzipped from another origin under `/game/`, directly and in a cross-origin iframe: first frame and play within 20 s on a 300 ms, 1.5 Mbit/s link; zero requests outside the package and no room connection; WebGPU, WebGL2, and the WebGL2 fallback in an iframe without WebGPU; portal mode (no room buttons, chip, corner press or name box; label "you"; the privacy note); nothing stored; no console errors or horizontal overflow, both orientations; three touch schemes. `ZIP=<the zip> CHROME=$CHROME153 node tests/manta/portal/portal.mjs`, no server needed; `NOGZIP=1` measures the load served uncompressed. About 70 s.
 - `room-radar/radar.mjs`: the radar in the solo lab: a static-server harness, so run it with `lib/serve.sh`. About 60 s.
 
 Each room test directory carries its own `playclient.mjs`, the scripted phone

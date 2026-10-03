@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-title=" rooms probe">
 <head>
 <meta charset="utf-8">
 <meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Manta rooms probe</title>
+<title></title>
 <!-- An empty data URL, so the browser never asks for /favicon.ico. -->
 <link rel="icon" href="data:,">
 <!--
@@ -91,6 +91,7 @@
   <p class="foot">build <span id="build"></span></p>
 </main>
 
+<script type="module">import { GAME_NAME } from '../game.js'; document.title = GAME_NAME + document.documentElement.dataset.title;</script>
 <script>
 'use strict';
 /* Bumped by hand whenever this page changes, so a stale deploy is obvious. */
