@@ -146,6 +146,7 @@ One line each: what it checks, how to run it, roughly how long.
 - `room-bytes/bytes.mjs`: bytes per phone at the far zoom with a 500-long train. `NAMES=1`. About 90 s.
 - `room-radar/room.mjs`: the radar in a room through the proxy. `NAMES=1`. About 90 s.
 - `room-radar/page.mjs`: the radar on the feedback page. `DIRECT=1`. About 60 s.
+- `room-overflow/overflow.mjs`: overflow rooms: 25 joiners land 10, 10 and 5; a leaver's seat goes to the next joiner; the feedback page and a first visit's Play swim in the fullest room with a seat; the cap holds; every room full, the feedback page goes solo with its note. `DIRECT=1 VARS="--var LIVE_CAP:4"` (the cap lowered so a few dozen phones reach it). About 60 s.
 - `room-radar/radar.mjs`: the radar in the solo lab: a static-server harness, so run it with `lib/serve.sh`. About 60 s.
 
 Each room test directory carries its own `playclient.mjs`, the scripted phone

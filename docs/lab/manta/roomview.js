@@ -49,6 +49,12 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   const input = { want: null, burst: false };   // written by the touch controls in play mode
   const snaps = [], pending = [], gaps = [], offsets = [];
   let ws = null, retry = 0, backoff = 0.5, stopped = false, connected = false, everOpen = false;
+  /* OVERFLOW ROOMS (3O): a player in the public game asks the rooms which
+     public room to swim in ("lobby", "lobby-2", ...) and keeps it for every
+     reconnect; refused there as full, it asks again. allFull: every room
+     is full, and the page goes solo. Watching stays on "lobby". */
+  const publicGame = room === 'lobby' && new URLSearchParams(location.search).get('stage') !== 'cut';   // never the staged test room
+  let seatRoom = null, foundFull = '', allFull = false, asking = false;
   let rtt = null, delay = 0.1, offset = null, lastArrive = null, lastSnap = null, snapCount = 0;
   let wildNow = null;
   /* Predicted pickups (3I): play mode only. The limit is your round trip
@@ -173,7 +179,17 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   }
 
   function connect () {
-    if (stopped) return;
+    if (stopped || asking) return;
+    if (publicGame && play && !seatRoom) {
+      asking = true;
+      fetch('/lab/manta/rooms/public' + (foundFull ? '?full=' + foundFull : ''), { method: 'POST', cache: 'no-store' })
+        .then(r => r.ok ? r.json().then(j => { if (/^lobby(-\d+)?$/.test(j.room)) seatRoom = j.room; })
+                        : r.status === 503 ? r.text().then(t => { if (/full/.test(t)) allFull = true; }) : null)
+        .catch(() => { /* the page's own five seconds decide */ })
+        .then(() => { asking = false; foundFull = ''; if (allFull) { showSignal(); return; } if (seatRoom) connect(); else later(); });
+      return;
+    }
+    const target = publicGame && play ? seatRoom : room;
     let s;
     /* ?stage=cut asks for the staged cut room, which only wrangler dev has
        (tests: a train of your own to burst with); anywhere else it is a 404
@@ -181,7 +197,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     const kind = q.get('stage') === 'cut' ? 'stage/' : 'ocean/';
     /* ?xb=1 with the staged room (3H, tests only): bot 2 cuts your train. */
     const extra = kind === 'stage/' && q.get('xb') === '1' ? '?xb=1' : '';
-    try { s = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/lab/manta/rooms/' + kind + room + extra); }
+    try { s = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/lab/manta/rooms/' + kind + target + extra); }
     catch (e) { later(); return; }
     ws = s;
     s.binaryType = 'arraybuffer';
@@ -215,6 +231,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   function receive (m) {
     if (m.t === 'reload') { stopped = true; clearTimeout(retry); try { ws.close(); } catch (_) {} ws = null; connected = false; showSignal(); showReload(); return; }
     /* A room with ten players already: watch it instead of playing. */
+    if (m.t === 'full' && publicGame && play) { foundFull = seatRoom || room; seatRoom = null; return; }   // the close that follows asks again
     if (m.t === 'full') { if (!play) return; play.stop(); play = null;
       mirror.watching = true; watched = -1; you.watched = -1; you.followers.length = 0; you.dead = 0; showSignal(); return; }
     if (m.t === 'init') { Object.assign(params, m.params || {}); resync(); setNames(m.names); radar.trains.clear(); for (const r of m.rp || []) if (Array.isArray(r) && r.length === 3) radar.setPath(r[0], r[1], r[2]); if (pickups) pickups.reset(); if (hits) hits.reset();
@@ -442,6 +459,8 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
       /* Play mode: the correction sizes (units, one per snapshot) and the
          input sequence the room has acknowledged. */
       get play () { return !!play; }, get me () { return play ? play.me : null; },
+      /* The public room this player swims in, and whether every room was full (3O). */
+      get seatRoom () { return seatRoom; }, get allFull () { return allFull; },
       get corrections () { return play ? play.corrections : []; }, get seq () { return play ? play.seq : 0; },
       get ack () { return play ? play.ack : 0; }, get name () { return play ? play.name : null; },
       /* Play mode's clock (3E): steps ahead of the room, inputs the room
@@ -464,6 +483,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   function startPlaying (name) {
     if (play || stopped) return false;
     playing = true;
+    if (publicGame && !seatRoom) seatRoom = room;   // seated in place on the lobby connection; full there, it asks
     play = createPlay({ room, params, core, you, input, send, rtt: () => rtt, view: viewStep });
     pickups = createPickups(); hits = createHits();
     if (!pencil) makePencil();

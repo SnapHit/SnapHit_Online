@@ -24,6 +24,11 @@ const ROOMS = '/lab/manta/rooms/';
    this same Room class under a name no path can reach ('#' is in no room
    pattern), so nothing new is deployed: no class, no migration. */
 const LOBBY = 'lobby';
+/* OVERFLOW ROOMS (3O): the public game is "lobby", then "lobby-2" up to
+   "lobby-20" as each fills. Every one of those names is the server's own. */
+const PUBLIC = /^lobby(-([2-9]|1[0-9]|20))?$/;
+const SEATS = 10;                 // players in one room: ocean.js MAX_PLAYERS
+const SENT_FOR_MS = 10000;        // a player sent to a public room counts this long until it reports
 const REGISTRY = '#registry';
 const REG = 'https://registry.internal/';
 const ALPHABET = '23456789abcdefghjkmnpqrstuvwxyz';   // no 0/o, 1/l/i
@@ -99,6 +104,8 @@ export class Room extends DurableObject {
       /* Woken with no ocean in memory: the phone reconnects and resyncs. */
       if (!this.ocean) { try { ws.close(1012, 'room restarted'); } catch (_) { /* gone */ } return; }
       await this.ocean.message(ws, message);
+      /* A player seated or benched: the registry hears at once (3O). */
+      if (this.ocean && this.ocean.players !== this.seated) this.report();
       return;
     }
     if (message === 'who') {
@@ -129,8 +136,9 @@ export class Room extends DurableObject {
     if (!this.name) return;
     const n = this.ctx.getWebSockets('ocean').filter(s => s !== gone).length;
     this.reportedAt = Date.now();
+    this.seated = this.ocean ? this.ocean.players : 0;
     const reg = this.env.ROOMS.get(this.env.ROOMS.idFromName(REGISTRY));
-    reg.fetch(REG + 'live?name=' + this.name + '&n=' + n).then(r => r.text()).catch(() => { /* next report */ });
+    reg.fetch(REG + 'live?name=' + this.name + '&n=' + n + '&p=' + this.seated).then(r => r.text()).catch(() => { /* next report */ });
   }
 
   /* THE REGISTRY: only ever the object named REGISTRY, reached only from
@@ -142,13 +150,52 @@ export class Room extends DurableObject {
     const ttl = +this.env.CODE_TTL_MS || CODE_TTL_MS, cap = +this.env.LIVE_CAP || LIVE_CAP;
     const live = [];
     for (const [k, until] of await s.list({ prefix: 'live:' })) if (until > now) live.push(k.slice(5)); else await s.delete(k);
+    /* Players sent to a public room and not yet seated there (3O):
+       name -> times sent, each dropped when the room reports one more
+       player, or after SENT_FOR_MS. */
+    const sent = this.sent = this.sent || new Map();
+    for (const [k, a] of sent) { const b = a.filter(t => now - t < SENT_FOR_MS); if (b.length) sent.set(k, b); else sent.delete(k); }
     if (op === 'live') {
-      const n = +url.searchParams.get('n') || 0;
+      const n = +url.searchParams.get('n') || 0, p = +url.searchParams.get('p') || 0;
       if (n > 0) await s.put('live:' + name, now + LIVE_FOR_MS); else await s.delete('live:' + name);
       if (await s.get('code:' + name)) await s.put('code:' + name, now);
+      if (PUBLIC.test(name)) {
+        const was = (await s.get('seats:' + name)) || 0;
+        if (p > was && sent.has(name)) sent.get(name).splice(0, p - was);
+        if (n > 0) await s.put('seats:' + name, p); else await s.delete('seats:' + name);
+      }
       return text('ok', 200);
     }
+    /* THE PUBLIC GAME (3O): the public room with the most players that still
+       has a free seat, lobby first on a tie. A new one opens only when every
+       open one is full, and only while fewer than the cap are live, private
+       rooms included. A room a phone found full is taken as full here. */
+    if (op === 'public') {
+      const full = url.searchParams.get('full') || '';
+      if (PUBLIC.test(full)) await s.put('seats:' + full, SEATS);
+      const open = [LOBBY];
+      for (let i = 2; i <= cap; i++) { const r = LOBBY + '-' + i; if (live.includes(r) || sent.has(r)) open.push(r); }
+      let best = null, most = -1;
+      for (const r of open) {
+        const n = ((live.includes(r) && await s.get('seats:' + r)) || 0) + (sent.has(r) ? sent.get(r).length : 0);
+        if (n < SEATS && n > most) { best = r; most = n; }
+      }
+      if (!best) {
+        const busy = new Set([...live, ...sent.keys()]);
+        if (busy.size >= cap) return text('every room is full: try again soon', 503);
+        for (let i = 2; i <= cap && !best; i++) if (!busy.has(LOBBY + '-' + i)) best = LOBBY + '-' + i;
+        if (!best) return text('every room is full: try again soon', 503);
+      }
+      if (!sent.has(best)) sent.set(best, []);
+      sent.get(best).push(now);
+      return Response.json({ room: best }, { headers: { 'cache-control': 'no-store' } });
+    }
     if (op === 'enter') {
+      /* A public overflow room: the server's own name, within the cap. */
+      if (name !== LOBBY && PUBLIC.test(name)) {
+        if (!live.includes(name) && !sent.has(name) && live.length >= cap) return text('every room is busy: try again soon', 503);
+        return text('ok', 200);
+      }
       if (name !== LOBBY) {
         const seen = await s.get('code:' + name);
         if (!seen) return text('no such room', 404);
@@ -200,13 +247,19 @@ export default {
       const ip = (LOCAL.test(url.hostname) && request.headers.get('X-Test-Address')) || request.headers.get('CF-Connecting-IP') || '';
       return registry(env).fetch(REG + 'new?ip=' + encodeURIComponent(ip));
     }
+    /* The public game (3O): which public room a joining player swims in. */
+    if (path === ROOMS + 'public') {
+      if (request.method !== 'POST') return text('expected a POST', 405);
+      if (!originAllowed(request, url)) return text('not from this site', 403);
+      return registry(env).fetch(REG + 'public?full=' + encodeURIComponent(url.searchParams.get('full') || ''));
+    }
     /* The probe page's room echo is the room "probe" and no other. */
     const room = /^\/lab\/manta\/rooms\/room\/(probe)$/.exec(path);
     const ocean = /^\/lab\/manta\/rooms\/ocean\/([a-z0-9-]{1,32})$/.exec(path);
     /* Under wrangler dev with --var TEST_NAMES:1 only, the older room tests
        may name their own rooms, outside the registry and the cap. */
-    const testName = ocean && LOCAL.test(url.hostname) && env.TEST_NAMES === '1' && ocean[1] !== LOBBY && !CODE.test(ocean[1]);
-    if (ocean && ocean[1] !== LOBBY && !CODE.test(ocean[1]) && !testName) return text('no such room', 404);
+    const testName = ocean && LOCAL.test(url.hostname) && env.TEST_NAMES === '1' && !PUBLIC.test(ocean[1]) && !CODE.test(ocean[1]);
+    if (ocean && !PUBLIC.test(ocean[1]) && !CODE.test(ocean[1]) && !testName) return text('no such room', 404);
     /* The staged cut test's room (3E): under wrangler dev only. Anywhere
        else this path is not a room at all, and gets the 404 below. */
     const stage = LOCAL.test(url.hostname) ? /^\/lab\/manta\/rooms\/stage\/([a-z0-9-]{1,32})$/.exec(path) : null;

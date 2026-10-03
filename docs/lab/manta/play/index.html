@@ -539,7 +539,8 @@
 
   var P = window.__play, $ = function (id) { return document.getElementById(id); };
   var ROOMS = '/lab/manta/rooms/';
-  var NOTES = { slow: 'The room could not be reached within 5 seconds, so this is solo.' };
+  var NOTES = { slow: 'The room could not be reached within 5 seconds, so this is solo.',
+                full: 'Every room is full just now, so this is solo.' };
   /* Test switches ride along; nothing else does. */
   function keep (u) { var q = new URLSearchParams(location.search); ['backend', 'tier'].forEach(function (k) { if (q.get(k)) u.searchParams.set(k, q.get(k)); }); return u; }
   function go (params) { var u = new URL(location.pathname, location.href); for (var k in params) u.searchParams.set(k, params[k]); location.replace(keep(u).href); }
@@ -618,6 +619,7 @@
       if (!R) return;
       if (t0 === null) t0 = performance.now();
       if (R.connected && (R.me || !R.play)) { clearInterval(wait); return; }   // playing, or watching (a full room, or the name panel)
+      if (R.allFull) { clearInterval(wait); goSolo('full'); return; }        // every room full (3O)
       if (performance.now() - t0 > 5000) { clearInterval(wait); goSolo('slow'); }
     }, 100);
   }
