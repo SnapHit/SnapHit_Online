@@ -127,7 +127,7 @@ One line each: what it checks, how to run it, roughly how long.
 ### Room tests (via `lib/rooms.sh`; each up to 10 min)
 
 - `room-base/roomtest.mjs`: an ocean room with Node clients. `DIRECT=1`. About 3 min.
-- `room-base/devcheck3b.mjs`: the static site and the rooms through wrangler dev. `DIRECT=1 SKIPRAW=1`. About 30 s. Its two echo checks send 50 pings back to back, over the 30-messages-a-second limit the Worker gained in 3G, so they fail by design, and its two "who" checks fail beside them (not investigated); the rest hold.
+- `room-base/devcheck3b.mjs`: the static site and the rooms through wrangler dev: 404s, the origin rule, the edge echo and the "probe" room's echo (pings paced at one every 40 ms, under the rooms' 30 a second) and "who". `DIRECT=1`. About 40 s.
 - `room-base/watchmode.mjs`: watch mode in the page. `DIRECT=1`. About 60 s.
 - `room-play/playtest.mjs`: the play-mode bars (corrections, cuts, bytes, drops, restart) with the phone's own code. `NAMES=1`, `PARTS=corr,cut,bytes,drop,restart`, ideally `ALONE=1`. About 4 min per delay.
 - `room-play/playmode.mjs`: play mode in the page through a proxy. `NAMES=1`. About 90 s per delay.
@@ -153,6 +153,10 @@ One line each: what it checks, how to run it, roughly how long.
 Each room test directory carries its own `playclient.mjs`, the scripted phone
 as it was when that test was written. They differ; do not merge them without
 re-running every test that imports one.
+
+### Acceptance tests, `accept/` (no browser, no server)
+
+- `accept.mjs`: the design doc's acceptance tests 3, 4 and 6 against the real simulation, moved out of `docs/` in 3O; the recorded sweeps are `accept-sweeps.txt` and `accept-3e.txt`. `node tests/manta/accept/accept.mjs 3 0 3` (three seeds, about 45 s); `6` takes a second; the full sweeps take far longer than 90 s.
 
 ### Shared
 

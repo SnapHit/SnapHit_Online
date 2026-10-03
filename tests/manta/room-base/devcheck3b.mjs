@@ -36,13 +36,20 @@ const open = path => new Promise(res => { const w = new WebSocket(WSB + path, { 
   w.onopen = () => { clearTimeout(t); res(w); }; w.onerror = () => { clearTimeout(t); res(null); }; });
 const ask = (w, msg) => new Promise(res => { const t = setTimeout(() => res('TIMEOUT'), 8000); w.onmessage = e => { clearTimeout(t); res(String(e.data)); }; w.send(msg); });
 const echoTest = async path => { const w = await open(path); if (!w) return 'could not open'; const rtt = [];
-  for (let i = 0; i < 50; i++) { const t0 = performance.now(); const got = await ask(w, 'ping ' + i); if (got !== 'ping ' + i) { w.close(); return 'wrong: ' + got; } rtt.push(performance.now() - t0); }
+  /* Paced (3O): the rooms close a socket over 30 messages a second (3G), so one ping every 40 ms. */
+  for (let i = 0; i < 50; i++) { if (i) await new Promise(r => setTimeout(r, 40)); const t0 = performance.now(); const got = await ask(w, 'ping ' + i); if (got !== 'ping ' + i) { w.close(); return 'wrong: ' + got; } rtt.push(performance.now() - t0); }
   w.close(1000, 'done'); rtt.sort((a, b) => a - b); return 'ok, 50 echoes, median ' + rtt[25].toFixed(2) + ' ms, worst ' + rtt[49].toFixed(2) + ' ms (localhost)'; };
 { const r = await echoTest('/lab/manta/rooms/echo'); ok('the edge echo echoes', r.startsWith('ok'), r); }
 { const r = await echoTest('/lab/manta/rooms/room/probe'); ok('the room echo echoes', r.startsWith('ok'), r); }
-{ const a = await open('/lab/manta/rooms/room/whotest'), b2 = await open('/lab/manta/rooms/room/whotest'), c = await open('/lab/manta/rooms/room/other');
-  const wa = a && await ask(a, 'who'), wb = b2 && await ask(b2, 'who'), wc = c && await ask(c, 'who');
-  ok('two connections to the same room see each other in "who"; another room sees only itself', wa === '{"who":2}' && wb === '{"who":2}' && wc === '{"who":1}', 'room whotest: ' + wa + ' / ' + wb + '; room other: ' + wc);
+/* "who" in the one echo room there is since 3G, "probe": any other room name
+   is refused (404, checked above). The old half, "another room sees only
+   itself", is retired: there is no second echo room to ask, and an issued
+   room code opens an ocean, which does not answer "who" (room limits and
+   issued codes are room-limits/limits.mjs's). */
+await new Promise(r => setTimeout(r, 300));
+{ const a = await open('/lab/manta/rooms/room/probe'), b2 = await open('/lab/manta/rooms/room/probe'), c = null;
+  const wa = a && await ask(a, 'who'), wb = b2 && await ask(b2, 'who');
+  ok('two connections to the probe room see each other in "who"', wa === '{"who":2}' && wb === '{"who":2}', 'room probe: ' + wa + ' / ' + wb);
   if (b2) b2.close(1000, 'x'); await new Promise(r => setTimeout(r, 300));
   const after = a && await ask(a, 'who'); ok('and when one leaves, "who" drops', after === '{"who":1}', 'after one closed: ' + after);
   for (const w of [a, c]) if (w) w.close(1000, 'done'); }

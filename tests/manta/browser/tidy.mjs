@@ -16,7 +16,7 @@ await p.waitForFunction(()=>window.__labReady===true,null,{timeout:25000}).catch
 await p.waitForTimeout(1500);
 
 const r=await p.evaluate(async()=>{
-  const L=window.__lab, S=window.__sim, F=L.follower, M=L.mantas, R=L.renderer();
+  const L=window.__lab, S=window.__sim, F=L.follower, M=L.mantas, R=typeof L.renderer==="function"?L.renderer():L.renderer;   // the renderer object itself since 3M
   L.pause();
   const frame=()=>new Promise(res=>requestAnimationFrame(()=>res()));
   /* Count uploads of the pool's own five attributes, per rendered frame. */

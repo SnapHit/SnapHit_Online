@@ -20,15 +20,15 @@
  * used are the ones the page and the older suites already use: params, the
  * brain object and pinBurst.
  */
-import { createSim, STEP } from './sim.js';
-import { PRESETS } from './bots.js';
+import { createSim, STEP } from '../../../docs/lab/manta/sim.js';
+import { PRESETS } from '../../../docs/lab/manta/bots.js';
 import { readFileSync } from 'node:fs';
 
 /* params.js imports three for its uniforms, so Node cannot load it. Its
    defaults are read from the file itself instead, so there is still one
    source for Nathan's values and this cannot drift from the drawer. */
 const P = {};
-for (const m of readFileSync(new URL('./params.js', import.meta.url), 'utf8')
+for (const m of readFileSync(new URL('../../../docs/lab/manta/params.js', import.meta.url), 'utf8')
     .matchAll(/\{ key: '(\w+)',[^}]*?def: ([-\d.e]+)/g)) P[m[1]] = parseFloat(m[2]);
 
 const MATCH = 5 * 60;                       // simulated seconds
