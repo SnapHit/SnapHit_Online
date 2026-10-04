@@ -39,6 +39,7 @@ import { rollSummary, wildSplit } from './roll.js';
 import { createFollow } from './follow.js';
 import { savedName } from './labels.js';
 import { GAME_NAME } from './game.js';
+import { createHint } from './hint.js';
 /* The game's name (3O), from its one constant: the title, plus the page's
    own suffix (<html data-title>), and every .gameName on the page. */
 document.title = GAME_NAME + (document.documentElement.dataset.title || '');
@@ -301,6 +302,7 @@ function advance (now, dt) {
     if (controls) controls.apply(sim.you, STEP);
     sim.step(dt, dbg.rate === 0, owed);   // Pause and Step hold what is drawn
     uArenaR.value = sim.params.arenaR;
+    if (hint) hint.update(dt, !!sim.input.burst && sim.you.followers.length > 0 && !(sim.you.dead > 0), controls && controls.keyed);
   } else if (sim) {
     /* Steps of exactly 1/60, capped so a long pause does not fast-forward
        the whole world when the tab comes back. */
@@ -327,6 +329,7 @@ function advance (now, dt) {
       const t0 = performance.now();
       sim.step();
       stepCost += performance.now() - t0; stepCount++;
+      if (hint) hint.update(STEP, sim.you.bursting === true, controls && controls.keyed);
       if (stepCount >= 60) {
         panel.set('sim step', (stepCost / stepCount).toFixed(3) + ' ms  \u00b7  ' +
           sim.rivals.length + ' bots, ' + wildSplit(sim).text);
@@ -460,6 +463,7 @@ window.__lab.step = (seconds = 1 / 60) => {
   return simTime;
 };
 
+let hint = null;
 function makeControls () {
   if (controls) return;
   const canvas = lab.renderer && lab.renderer.domElement;
@@ -468,7 +472,11 @@ function makeControls () {
     x: sim.you.x + (u - 0.5) * view.w,
     z: sim.you.z + (v - 0.5) * view.h,
   }), () => P.scheme);
-  window.__lab.controls = controls;           // the keys and mouse harness drives it (4A)
+  /* THE CONTROLS HINT (4A, hint.js): the first swim of this session, for
+     the device in use. ?hint=0 keeps it off, for the pixel comparisons. */
+  if (controls && !hint && query.get('hint') !== '0') { hint = createHint(); hint.show(); }
+  window.__lab.controls = controls;
+  window.__lab.hint = hint;
 }
 lab.start().then(ok => {
   if (!ok) { window.__labReady = true; return; }
