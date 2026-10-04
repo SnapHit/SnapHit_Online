@@ -40,6 +40,7 @@ import { createFollow } from './follow.js';
 import { savedName } from './labels.js';
 import { GAME_NAME } from './game.js';
 import { createHint } from './hint.js';
+import { createSharkMesh } from './sharkmesh.js';
 /* The game's name (3O), from its one constant: the title, plus the page's
    own suffix (<html data-title>), and every .gameName on the page. */
 document.title = GAME_NAME + (document.documentElement.dataset.title || '');
@@ -108,7 +109,9 @@ const BURST_SLOT = STAMP_SLOTS;
    deposits nothing adds exactly zero, which is what the classic proof
    measures. */
 const SLASH_SLOT = STAMP_SLOTS + 1;
-const lm = FX ? createLightMemory(STAMP_SLOTS + 2) : null;
+/* And one for the whale shark's wake (4A stage 5), the plankton it disturbs. */
+const SHARK_SLOT = STAMP_SLOTS + 2;
+const lm = FX ? createLightMemory(STAMP_SLOTS + 3) : null;
 if (lm) useLightMemory(lm);
 /* The seabed, generated once into a texture on the first draw: the renderer
    has to exist before anything can be rendered into a target. */
@@ -125,7 +128,7 @@ if (shadows) useShadows(shadows);
    fade measured in tens of seconds. 0.9994 a frame at 60 is a half life of
    about nineteen seconds. Stamped by the same calls, rendered only when the
    slider asks for it. */
-const lmSlow = FX ? createLightMemory(STAMP_SLOTS + 2) : null;
+const lmSlow = FX ? createLightMemory(STAMP_SLOTS + 3) : null;
 if (lmSlow) { lmSlow.setFade(0.9994); useLongMemory(lmSlow); }
 let slowAttached = false;
 
@@ -294,6 +297,7 @@ function applyView (v) {
 /* The camera and every instance live in follow.js. */
 follower = createFollow({ mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS,
                                 PARKED, camera, zoomFor, setZoom, applyView, uCam, cut, look: LOOK, slashSlot: SLASH_SLOT,
+                                sharkSlot: SHARK_SLOT, sharkMesh: createSharkMesh(scene),
                                 get view () { return view; }, get sim () { return sim; }, get P () { return P; },
                                 get lm () { return lm; }, get lmSlow () { return lmSlow; }, get post () { return post; },
                                 get shadows () { return shadows; } });
@@ -342,6 +346,8 @@ function advance (now, dt, drive = false) {
       sim.params.bloomPull = P.bloomPull; sim.params.trainScale = P.trainScale;
       sim.params.pinkOn = P.pinkOn; sim.params.pinkWait = P.pinkWait; sim.params.pinkClear = P.pinkClear; sim.params.pinkNotice = P.pinkNotice;
       sim.params.pinkFlee = P.pinkFlee; sim.params.pinkReward = P.pinkReward; sim.params.pinkStay = P.pinkStay;
+      sim.params.sharkOn = P.sharkOn; sim.params.sharkEvery = P.sharkEvery; sim.params.sharkStay = P.sharkStay;
+      sim.params.sharkSpeed = P.sharkSpeed; sim.params.sharkLen = P.sharkLen; sim.params.sharkWide = P.sharkWide;
       /* THE ARENA CHANGES AT THE NEXT RESTART, never under you: moving the
          wall while a run is in progress can put your leader outside it, and
          outside the wall is a crash you did not make. */

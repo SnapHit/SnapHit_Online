@@ -23,6 +23,7 @@ import { STEP, DEF, FADE, zoomFor, viewFor, joinMix, looseMix, sizeFor, leaderSi
 export { STEP, DEF, FADE, zoomFor, viewFor, joinMix, looseMix, sizeFor, leaderSize, createHash };
 
 import { createPink } from './pink.js';
+import { createShark } from './shark.js';
 export function createSim ({ seed = 1, params = {} } = {}) {
   const p = { ...DEF, ...params };
   /* One generator, swappable, so New ocean can reseed the world in place:
@@ -404,6 +405,10 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   }
   const ruleCtx = { p, next, groupCount: () => GROUPS, wild, scratch, hash, trains, you, blooms, events, now: () => time, pastOf };
   const { scatter, crash, cutAt, resolveTouches, payForBurst, steerRival } = createRules(ruleCtx);
+  /* THE WHALE SHARK (4A stage 5, shark.js): its touches go through these
+     rules, so a cut by it and a crash into it are events like any other. */
+  const sharkRun = createShark({ p, next, trains, rules: { crash, cutAt }, get events () { return events; }, now: () => time });
+  brainCtx.shark = sharkRun.m; brainCtx.sharkDist = sharkRun.spineDist; brainCtx.sharkTail = sharkRun.tail;
 
   function stepTrain (t, want, dt) {
     if (t.crashed > 0) t.crashed = Math.max(0, t.crashed - dt);
@@ -474,6 +479,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     seedTrail(you);
     events.length = 0;
     pinkRun.m.alive = false; pinkRun.m.state = 'idle'; pinkRun.m.lastGone = time;
+    sharkRun.m.alive = false; sharkRun.m.lastGone = time;
   }
 
   function step () {
@@ -526,6 +532,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     /* After every leader has moved and decided its burst, before the hash:
        it is never in the hash, so only its own rule can take it. */
     pinkRun.step(dt);
+    sharkRun.step(dt);
 
     /* The hash carries every leader and follower circle, which is what both
        recruiting and crashing ask about. Wild mantas go in too, because
@@ -565,6 +572,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     params: p, blooms, you, rivals, bots, botMix, brain, setBotCount, trains, input, step, wild, groups, hash, joinedAt,
     liveWild: livingWild, ambientWild, debrisWild,
     pink: pinkRun.m,
+    shark: sharkRun.m, sharkDist: sharkRun.spineDist, sharkTail: sharkRun.tail,
     scatter, crash, cutAt, makeTrain, seedTrail, restart, events, newOcean,
     /* For tests: where a train stood `back` steps ago (null without p.history). */
     pastOf,

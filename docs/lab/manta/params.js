@@ -175,6 +175,14 @@ export const SPEC = [
   { key: 'pinkFlee',       label: 'pink manta flee speed', def: 260,   min: 150,  max: 400,   step: 5,     gpu: false },
   { key: 'pinkReward',     label: 'pink manta followers',  def: 10,    min: 1,    max: 30,    step: 1,     gpu: false },
   { key: 'pinkStay',       label: 'pink manta stays (s)',  def: 60,    min: 10,   max: 180,   step: 5,     gpu: false },
+  /* THE WHALE SHARK (4A stage 5, 7.1): off by default everywhere; the solo
+     drawer turns it on. Rooms keep it off until Nathan says otherwise. */
+  { key: 'sharkOn',        label: 'whale shark 0=off 1=on', def: 0,    min: 0,    max: 1,     step: 1,     gpu: false },
+  { key: 'sharkEvery',     label: 'whale shark every (s)', def: 150,   min: 20,   max: 400,   step: 10,    gpu: false },
+  { key: 'sharkStay',      label: 'whale shark stays (s)', def: 40,    min: 10,   max: 90,    step: 5,     gpu: false },
+  { key: 'sharkSpeed',     label: 'whale shark speed',     def: 120,   min: 60,   max: 200,   step: 5,     gpu: false },
+  { key: 'sharkLen',       label: 'whale shark length',    def: 320,   min: 160,  max: 500,   step: 10,    gpu: false },
+  { key: 'sharkWide',      label: 'whale shark width',     def: 70,    min: 30,   max: 120,   step: 5,     gpu: false },
 ];
 
 /* Plain numbers, read from JS each frame. */

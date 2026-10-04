@@ -169,6 +169,27 @@ export function createBrain (ctx) {
       }
     }
 
+    /* THE WHALE SHARK (4A stage 5, 7.1): steer clear of its body and the
+       path ahead of it, harder the nearer and the more cautious; a greedy
+       bot follows it to feed on what it frees, a few lengths behind. */
+    const sh = ctx.shark;
+    if (sh && sh.alive && ctx.sharkDist) {
+      const half = (p.sharkWide || 70) / 2, ahead = 500;
+      /* Its spine, extended ahead of the head along its heading. */
+      const hx = sh.x - Math.sin(sh.head) * ahead, hz = sh.z - Math.cos(sh.head) * ahead, tl = ctx.sharkTail();
+      const dx = hx - tl.x, dz = hz - tl.z, L2 = dx * dx + dz * dz || 1e-9;
+      const u = Math.max(0, Math.min(1, ((t.x - tl.x) * dx + (t.z - tl.z) * dz) / L2));
+      const px = tl.x + dx * u, pz = tl.z + dz * u, d = Math.hypot(t.x - px, t.z - pz);
+      const keep = half + 140 + t.caution * 160;
+      if (d < keep) {
+        const k = (1 - d / keep) * (1.5 + t.caution * 2.5), nx = (t.x - px) / (d || 1), nz = (t.z - pz) / (d || 1);
+        gx += nx * k * 2; gz += nz * k * 2;
+      }
+      if (t.greed >= 0.9 && t.goalKind !== 'pink') {
+        const bx = tl.x + Math.sin(sh.head) * 220, bz = tl.z + Math.cos(sh.head) * 220, db = Math.hypot(bx - t.x, bz - t.z);
+        if (db < reachOf(t) && db > 120) { const n = db || 1; gx += ((bx - t.x) / n) * 0.9; gz += ((bz - t.z) / n) * 0.9; t.goalKind = 'shark'; }
+      }
+    }
     /* Burst to catch the pink manta when near it and able to pay. */
     if (!burst && t.goalKind === 'pink' && ctx.pink && ctx.pink.alive && t.followers.length > 0) {
       const d = Math.hypot(ctx.pink.x - t.x, ctx.pink.z - t.z);

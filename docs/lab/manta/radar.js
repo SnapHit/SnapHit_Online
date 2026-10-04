@@ -109,6 +109,9 @@ export function createRadar () {
       g.strokeStyle = 'rgba(230,241,251,0.35)'; g.lineWidth = 1 * pr;
       g.strokeRect(X(you.x - o.view.w / 2), Z(you.z - o.view.h / 2), o.view.w * scale, o.view.h * scale);
     }
+    /* THE WHALE SHARK (4A stage 5): a dark-grey capsule from head to tail,
+       its true width at radar scale, from the moment it appears. */
+    if (o.shark) { g.globalAlpha = 0.85; g.strokeStyle = 'rgba(150,160,172,0.9)'; g.lineCap = 'round'; g.lineWidth = Math.max(2, o.shark.w * scale) ; g.beginPath(); g.moveTo(X(o.shark.t.x), Z(o.shark.t.z)); g.lineTo(X(o.shark.x), Z(o.shark.z)); g.stroke(); g.globalAlpha = 1; }
     /* THE PINK MANTA (4A stage 4): a pink dot from the moment it appears, so
        everyone sees the chase; last, so nothing covers it. */
     if (o.pink) { g.globalAlpha = 1; g.fillStyle = '#ff5fb7'; g.beginPath(); g.arc(X(o.pink.x), Z(o.pink.z), 2.2 * pr, 0, Math.PI * 2); g.fill(); g.strokeStyle = 'rgba(255,230,245,0.8)'; g.lineWidth = 0.8 * pr; g.stroke(); }

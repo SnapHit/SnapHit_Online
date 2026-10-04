@@ -101,6 +101,7 @@ export function createFollow (ctx) {
   let bestPeak = 0, beatShown = false, boardAt = 0, offScreen = 0;
   let zoomNow = null, wasDying = false, lastRuns = undefined;   // the eased camera (3L)
   let pinkBelly = null, pinkDrawn = false, pinkFlashAt = -1;    // the pink manta (4A stage 4)
+  let sharkStamped = false;                                       // the whale shark (4A stage 5)
   const pinkFlash = { x: 0, z: 0 };
   /* THE BURST ZOOM (4A, 10.2's zoom row): while you burst the view widens a
      further burstZoom percent, easing out over BURST_OUT seconds and back
@@ -208,7 +209,8 @@ export function createFollow (ctx) {
     const mine = you && you.watched >= 0 ? you.watched : (you ? you.id : -1);
     perf2.last = radarUI.draw(model, { size, opacity: P.radarOpacity ?? 0.4, arenaR: sim.params.arenaR || P.arenaR || 2000, range: P.radarRange || 0,
       you: you ? { id: mine, x: you.x, z: you.z, len: sim.watching ? you.len : you.followers.length } : null, view: ctx.view, colourOf: radarColour,
-      pink: sim.pink && sim.pink.alive ? { x: sim.pink.x, z: sim.pink.z } : null }, now);
+      pink: sim.pink && sim.pink.alive ? { x: sim.pink.x, z: sim.pink.z } : null,
+      shark: sim.shark && sim.shark.alive && sim.sharkTail ? { x: sim.shark.x, z: sim.shark.z, t: sim.sharkTail(), w: sim.params.sharkWide || 70 } : null }, now);
   }
 
   function followCamera (dt) {
@@ -395,6 +397,21 @@ export function createFollow (ctx) {
       if (pinkBelly !== belly) { pinkBelly = belly; m.setCutMix(PINK_SLOT, belly ? 0 : 1); m.setTintScale(PINK_SLOT, belly ? 1.3 : 1); }
       pinkDrawn = true;
     } else if (pinkDrawn) { m.aPos.setXYZ(PINK_SLOT, PARKED, 0, PARKED); pinkDrawn = false; }
+    /* THE WHALE SHARK (4A stage 5): its mesh where the simulation has it,
+       and its wake stamped along its length each frame, the plankton's own
+       blue-green at one and a half times a wild manta's deposit, so the
+       glow outlines a dark shape (sharkmesh.js). Reduced motion changes
+       nothing: it is slow. */
+    const sh = ctx.sim.shark;
+    if (ctx.sharkMesh) {
+      const alive = !!(sh && sh.alive);
+      ctx.sharkMesh.set(alive, alive ? sh.x : 0, alive ? sh.z : 0, alive ? sh.head : 0);
+      if (ctx.lm && ctx.sharkSlot !== undefined) {
+        if (alive) { const tl = ctx.sim.sharkTail ? ctx.sim.sharkTail() : { x: sh.x, z: sh.z }; const P = ctx.P || ctx.sim.params;
+          ctx.lm.stamp(ctx.sharkSlot, tl.x, tl.z, sh.x, sh.z, (ctx.sim.params.sharkWide || 70) / 2, 0.10, 0.42, 0.36, 0.0018 * (P.stamp ?? 3) * Math.max(0, dt) * 60 * 0.35 * 1.5); sharkStamped = true; }
+        else if (sharkStamped) { ctx.lm.stamp(ctx.sharkSlot, 0, 0, 0, 0, 1, 0, 0, 0, 0); sharkStamped = false; }
+      }
+    }
     for (let i = WILD_SLOTS; i < w.length; i++) {
       const q = w[i];
       if (!q || !q.alive) continue;
@@ -445,6 +462,7 @@ export function createFollow (ctx) {
            0.3 s where it was taken (the slash's slot, free at a catch). Its
            appearance and leaving play nothing: it is seen, not announced. */
         if (e.kind === 'pink') { if (e.what === 'catch') { pinkFlashAt = realNow(); pinkFlash.x = e.x; pinkFlash.z = e.z; } continue; }
+        if (e.kind === 'shark') continue;   // seen, not announced
         cut.trigger({ x: e.x, z: e.z });
         if (e.kind === 'crash' && e.id === you.id) shake = 0.25;
         if (NEW && e.kind === 'cut') {

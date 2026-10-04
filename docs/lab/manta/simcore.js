@@ -28,6 +28,9 @@ export const DEF = {
      appears; the distance at which it flees; its flee speed; the followers a
      catch adds; how long it stays uncaught before it dives. */
   pinkOn: 1, pinkWait: 60, pinkClear: 800, pinkNotice: 300, pinkFlee: 260, pinkReward: 10, pinkStay: 60,
+  /* THE WHALE SHARK (4A stage 5, 7.1), off until Nathan has tried it: how
+     often it appears, how long it stays, its speed, its length and width. */
+  sharkOn: 0, sharkEvery: 150, sharkStay: 40, sharkSpeed: 120, sharkLen: 320, sharkWide: 70,
   /* v1.10 rule 3: a crash ends the run. The daze and the lone-leader stun
      are gone with it — there is no longer a you to daze. */
   deathBeat: 1.5,       // seconds before you are swimming again
