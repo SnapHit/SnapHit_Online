@@ -102,7 +102,12 @@ export function createStamper (ctx) {
          stamps a point rather than a stripe across the whole ocean. */
       const jumped = moved > 200;
       const speed = dt > 0 ? moved / dt : 0;
-      const speedFactor = Math.min(Math.max(speed / CRUISE, 0.25), 1.5);
+      /* Your leader's burst writes the brightest line on screen (4A stage 3,
+         change 4): its cap goes from 1.5 to 2.0 while you burst, in the new
+         look. A burst is 470 against the reference 120, so the cap is what
+         decides it; every other manta keeps 1.5. */
+      const cap = sl === 0 && ctx.burstHot && ctx.burstHot() ? 2.0 : 1.5;
+      const speedFactor = Math.min(Math.max(speed / CRUISE, 0.25), cap);
       /* Your leader's deposit doubles for 0.2 s after a recruit (4A stage 3, change 3; follow.js). */
       const boost = sl === 0 && ctx.recruitBoost ? ctx.recruitBoost() : 1;
       const s = STAMP_BASE * P.stamp * (dt * 60) * speedFactor * boost;

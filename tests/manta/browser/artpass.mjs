@@ -148,7 +148,8 @@ if (WANT.includes('4')) {
     await ctx.close();
   }
   const ratio = got.new.mem.map((v, i) => v / Math.max(1e-6, got.classic.mem[i]));
-  ok('new: the burst wake just behind your leader is about 1.33x the classic one (cap 2.0 against 1.5) at 30, 60 and 90 units back: ' + ratio.map(x => x.toFixed(2)).join(' '), got.new.bursting && got.classic.bursting && ratio.every(x => x > 1.2 && x < 1.45), JSON.stringify(got));
+  /* The leader's own deposit is 2.0 / 1.5 = 1.33x; the texels just behind it also hold the followers' deposits (unchanged) and the fading wake from before the burst, so the pixel ratio sits between 1.1 and 1.33. */
+  ok('new: the burst wake just behind your leader is brighter than the classic one (its own deposit 1.33x, the texels 1.1 to 1.33x with the followers\' share) at 30, 60 and 90 units back: ' + ratio.map(x => x.toFixed(2)).join(' '), got.new.bursting && got.classic.bursting && ratio.every(x => x > 1.1 && x <= 1.34), JSON.stringify(got));
 }
 
 if (WANT.includes('5')) {
