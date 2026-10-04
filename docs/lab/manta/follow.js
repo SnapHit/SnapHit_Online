@@ -14,6 +14,39 @@ import { createRadar, createRadarModel } from './radar.js';
 export function createFollow (ctx) {
   const { mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS, PARKED,
           camera, zoomFor, setZoom, applyView, uCam, cut } = ctx;
+  /* THE NEW LOOK (4A stage 3) is gated here and nowhere else in this file;
+     ?look=classic is the end of stage 1. */
+  const NEW = ctx.look !== 'classic';
+  /* THE CUT'S KICK AND SLASH (4A stage 3, change 1). On your own cut on
+     screen the camera and the ocean's view centre kick 9 units along your
+     heading and spring back, critically damped (no overshoot) with a time
+     constant of 55 ms, on a real clock so the slow-motion beat does not
+     stretch it; and on any cut on screen a slash is stamped into the light
+     memory: 140 units along the cutter's heading through the contact point,
+     18 wide, the cutter's colour lifted 60 percent towards white, 0.30 a
+     frame for 120 ms. Reduced flash and motion: no kick, the slash at 30
+     percent. Both cost a few adds and one stamp: nothing a tier pays for. */
+  const KICK = 9, KICK_TAU = 55, KICK_FOR = 300, SLASH_FOR = 120, SLASH_LEN = 140, SLASH_W = 18, SLASH_AMOUNT = 0.30;
+  const realNow = () => performance.now();
+  let kickAt = -1, kickX = 0, kickZ = 0, slashAt = -1, slashOn = false;
+  const slashSeg = { x0: 0, z0: 0, x1: 0, z1: 0, r: 1, g: 1, b: 1, k: 1 };
+  const kickNow = () => { if (kickAt < 0) return 0; const t = realNow() - kickAt; if (t > KICK_FOR) { kickAt = -1; return 0; } const k = t / KICK_TAU; return (1 + k) * Math.exp(-k); };
+  function startSlash (e, cutter, slot) {
+    const fx = -Math.sin(cutter.head), fz = -Math.cos(cutter.head);
+    slashSeg.x0 = e.x - fx * SLASH_LEN / 2; slashSeg.z0 = e.z - fz * SLASH_LEN / 2;
+    slashSeg.x1 = e.x + fx * SLASH_LEN / 2; slashSeg.z1 = e.z + fz * SLASH_LEN / 2;
+    const T = mantas.aTint, lift = c => { c = Math.min(1, Math.max(0, c)); return c + (1 - c) * 0.6; };
+    slashSeg.r = lift(slot >= 0 ? T.getX(slot) : 0.8); slashSeg.g = lift(slot >= 0 ? T.getY(slot) : 0.8); slashSeg.b = lift(slot >= 0 ? T.getZ(slot) : 0.8);
+    slashSeg.k = cut && cut.reduced ? 0.3 : 1;
+    slashAt = realNow(); slashOn = true;
+  }
+  function drawSlash () {
+    if (!ctx.lm || ctx.slashSlot === undefined) return;
+    if (slashAt >= 0 && realNow() - slashAt <= SLASH_FOR) {
+      const s = slashSeg;
+      ctx.lm.stamp(ctx.slashSlot, s.x0, s.z0, s.x1, s.z1, SLASH_W, s.r, s.g, s.b, SLASH_AMOUNT * s.k);
+    } else if (slashOn) { slashAt = -1; slashOn = false; ctx.lm.stamp(ctx.slashSlot, 0, 0, 0, 0, 1, 0, 0, 0, 0); }
+  }
 
   /* A recruit does not snap to your colour: 7.2 calls for it to arrive over a
      beat. It cannot be a gradient across the animal's body without a seventh
@@ -353,6 +386,20 @@ export function createFollow (ctx) {
         if (Math.abs(e.x - at.x) > hw || Math.abs(e.z - at.z) > hh) { offScreen++; continue; }
         cut.trigger({ x: e.x, z: e.z });
         if (e.kind === 'crash' && e.id === you.id) shake = 0.25;
+        if (NEW && e.kind === 'cut') {
+          const cutter = e.by === you.id ? you : (ctx.sim.trains.find(t => t.id === e.by) || null);
+          if (cutter) startSlash(e, cutter, dressOf.has(e.by) ? dressOf.get(e.by) : -1);
+          if (cutter === you && !(cut && cut.reduced)) { kickAt = realNow(); kickX = -Math.sin(you.head) * KICK; kickZ = -Math.cos(you.head) * KICK; }
+        }
+      }
+    }
+    if (NEW) {
+      drawSlash();
+      const a = kickNow();
+      if (a > 0) {
+        camera.position.x += kickX * a; camera.position.z += kickZ * a;
+        uCam.value.x += kickX * a; uCam.value.y += kickZ * a;
+        camera.updateMatrixWorld();
       }
     }
     if (shake > 0) {
@@ -387,6 +434,7 @@ export function createFollow (ctx) {
 
   return { followCamera, get peak () { return peakLength; }, get offScreen () { return offScreen; }, get zoom () { return zoomNow; },
            get zoomDrawn () { return zoomDrawn; }, get burstMix () { return burstMix; },
+           get kick () { return kickNow(); }, get slashing () { return slashOn; }, get look () { return NEW ? 'new' : 'classic'; },
            /* THE VIEW THE ROOM IS TOLD is the base one, without the burst's
               widening: roomcore's MARGIN (400 units beyond the view) covers
               the extra 12% with room to spare (at the far zoom on a phone

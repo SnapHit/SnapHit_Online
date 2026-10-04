@@ -54,6 +54,11 @@ const query = new URLSearchParams(typeof window.MANTA_QUERY === 'string' ? windo
    scene on a real phone rather than guessed at. */
 export const FX = query.get('fx') !== 'off';
 const TONE = query.get('tone') || 'neutral';
+/* THE LOOK (4A stage 3). ?look=classic is the look as it was at the end of
+   stage 1, pixel for pixel at a fixed seed and step (browser/classic.mjs
+   proves it); the new look is the default. Everything the art pass adds is
+   gated on this and nothing else, so the switch is one line per effect. */
+export const LOOK = query.get('look') === 'classic' ? 'classic' : 'new';
 /* ?tier=high|medium|low pins the tier so each one can be looked at and
    measured on demand instead of waiting for a device slow enough to pick it. */
 const FORCED_TIER = query.get('tier');
@@ -99,7 +104,11 @@ panel.probeAdapter();
    followers along the length of the train, and the nine scripted rivals. */
 const STAMP_SLOTS = 24;
 const BURST_SLOT = STAMP_SLOTS;
-const lm = FX ? createLightMemory(STAMP_SLOTS + 1) : null;
+/* One more past the burst, for the cut's slash (4A stage 3). A slot that
+   deposits nothing adds exactly zero, which is what the classic proof
+   measures. */
+const SLASH_SLOT = STAMP_SLOTS + 1;
+const lm = FX ? createLightMemory(STAMP_SLOTS + 2) : null;
 if (lm) useLightMemory(lm);
 /* The seabed, generated once into a texture on the first draw: the renderer
    has to exist before anything can be rendered into a target. */
@@ -116,7 +125,7 @@ if (shadows) useShadows(shadows);
    fade measured in tens of seconds. 0.9994 a frame at 60 is a half life of
    about nineteen seconds. Stamped by the same calls, rendered only when the
    slider asks for it. */
-const lmSlow = FX ? createLightMemory(STAMP_SLOTS + 1) : null;
+const lmSlow = FX ? createLightMemory(STAMP_SLOTS + 2) : null;
 if (lmSlow) { lmSlow.setFade(0.9994); useLongMemory(lmSlow); }
 let slowAttached = false;
 
@@ -282,7 +291,7 @@ function applyView (v) {
 
 /* The camera and every instance live in follow.js. */
 follower = createFollow({ mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS,
-                                PARKED, camera, zoomFor, setZoom, applyView, uCam, cut,
+                                PARKED, camera, zoomFor, setZoom, applyView, uCam, cut, look: LOOK, slashSlot: SLASH_SLOT,
                                 get view () { return view; }, get sim () { return sim; }, get P () { return P; },
                                 get lm () { return lm; }, get lmSlow () { return lmSlow; },
                                 get shadows () { return shadows; } });
@@ -290,6 +299,7 @@ const followCamera = dt => follower.followCamera(dt);
 window.__lab.zoom = () => follower.zoom;   // the eased camera zoom (3L), for the tests
 window.__lab.zoomDrawn = () => follower.zoomDrawn;   // with the burst zoom (4A) applied
 window.__lab.roomView = roomView;                // the view the room is told (4A tests)
+window.__lab.look = LOOK;
 window.__lab.view = view;                   // the live view in world units, what the room is told (4A tests)
 window.__lab.follower = follower;              // events skipped off screen, for the checks
 
