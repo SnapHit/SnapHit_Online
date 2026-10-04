@@ -41,6 +41,15 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   const params = Object.assign({}, DEF, start || {});
   const core = createMirror(params), wildView = createWildView();
   const radar = createRadarModel();        // the radar's trains (3L), fed by the room's channel
+  /* THE PINK MANTA (4A stage 4): what the room sends (flag 32), drawn at
+     the render delay between its last two samples like the trains, with
+     the roll and the flee from the newest. A catch you make is predicted:
+     bursting within the recruit radius of where it is drawn hides it and
+     plays the catch at once; the room's own catch event confirms it, and
+     the followers arrive with the room's lengths. If the room still sends
+     it a second later, it was not caught and it shows again. */
+  const pinkView = { a: null, b: null, roll: -1, flee: false, predictedAt: 0 };
+  const pink = { alive: false, x: 0, z: 0, head: 0, roll: -1, state: 'drift', caught: 0 };
   const you = { id: -1, x: 0, z: 0, head: 0, s: 0, followers: [], dead: 0, peak: 0, lastPeak: 0, len: 0, watched: -1 };
   const rivals = [], wild = [], events = [], board = [];
   const drawn = new Map();                 // train id -> what is drawn for it
@@ -262,6 +271,8 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     /* The radar's channel (3L): every train, five times a second; your own
        train comes from your own leader each frame in play (follow.js). */
     if (m.rd) { const nowMs = performance.now(), sp = params.spacing || 19; for (const r of m.rd) if (!(play && r[0] === play.id)) radar.update(r[0], r[1], r[2], r[3], r[5], r[4], nowMs, sp); }
+    if (m.pk) { pinkView.a = pinkView.b; pinkView.b = { t: m.time, x: m.pk.x, z: m.pk.z, h: m.pk.h }; pinkView.roll = m.pk.roll; pinkView.flee = m.pk.flee; }
+    else { pinkView.a = pinkView.b = null; pinkView.predictedAt = 0; }
     setNames(m.names);
     /* After the mirror took this snapshot's paths: the prediction lays its
        followers along this train's path, up to the true leader. */
@@ -291,6 +302,13 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
        a hit not predicted) plays now, a crash with your camera's shake.
        Everyone else's are held so they land where their trains are drawn. */
     for (const e of m.ev || []) {
+      if (e.k === 'pink') {
+        /* Your own predicted catch, confirmed: nothing more to play. */
+        if (e.what === 'catch' && play && e.by === play.id && pinkView.predictedAt) { pinkView.predictedAt = 0; pink.caught++; continue; }
+        if (e.what === 'catch') pink.caught++;
+        pending.push({ time: m.time, kind: 'pink', what: e.what, x: e.x, z: e.z, by: e.by });
+        continue;
+      }
       if (hits && play && play.id >= 0 && e.by === play.id) {
         if (!hits.confirm({ kind: e.k, x: e.x, z: e.z })) events.push({ kind: e.k, x: e.x, z: e.z, by: e.by, id: e.k === 'crash' ? you.id : undefined });
         continue;
@@ -430,12 +448,26 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     pending.sort((p, q) => p.time - q.time);
     while (pending.length && pending[0].time <= T) {
       const e = pending.shift();
-      if (e.time >= T - 0.5) events.push({ kind: e.kind, x: e.x, z: e.z, by: e.by });
+      if (e.time >= T - 0.5) events.push({ kind: e.kind, what: e.what, x: e.x, z: e.z, by: e.by });
+    }
+    /* The pink manta at T, between its last two samples. */
+    {
+      const a = pinkView.a, b = pinkView.b;
+      const hidden = pinkView.predictedAt && performance.now() - pinkView.predictedAt < 1000;
+      if (b && !hidden) {
+        const f = a && b.t > a.t ? Math.max(0, Math.min(1, (T - a.t) / (b.t - a.t))) : 1;
+        pink.x = a ? a.x + (b.x - a.x) * f : b.x; pink.z = a ? a.z + (b.z - a.z) * f : b.z; pink.head = b.h;
+        pink.roll = pinkView.roll; pink.state = pinkView.flee ? 'flee' : 'drift'; pink.alive = true;
+      } else pink.alive = false;
+      if (pink.alive && play && play.live && !paused && !pinkView.predictedAt && input.burst && you.len > 0 && Math.hypot(you.x - pink.x, you.z - pink.z) <= (params.recruitR || 30) * (params.trainScale || 1)) {
+        pinkView.predictedAt = performance.now();
+        events.push({ kind: 'pink', what: 'catch', x: pink.x, z: pink.z, by: play.id, predicted: true });
+      }
     }
   }
 
   const mirror = {
-    watching: !play, params, you, rivals, trains: board, wild, events, time: 0, radar,
+    watching: !play, params, you, rivals, trains: board, wild, events, time: 0, radar, pink,
     input, blooms: [],
     step,
     zoom: () => zoomFor(you.len, params),

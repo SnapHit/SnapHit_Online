@@ -48,6 +48,8 @@ const simParams = P => ({
   wildSize: P.wildSize, bloomPull: P.bloomPull, trainScale: P.trainScale,
   arenaR: P.arenaR, arenaRWanted: P.arenaR, bots: P.bots,
   burstCost: P.burstCost, scatterGlow: P.scatterGlow,
+  /* The pink manta (4A stage 4): the room's own, as every gameplay value. */
+  pinkOn: P.pinkOn, pinkWait: P.pinkWait, pinkClear: P.pinkClear, pinkNotice: P.pinkNotice, pinkFlee: P.pinkFlee, pinkReward: P.pinkReward, pinkStay: P.pinkStay,
 });
 
 const MAX_PLAYERS = 10;           // at most 12 (3G); the ocean has ten trains to drive
@@ -95,6 +97,11 @@ export function createOcean (env, url, opts = {}) {
     seed = crypto.getRandomValues(new Uint32Array(1))[0];
     sim = createSim({ seed, params: simParams(d.P) });
     sim.params.history = true;          // the ring lag compensation reads (sim.js)
+    /* Under wrangler dev only (--var PINK_WAIT:4 PINK_STAY:40): the pink
+       manta in seconds rather than a minute, for the room tests. A deploy
+       sets neither, so production keeps the drawer's defaults. */
+    if (env && env.PINK_WAIT > 0) sim.params.pinkWait = +env.PINK_WAIT;
+    if (env && env.PINK_STAY > 0) sim.params.pinkStay = +env.PINK_STAY;
     sim.you.dead = 1e9; sim.you.followers.length = 0;   // no human manta yet
     if (staged) stage();
   });

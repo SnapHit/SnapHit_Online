@@ -58,7 +58,7 @@
  */
 import { createMotion } from './motion.js';
 
-export const PROTOCOL = 2;
+export const PROTOCOL = 3;             // 3: the pink manta (4A stage 4): flag 32, event kinds 2 to 4
 export const SNAP_HZ = 20;
 export const WILD_EVERY = 4;             // snapshots between full wild lists: 5 a second
 export const MARGIN = 400;               // units beyond the view a phone is sent
@@ -151,9 +151,11 @@ export function snapFor (sim, phone, n, events, step = 0) {
   w.put8(countAt, count);
 
   const evAt = w.at; w.u8(0); let ne = 0;
-  for (const e of events) if ((e.kind === 'crash' || e.kind === 'cut') && near(view, e.x, e.z) && ne < 255) {
-    const by = e.kind === 'cut' ? e.by : e.id;
-    w.u8(e.kind === 'cut' ? 1 : 0); w.i16(e.x - cx); w.i16(e.z - cz); w.u8(Number.isInteger(by) && by >= 0 && by < 255 ? by : 255); ne++;
+  for (const e of events) if ((e.kind === 'crash' || e.kind === 'cut' || e.kind === 'pink') && near(view, e.x, e.z) && ne < 255) {
+    const by = e.kind === 'crash' ? e.id : e.by;
+    /* 0 crash, 1 cut; the pink manta (4A stage 4): 2 caught, 3 appeared, 4 left. */
+    const kind = e.kind === 'cut' ? 1 : e.kind === 'pink' ? (e.what === 'catch' ? 2 : e.what === 'appear' ? 3 : 4) : 0;
+    w.u8(kind); w.i16(e.x - cx); w.i16(e.z - cz); w.u8(Number.isInteger(by) && by >= 0 && by < 255 ? by : 255); ne++;
   }
   w.put8(evAt, ne);
 
@@ -239,6 +241,15 @@ export function snapFor (sim, phone, n, events, step = 0) {
     w.u8(Math.min(255, sim.rivals.length));
     for (const r of sim.rivals.slice(0, 255)) { w.u8(r.id & 255); w.i16(r.x - cx); w.i16(r.z - cz); w.u16(r.followers.length); w.u16(r.runs); w.u8(r.dead > 0 ? 0 : 1); }
   }
+  /* THE PINK MANTA (flag 32, 4A stage 4): while it is in the water, where
+     it is, its heading, its roll and whether it flees, every snapshot and
+     whatever the phone's view, since its radar dot is for everyone. Seven
+     bytes. No record means it is not in the water. */
+  if (sim.pink && sim.pink.alive) {
+    flags |= 32;
+    const pk = sim.pink;
+    w.i16(pk.x - cx); w.i16(pk.z - cz); w.u8(ang(pk.head)); w.u8(pk.roll < 0 ? 255 : Math.min(254, Math.round(pk.roll * 254))); w.u8(pk.state === 'flee' ? 1 : 0);
+  }
   /* PLAY MODE (flag 8): the player's own leader, true and unrounded
      enough to predict from, and its clock: how early its inputs arrived
      (the worst since the last snapshot, with the newest seq that covers),
@@ -288,13 +299,14 @@ export function decodeSnap (buf) {
     tr.push(q);
   }
   const ev = [];
-  for (let c = u8(); c > 0; c--) { const kind = u8(); const e = { k: kind === 1 ? 'cut' : 'crash', x: cx + i16(), z: cz + i16() }, by = u8(); e.by = by === 255 ? -1 : by; ev.push(e); }
+  for (let c = u8(); c > 0; c--) { const kind = u8(); const e = { k: kind === 1 ? 'cut' : kind >= 2 ? 'pink' : 'crash', x: cx + i16(), z: cz + i16() }, by = u8(); e.by = by === 255 ? -1 : by; if (kind >= 2) e.what = kind === 2 ? 'catch' : kind === 3 ? 'appear' : 'leave'; ev.push(e); }
   const m = { t: 'snap', n, k, time: k / 60, tr, ev };
   if (flags & 1) { m.bd = []; for (let c = u8(); c > 0; c--) { const id = u8(); m.bd.push([id, u16()]); } }
   const rec = () => { const slot = u16(), x = cx + i16(), z = cz + i16(), h = unang(u8()), fl = u8(), col = u8(); return [slot, x, z, h, fl, col === 255 ? -1 : col]; };
   if (flags & 2) { m.wd = []; for (let c = u16(); c > 0; c--) m.wd.push(rec()); }
   if (flags & 4) { m.wa = []; for (let c = u16(); c > 0; c--) m.wa.push(rec()); m.wg = []; for (let c = u16(); c > 0; c--) m.wg.push(u16()); }
   if (flags & 16) { m.rd = []; for (let c = u8(); c > 0; c--) m.rd.push([u8(), cx + i16(), cz + i16(), u16(), u16(), u8()]); }   // [id, x, z, len, runs, alive]
+  if (flags & 32) { const x = cx + i16(), z = cz + i16(), h = unang(u8()), r = u8(), f = u8(); m.pk = { x, z, h, roll: r === 255 ? -1 : r / 254, flee: f === 1 }; }   // the pink manta (4A stage 4)
   if (flags & 8) {
     const f32 = () => { const v = dv.getFloat32(o, true); o += 4; return v; };
     const f = u8(), me = { x: f32(), z: f32(), h: f32(), s: i32() / 16, len: u16(), runs: u16() };
