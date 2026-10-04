@@ -15,8 +15,8 @@ const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceSc
 const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
 const errs = []; p.on('console', c => { if (c.type() === 'error') errs.push(c.text().slice(0, 140)); }); p.on('pageerror', e => errs.push('pageerror: ' + e.message.slice(0, 140)));
 /* BACK=gpu asks for WebGPU (Chrome 153 under SwiftShader), to compile its shader there; otherwise WebGL2. */
-const BACKEND = process.env.BACK === 'gpu' ? 'webgpu' : 'webgl2';
-await p.goto(O + '/lab/manta/?seed=7&paused=1&hint=0&tier=low&backend=' + BACKEND + '&bots=0&train=40', { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));
+const BACKEND = process.env.BACK === 'gpu' ? 'webgpu' : 'webgl2', TIER = process.env.TIER || 'low';   // TIER=high|medium|low
+await p.goto(O + '/lab/manta/?seed=7&paused=1&hint=0&tier=' + TIER + '&backend=' + BACKEND + '&bots=0&train=40', { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));
 await p.waitForFunction(() => window.__labReady === true && window.__labDrew === true, null, { timeout: 25000, polling: 100 }).catch(() => console.log('(no ready)'));
 await p.evaluate(() => { for (let i = 0; i < 80; i++) window.__lab.step(1 / 60); });
 const h2f = h => { const e = (h >> 10) & 0x1f, m = h & 0x3ff; return e === 0 ? m / 1024 * Math.pow(2, -14) : (1 + m / 1024) * Math.pow(2, e - 15); };

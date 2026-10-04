@@ -4,6 +4,7 @@
    belly; a pink dot on the radar where it is; a burst onto it catches it,
    adds ten followers at once and stamps a pink light burst where it was. */
 import { chromium } from '../lib/tools.mjs';
+const TIER = process.env.TIER || 'low';   // TIER=high|medium|low
 const O = 'http://127.0.0.1:' + process.env.PORT, OUT = process.env.MANTA_OUT || '/tmp';
 const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 85000);
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x ? '  [' + x + ']' : '')); };
@@ -11,7 +12,7 @@ const b = await chromium.launch({ executablePath: process.env.CHROME, args: ['--
 const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
 const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
 const errs = []; p.on('console', c => { if (c.type() === 'error') errs.push(c.text().slice(0, 140)); }); p.on('pageerror', e => errs.push('pageerror: ' + e.message.slice(0, 140)));
-await p.goto(O + '/lab/manta/?seed=7&paused=1&hint=0&tier=low&backend=webgl2&bots=0&train=20', { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));
+await p.goto(O + '/lab/manta/?seed=7&paused=1&hint=0&tier=' + TIER + '&backend=webgl2&bots=0&train=20', { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));
 await p.waitForFunction(() => window.__labReady === true && window.__labDrew === true, null, { timeout: 25000, polling: 100 }).catch(() => console.log('(no ready)'));
 await p.evaluate(() => { for (let i = 0; i < 80; i++) window.__lab.step(1 / 60); });   // past the reveal
 const h2f = h => { const e = (h >> 10) & 0x1f, m = h & 0x3ff; return e === 0 ? m / 1024 * Math.pow(2, -14) : (1 + m / 1024) * Math.pow(2, e - 15); };
