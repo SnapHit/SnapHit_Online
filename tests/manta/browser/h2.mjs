@@ -92,6 +92,8 @@ async function sample(q,label,snaps){
   p.on('pageerror',e=>errs.push('pageerror: '+(e.stack||e.message).slice(0,350)));
   p.on('request',r=>{const u=r.url(); if(!u.startsWith(O)&&!/^(data|about|blob):/.test(u))off.push(u);});
   p.on('response',r=>{if(r.status()>=400)bad4.push(r.status()+' '+r.url().replace(O,''));});
+  /* BACK=gl forces the WebGL2 fallback (4A), which is what this harness measures on Chromium 141. */
+  if (process.env.BACK==='gl') q+=(q.includes('?')?'&':'?')+'backend=webgl2';
   await p.goto(O+'/lab/manta/'+q,{waitUntil:'load'}).catch(e=>console.log('  goto '+e.message));
   await p.waitForFunction(()=>window.__labReady===true,null,{timeout:25000}).catch(()=>console.log('  (no ready)'));
   /* 3A: every crash or cut set piece, where and when (scene clock) it fired,

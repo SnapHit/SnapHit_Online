@@ -22,6 +22,7 @@ import { STEP, DEF, FADE, zoomFor, viewFor, joinMix, looseMix, sizeFor, leaderSi
 /* Re-exported, so everything that imported these from sim.js still does. */
 export { STEP, DEF, FADE, zoomFor, viewFor, joinMix, looseMix, sizeFor, leaderSize, createHash };
 
+import { createPink } from './pink.js';
 export function createSim ({ seed = 1, params = {} } = {}) {
   const p = { ...DEF, ...params };
   /* One generator, swappable, so New ocean can reseed the world in place:
@@ -335,6 +336,10 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   const trains = [you, ...rivals];
   brainCtx.trains = trains;
   brainCtx.wild = wild;
+  /* THE PINK MANTA (4A stage 4, pink.js): stepped with the world, read by
+     the brain (brainCtx.pink), drawn by follow.js. */
+  const pinkRun = createPink({ p, next, trains, get events () { return events; }, now: () => time });
+  brainCtx.pink = pinkRun.m;
   /* The slider, applied as it moves: a new bot is dealt its personality from
      the same generator, so the ocean stays a function of the seed. */
   function setBotCount (n) {
@@ -468,6 +473,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     you.s = 0; you.peak = 0; you.lastPeak = 0; you.rebuild = 10;
     seedTrail(you);
     events.length = 0;
+    pinkRun.m.alive = false; pinkRun.m.state = 'idle'; pinkRun.m.lastGone = time;
   }
 
   function step () {
@@ -517,6 +523,9 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     stepWild(dt);
     drainSurplus(dt);
     regrowWild(dt);
+    /* After every leader has moved and decided its burst, before the hash:
+       it is never in the hash, so only its own rule can take it. */
+    pinkRun.step(dt);
 
     /* The hash carries every leader and follower circle, which is what both
        recruiting and crashing ask about. Wild mantas go in too, because
@@ -555,6 +564,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     get time () { return time; },
     params: p, blooms, you, rivals, bots, botMix, brain, setBotCount, trains, input, step, wild, groups, hash, joinedAt,
     liveWild: livingWild, ambientWild, debrisWild,
+    pink: pinkRun.m,
     scatter, crash, cutAt, makeTrain, seedTrail, restart, events, newOcean,
     /* For tests: where a train stood `back` steps ago (null without p.history). */
     pastOf,

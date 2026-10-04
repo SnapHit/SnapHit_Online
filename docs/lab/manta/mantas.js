@@ -62,7 +62,11 @@ const WILD_COUNT = 300;
 export const RIVAL_BASE = TRAIN_MAX;
 export const WILD_BASE = TRAIN_MAX + RIVAL_TRAINS * RIVAL_LEN;
 export const WILD_SLOTS = WILD_COUNT + (TRAIN_MAX - 1) + RIVAL_TRAINS * (RIVAL_LEN - 1);
-export const COUNT = WILD_BASE + WILD_SLOTS;
+/* THE PINK MANTA (4A stage 4): one slot of its own past the wild block,
+   leader sized, with its own two tints (colours.js): dark from above, pink
+   when it rolls. */
+export const PINK_SLOT = WILD_BASE + WILD_SLOTS;
+export const COUNT = PINK_SLOT + 1;
 /* THE SPILL (ruling 1 of 2B part five). Every simulated manta is drawn: a
    follower past its train's block — a bot's ninth onwards, your 301st — is
    drawn after the fixed slots, in its train's colour, and the pool grows as
@@ -301,6 +305,7 @@ export function createMantas (scene, { scripted = false } = {}) {
   for (let i = 0; i < WILD_SLOTS; i++) {
     roles.push({ kind: 'wild', idx: i, size: WILD_SIZE, wild: true, group: 'wild' });
   }
+  roles.push({ kind: 'pink', idx: 0, size: LEADER_SIZE, group: 'pink' });
   /* The spill: dressed in its train's colour by follow.js as it is used. */
   const spillRole = () => ({ kind: 'spill', idx: 0, size: FOLLOWER_SIZE, group: 'spill' });
   for (let i = COUNT; i < cap; i++) roles.push(spillRole());

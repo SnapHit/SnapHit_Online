@@ -73,6 +73,18 @@ export function gainFor (key) {
   return LUM(yoursTint(c.hex)) / LUM(tint(c.hex, levelFor(c.hex, BASE_LEVEL)));
 }
 
+/* THE PINK MANTA (4A stage 4, 7.2's colour rules): the only pink thing in
+   the ocean, so nothing else may reach this hue. Its train tint is the pink
+   at a level above your own train's; its own tint, which it wears from
+   above, is a dark plum at about a third of a wild manta's luminance: a
+   shape in the water rather than a light, as the real one's black back is
+   from above, and still a manta you can see (at a tenth it vanished into
+   the caustics). The cut mix walks between them: 1 is the back, 0 the
+   belly. */
+export const PINK_HEX = 0xff5fb7;
+export const pinkTint = () => tint(PINK_HEX, 0.46);
+export const pinkBackTint = () => tint(0x6a3058, 1.6);   // luminance about a third of a wild manta's: a shape, not a light
+
 export function createColours ({ COUNT, roles, aTint, rivals, wilds, train }) {
   let n = COUNT;
   /* The deal. A seed per load, ?seed= to reproduce one, ?player= to pin the
@@ -119,6 +131,9 @@ export function createColours ({ COUNT, roles, aTint, rivals, wilds, train }) {
       } else if (r.kind === 'rival') {
         t = baseTintFor(dealt.rivals[r.rival].hex);
         own = t;
+      } else if (r.kind === 'pink') {
+        t = pinkTint();
+        own = pinkBackTint();
       } else {
         t = baseTintFor(dealt.wilds[r.idx].hex);
         own = t;

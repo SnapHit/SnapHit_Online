@@ -23,6 +23,11 @@ export const DEF = {
   recruitR: 30,        // contact with a 20-unit wild manta, plus a margin
   burstCost: 0.35,      // seconds a follower
   scatterGlow: 4,
+  /* THE PINK MANTA (4A stage 4, 7.1), every (P) value: on; the wait after
+     the last was caught or left; its clearance from every leader when it
+     appears; the distance at which it flees; its flee speed; the followers a
+     catch adds; how long it stays uncaught before it dives. */
+  pinkOn: 1, pinkWait: 60, pinkClear: 800, pinkNotice: 300, pinkFlee: 260, pinkReward: 10, pinkStay: 60,
   /* v1.10 rule 3: a crash ends the run. The daze and the lone-leader stun
      are gone with it — there is no longer a you to daze. */
   deathBeat: 1.5,       // seconds before you are swimming again

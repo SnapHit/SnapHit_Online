@@ -101,11 +101,12 @@ One line each: what it checks, how to run it, roughly how long.
 
 ### Node suites, `node/` (no browser, no server)
 
+- `simtest12.mjs`: the pink manta (4A): appears after the wait, clear of every leader, one at a time; flees at 260 and outruns a cruising leader; caught only by a burst, adding exactly 10 once; a touch without bursting does nothing; greedy bots chase it hardest, timid ones rarely; off, nothing appears. Out of the fingerprint set. About 60 s.
 - `simtest.mjs` to `simtest11.mjs`: the simulation's rules, bots, pickups, cuts and the close-up zoom in plain Node, imported straight from `docs/lab/manta/`. Run all with `node/run.sh`; each well under 90 s. `simtest9.mjs` takes `SET=def` or `SET=big`. `disperse.mjs` is a helper `simtest2` imports.
 
 ### Browser harnesses, `browser/` (via `lib/serve.sh`; each up to 90 s)
 
-- `h2.mjs`: the four conditions at every tier at the near zoom, with pixel sampling. `TIERS`, `PIN`, `RADIUS`, `MOON`, `SET` env. About 80 s.
+- `h2.mjs`: the four conditions at every tier at the near zoom, with pixel sampling. `TIERS`, `PIN`, `RADIUS`, `MOON`, `SET` env; `BACK=gl` forces the WebGL2 fallback, which is what it measures on Chromium 141 (from 4A the WebGPU attempt there no longer falls back by itself on every build, and the clean-water frame then dies on the swizzle error). About 80 s.
 - `s1.mjs`: the lab page's layout, portrait and landscape, panel and drawer. About 30 s.
 - `cam.mjs`: the camera sits on your leader and the same-area rule holds. About 40 s.
 - `wake.mjs`: a wake stays on the water it was laid on while the camera moves. About 40 s.
@@ -114,7 +115,7 @@ One line each: what it checks, how to run it, roughly how long.
 - `tidy.mjs`: the growing pool: uploads per frame after growth. About 40 s.
 - `schemes.mjs`: each touch scheme steers and bursts through real PointerEvents. About 60 s.
 - `probe.mjs`: the page compiles its shaders on WebGL2 with no console errors. About 15 s.
-- `def.mjs`: the committed defaults, the scene clock and the step hook. About 40 s.
+- `def.mjs`: the committed defaults, the scene clock and the step hook; `BACK=gl` as for h2. About 40 s.
 - `rows.mjs`: the wild and mantas rows and the ordinary wild count. About 40 s.
 - `newocean.mjs`: New ocean in the page. About 40 s.
 - `zoom.mjs`: the close-up camera: zoom against length, labels and radar at both ends, a wake through a zoom step, the ease after a cut, a restart's first frame. About 80 s.
@@ -122,6 +123,7 @@ One line each: what it checks, how to run it, roughly how long.
 - `hint.mjs`: the controls hint (4A): the mouse-and-keys line on a desktop, the hold-and-double-tap line on a phone, on the lab and feedback pages; visible, fading after five seconds on a real clock, gone at once on the first burst; `?hint=0` keeps it off. About 60 s.
 - `bzoom.mjs`: the burst zoom (4A): a burst widens the view 12% with a smoothstep ease out over 0.3 s and back over 0.6 s, the close-up camera untouched, the view the room is told widening with it, reduced motion halving it, the slider at 0 turning it off. About 30 s.
 - `desktop.mjs`: the desktop layout (4A) at 1366x768, 1920x1080 and 2560x1440 with a mouse: the feedback page (solo, and the first visit's name panel) and the lab page, nothing overlapping, text at least 13 px, the radar growing with the screen, no overflow; screenshots `desk-<w>x<h>[-name|-lab].png` in `MANTA_OUT`, to be looked at. `SIZE=1920x1080` picks one size and `PART=feed|name|lab` one page; 2560x1440 needs the parts, each about 40 s.
+- `pink.mjs`: the pink manta on screen (4A): drawn in its own slot where the simulation has it, dark from above and pink while it rolls, a pink dot on the radar, a pink light burst where it is caught, ten followers at once. About 40 s.
 - `classic.mjs`: pixel-for-pixel comparisons at a fixed seed and step (4A): `?paused=1` holds the page at its first frame and `__lab.step` drives it. `MODE=self` loads one recipe twice and expects identical canvases; `MODE=ref REF=<png>` saves a reference; `MODE=cmp REF=<png> Q=look=classic` compares. `STEPS` (45) sixtieths. About 40 s.
 - `camera.mjs`: the close-up camera's restart and cut, with no rival trains and a train swimming straight so nothing can crash it: a restart's first frame at the curve for its length, read on that frame; after a cut that halves the train, the view eases back in. About 30 s.
 - `watch.mjs`: the WebGPU error watch: the page's errors and error-watch rows. Run with `CHROME=$CHROME153`; `BACK=gl` for the WebGL2 side. About 30 s.
@@ -149,6 +151,7 @@ One line each: what it checks, how to run it, roughly how long.
 - `room-hits/hits.mjs`: your own hits at once. `NAMES=1`. About 90 s.
 - `room-hits/bhits.mjs`: the feedback page in the staged cut room. `DIRECT=1`, `MODE=crash|cut`. About 60 s each.
 - `room-bytes/bytes.mjs`: bytes per phone at the far zoom with a 500-long train. `NAMES=1`. About 90 s. With the burst zoom (4A) the widest view a phone reports is 12% wider: `VIEW_W=1077 VIEW_H=2395 NAMES=1 ...` checks the limits there.
+- `room-pink/pink.mjs`: the pink manta through a room (4A): the snapshot carries it from its appearance, cruising at it catches nothing, bursting at it catches it with the length up by exactly 10 once and the room's event naming the phone, one at a time, bytes within the bar. `NAMES=1 VARS="--var PINK_WAIT:4 --var PINK_STAY:40"`. About 60 s per delay.
 - `room-radar/room.mjs`: the radar in a room through the proxy. `NAMES=1`. About 90 s.
 - `room-radar/page.mjs`: the radar on the feedback page. `DIRECT=1`. About 60 s.
 - `room-overflow/overflow.mjs`: overflow rooms: 25 joiners land 10, 10 and 5; a leaver's seat goes to the next joiner; the feedback page and a first visit's Play swim in the fullest room with a seat; the cap holds; every room full, the feedback page goes solo with its note. `DIRECT=1 VARS="--var LIVE_CAP:4"` (the cap lowered so a few dozen phones reach it). About 60 s.

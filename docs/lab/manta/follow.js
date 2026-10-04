@@ -10,6 +10,7 @@
 import { joinMix, looseMix, sizeFor, leaderSize } from './sim.js';
 import { createLabels, savedName, PALE } from './labels.js';
 import { createRadar, createRadarModel } from './radar.js';
+import { PINK_SLOT } from './mantas.js';
 
 export function createFollow (ctx) {
   const { mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS, PARKED,
@@ -63,6 +64,11 @@ export function createFollow (ctx) {
   }
   function drawSlash () {
     if (!ctx.lm || ctx.slashSlot === undefined) return;
+    if (pinkFlashAt >= 0) {
+      const k = (realNow() - pinkFlashAt) / 300;
+      if (k <= 1) { ctx.lm.stamp(ctx.slashSlot, pinkFlash.x, pinkFlash.z, pinkFlash.x, pinkFlash.z, 60 + k * 120, 1.0, 0.37, 0.72, 0.30 * (1 - k) * (1 - k) * (cut && cut.reduced ? 0.3 : 1)); return; }
+      pinkFlashAt = -1; ctx.lm.stamp(ctx.slashSlot, 0, 0, 0, 0, 1, 0, 0, 0, 0);
+    }
     if (slashAt >= 0 && realNow() - slashAt <= SLASH_FOR) {
       const s = slashSeg;
       ctx.lm.stamp(ctx.slashSlot, s.x0, s.z0, s.x1, s.z1, SLASH_W, s.r, s.g, s.b, SLASH_AMOUNT * s.k);
@@ -94,6 +100,8 @@ export function createFollow (ctx) {
   const SPILL_BASE = mantas.SPILL_BASE;
   let bestPeak = 0, beatShown = false, boardAt = 0, offScreen = 0;
   let zoomNow = null, wasDying = false, lastRuns = undefined;   // the eased camera (3L)
+  let pinkBelly = null, pinkDrawn = false, pinkFlashAt = -1;    // the pink manta (4A stage 4)
+  const pinkFlash = { x: 0, z: 0 };
   /* THE BURST ZOOM (4A, 10.2's zoom row): while you burst the view widens a
      further burstZoom percent, easing out over BURST_OUT seconds and back
      over BURST_BACK. burstMix runs 0 to 1 at those rates and the widening
@@ -199,7 +207,8 @@ export function createFollow (ctx) {
     const short = Math.min(innerWidth, innerHeight), size = Math.round(Math.max(96, Math.min(short >= 900 ? 220 : 160, short * (P.radarSize || 28) / 100)));
     const mine = you && you.watched >= 0 ? you.watched : (you ? you.id : -1);
     perf2.last = radarUI.draw(model, { size, opacity: P.radarOpacity ?? 0.4, arenaR: sim.params.arenaR || P.arenaR || 2000, range: P.radarRange || 0,
-      you: you ? { id: mine, x: you.x, z: you.z, len: sim.watching ? you.len : you.followers.length } : null, view: ctx.view, colourOf: radarColour }, now);
+      you: you ? { id: mine, x: you.x, z: you.z, len: sim.watching ? you.len : you.followers.length } : null, view: ctx.view, colourOf: radarColour,
+      pink: sim.pink && sim.pink.alive ? { x: sim.pink.x, z: sim.pink.z } : null }, now);
   }
 
   function followCamera (dt) {
@@ -373,6 +382,19 @@ export function createFollow (ctx) {
     }
     for (let i = lim; i < drawnWild; i++) m.aPos.setXYZ(WILD_BASE + i, PARKED, 0, PARKED);
     drawnWild = lim;
+    /* THE PINK MANTA (4A stage 4): dark from above (its own tint, cut mix
+       1), pink while its roll shows the belly (cut mix 0, lifted 1.3x), the
+       span narrowed through the roll to suggest the turn. Parked when it is
+       not in the water. */
+    const pk = ctx.sim.pink;
+    if (pk && pk.alive) {
+      const r = pk.roll, belly = r >= 0 && r > 0.25 && r < 0.75;
+      m.aPos.setXYZ(PINK_SLOT, pk.x, 0, pk.z); m.aHead.setX(PINK_SLOT, pk.head);
+      const span = leaderSize(ctx.sim.params) * (r >= 0 ? 0.55 + 0.45 * Math.abs(Math.cos(r * Math.PI)) : 1);
+      if (m.aSize.getX(PINK_SLOT) !== span) { m.aSize.setX(PINK_SLOT, span); sizeDirty = true; }
+      if (pinkBelly !== belly) { pinkBelly = belly; m.setCutMix(PINK_SLOT, belly ? 0 : 1); m.setTintScale(PINK_SLOT, belly ? 1.3 : 1); }
+      pinkDrawn = true;
+    } else if (pinkDrawn) { m.aPos.setXYZ(PINK_SLOT, PARKED, 0, PARKED); pinkDrawn = false; }
     for (let i = WILD_SLOTS; i < w.length; i++) {
       const q = w[i];
       if (!q || !q.alive) continue;
@@ -419,6 +441,10 @@ export function createFollow (ctx) {
       const v = ctx.view, hw = v.w / 2 + 40, hh = v.h / 2 + 40;
       for (const e of evs.splice(0)) {
         if (Math.abs(e.x - at.x) > hw || Math.abs(e.z - at.z) > hh) { offScreen++; continue; }
+        /* The pink manta's catch on screen: a pink light burst stamped for
+           0.3 s where it was taken (the slash's slot, free at a catch). Its
+           appearance and leaving play nothing: it is seen, not announced. */
+        if (e.kind === 'pink') { if (e.what === 'catch') { pinkFlashAt = realNow(); pinkFlash.x = e.x; pinkFlash.z = e.z; } continue; }
         cut.trigger({ x: e.x, z: e.z });
         if (e.kind === 'crash' && e.id === you.id) shake = 0.25;
         if (NEW && e.kind === 'cut') {

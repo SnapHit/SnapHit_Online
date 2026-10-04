@@ -166,6 +166,15 @@ export const SPEC = [
   { key: 'bots',           label: 'bot count',            def: 10,    min: 0,    max: 20,    step: 1,     gpu: false },
   { key: 'trainScale',     label: 'train size',           def: 1,     min: 0.6,  max: 2,     step: 0.05,  gpu: false },
   { key: 'scatterGlow',    label: 'scatter glow',         def: 10,     min: 0.5,  max: 10,    step: 0.5,   gpu: false },
+  /* THE PINK MANTA (4A stage 4, 7.1): on by default, with its (P) values.
+     Gameplay, so a room runs its own (rooms/ocean.js); solo reads these. */
+  { key: 'pinkOn',         label: 'pink manta 0=off 1=on', def: 1,     min: 0,    max: 1,     step: 1,     gpu: false },
+  { key: 'pinkWait',       label: 'pink manta wait (s)',   def: 60,    min: 10,   max: 180,   step: 5,     gpu: false },
+  { key: 'pinkClear',      label: 'pink manta clearance', def: 800,   min: 200,  max: 1500,  step: 50,    gpu: false },
+  { key: 'pinkNotice',     label: 'pink manta flees within', def: 300, min: 100,  max: 600,   step: 10,    gpu: false },
+  { key: 'pinkFlee',       label: 'pink manta flee speed', def: 260,   min: 150,  max: 400,   step: 5,     gpu: false },
+  { key: 'pinkReward',     label: 'pink manta followers',  def: 10,    min: 1,    max: 30,    step: 1,     gpu: false },
+  { key: 'pinkStay',       label: 'pink manta stays (s)',  def: 60,    min: 10,   max: 180,   step: 5,     gpu: false },
 ];
 
 /* Plain numbers, read from JS each frame. */

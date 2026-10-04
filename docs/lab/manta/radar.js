@@ -109,6 +109,9 @@ export function createRadar () {
       g.strokeStyle = 'rgba(230,241,251,0.35)'; g.lineWidth = 1 * pr;
       g.strokeRect(X(you.x - o.view.w / 2), Z(you.z - o.view.h / 2), o.view.w * scale, o.view.h * scale);
     }
+    /* THE PINK MANTA (4A stage 4): a pink dot from the moment it appears, so
+       everyone sees the chase; last, so nothing covers it. */
+    if (o.pink) { g.globalAlpha = 1; g.fillStyle = '#ff5fb7'; g.beginPath(); g.arc(X(o.pink.x), Z(o.pink.z), 2.2 * pr, 0, Math.PI * 2); g.fill(); g.strokeStyle = 'rgba(255,230,245,0.8)'; g.lineWidth = 0.8 * pr; g.stroke(); }
     g.restore();
     lastMs = performance.now() - t0;
     return { scale: scale / pr, centre: c / pr, drawn: drawnCount, hidden, range: o.range, yourLen, ms: lastMs };

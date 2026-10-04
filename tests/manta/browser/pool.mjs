@@ -27,6 +27,7 @@ const run=await p.evaluate(()=>{
     if(!(S.you.dead>0)) sim+=1+S.you.followers.length;
     for(const t of S.rivals) if(!(t.dead>0)){ sim+=1+t.followers.length; if(t.followers.length>maxLen) maxLen=t.followers.length; }
     for(const w of S.wild) if(w&&w.alive) sim++;
+    if(S.pink&&S.pink.alive) sim++;   // the pink manta (4A stage 4) is drawn in its own slot
     const n=M.drawn, P=M.aPos, drawn=new Set(); let d=0;
     for(let j=0;j<n;j++){ const x=P.getX(j); if(x!==M.PARKED){ d++; drawn.add(key(x,P.getZ(j))); } }
     if(d!==sim){ mismatch++; worstDiff=Math.max(worstDiff,Math.abs(d-sim)); if(firstBad.length<3) firstBad.push([i,sim,d]); }
@@ -53,6 +54,7 @@ const slider=await p.evaluate(()=>{
     S.setBotCount(nb); let bad=0, worst=0;
     for (let i=0;i<1200;i++){ S.step(); F.followCamera(1/60);
       let sim=S.you.dead>0?0:1+S.you.followers.length; for(const t of S.rivals) if(!(t.dead>0)) sim+=1+t.followers.length; for(const w of S.wild) if(w&&w.alive) sim++;
+    if(S.pink&&S.pink.alive) sim++;   // the pink manta (4A stage 4) is drawn in its own slot
       let d=0; for(let j=0;j<M.drawn;j++) if(M.aPos.getX(j)!==M.PARKED) d++;
       if(d!==sim){ bad++; worst=Math.max(worst,Math.abs(d-sim)); } }
     out[label]={ steps:1200, mismatched:bad, worst };
@@ -71,6 +73,7 @@ const grow=await p.evaluate(async()=>{
   t.followers.length=0; for(let i=0;i<3000;i++) t.followers.push({x:t.x+19*(i+1),z:t.z,head:0,born:0,from:i%20});
   F.followCamera(1/60);
   let sim=S.you.dead>0?0:1+S.you.followers.length; for(const r of S.rivals) if(!(r.dead>0)) sim+=1+r.followers.length; for(const w of S.wild) if(w&&w.alive) sim++;
+    if(S.pink&&S.pink.alive) sim++;   // the pink manta (4A stage 4) is drawn in its own slot
   let d=0; for(let j=0;j<M.drawn;j++) if(M.aPos.getX(j)!==M.PARKED) d++;
   for(let k=0;k<4;k++){ L.step(1/60); await new Promise(r=>requestAnimationFrame(()=>r())); }
   const rows=[...document.querySelectorAll('#rows dt')].map(e=>[e.textContent,e.nextElementSibling?e.nextElementSibling.textContent:'']);

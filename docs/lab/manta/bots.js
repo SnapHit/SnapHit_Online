@@ -37,6 +37,15 @@ export function createBrain (ctx) {
 
   function pickGoal (t) {
     const reach = reachOf(t);
+    /* THE PINK MANTA (4A stage 4, 7.1): greedy bots chase it hardest, a
+       bully when it is fairly near, a timid one rarely; and never past its
+       own reef line. The goal follows it (think), since it moves. */
+    const pk = ctx.pink;
+    if (pk && pk.alive) {
+      const d = Math.hypot(pk.x - t.x, pk.z - t.z);
+      const keen = t.greed >= 0.9 ? d < reach * 1.2 : t.greed >= 0.6 ? d < reach * 0.5 : (d < 250 && ctx.next() < 0.15);
+      if (keen && Math.hypot(pk.x, pk.z) <= reefLine(t) + 100) { t.goalX = pk.x; t.goalZ = pk.z; t.goalKind = 'pink'; t.goalAt = d; return; }
+    }
     let best = null, bd = reach;
     for (const w of ctx.wild) {
       if (!w || !w.alive || w.sinking > 0) continue;
@@ -84,6 +93,8 @@ export function createBrain (ctx) {
   function think (t, dt) {
     t.think = (t.think || 0) - dt;
     if (t.think <= 0) { t.think = 0.5; pickGoal(t); }
+    /* A pink goal moves; a pink goal that has gone is dropped at once. */
+    if (t.goalKind === 'pink') { const pk = ctx.pink; if (pk && pk.alive) { t.goalX = pk.x; t.goalZ = pk.z; } else { t.think = 0; pickGoal(t); } }
 
     let gx = (t.goalX === undefined ? t.x : t.goalX) - t.x;
     let gz = (t.goalZ === undefined ? t.z : t.goalZ) - t.z;
@@ -158,6 +169,11 @@ export function createBrain (ctx) {
       }
     }
 
+    /* Burst to catch the pink manta when near it and able to pay. */
+    if (!burst && t.goalKind === 'pink' && ctx.pink && ctx.pink.alive && t.followers.length > 0) {
+      const d = Math.hypot(ctx.pink.x - t.x, ctx.pink.z - t.z);
+      if (d < 160) burst = true;
+    }
     t.bursting = burst && t.followers.length > 0;
     t.want = Math.atan2(-gx, -gz);
   }

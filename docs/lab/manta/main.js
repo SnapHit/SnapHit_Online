@@ -340,6 +340,8 @@ function advance (now, dt, drive = false) {
       sim.params.wildCount = P.wildCount; sim.params.regrow = P.regrow;
       sim.params.wildSize = P.wildSize;
       sim.params.bloomPull = P.bloomPull; sim.params.trainScale = P.trainScale;
+      sim.params.pinkOn = P.pinkOn; sim.params.pinkWait = P.pinkWait; sim.params.pinkClear = P.pinkClear; sim.params.pinkNotice = P.pinkNotice;
+      sim.params.pinkFlee = P.pinkFlee; sim.params.pinkReward = P.pinkReward; sim.params.pinkStay = P.pinkStay;
       /* THE ARENA CHANGES AT THE NEXT RESTART, never under you: moving the
          wall while a run is in progress can put your leader outside it, and
          outside the wall is a crash you did not make. */

@@ -16,7 +16,9 @@ p.on('console',c=>{if(c.type()==='error')errs.push(c.text().slice(0,200));});
 p.on('pageerror',e=>errs.push('pageerror: '+(e.stack||e.message).slice(0,300)));
 p.on('request',r=>{const u=r.url(); if(!u.startsWith(O)&&!/^(data|about|blob):/.test(u))off.push(u);});
 p.on('response',r=>{if(r.status()>=400)bad4.push(r.status()+' '+r.url().replace(O,''));});
-await p.goto(O+'/lab/manta/?tier=high',{waitUntil:'load'}).catch(e=>console.log('  goto '+e.message));
+/* BACK=gl forces the WebGL2 fallback (4A): on Chromium 141 the WebGPU attempt no longer falls back by itself on every build. */
+const BACKQ=process.env.BACK==='gl'?'&backend=webgl2':'';
+await p.goto(O+'/lab/manta/?tier=high'+BACKQ,{waitUntil:'load'}).catch(e=>console.log('  goto '+e.message));
 await p.waitForFunction(()=>window.__labReady===true,null,{timeout:25000}).catch(()=>console.log('  (no ready)'));
 await p.waitForTimeout(5000);
 
