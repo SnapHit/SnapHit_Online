@@ -35,6 +35,18 @@ export function createFollow (ctx) {
      frame and a text change; nothing flashes or moves fast, so reduced
      flash and motion keep all of it. */
   const VIG_DEEP = 0.42, VIG_IN = 0.4, VIG_OUT = 0.3, COUNT_FOR = 0.5;
+  /* THE RECRUIT POPS (4A stage 3, change 3). A follower that has just
+     joined is drawn POP_BY larger for its first POP_HOLD seconds of scene
+     time and settles to its size by POP_FOR, an overshoot of the drawn size
+     only (simcore's size rule, which the tests share, is untouched); and
+     your leader's wake deposit doubles for BOOST_FOR seconds after a
+     recruit (stamp.js reads recruitBoost), so a feeding run writes a
+     brighter line. Reduced flash and motion: no overshoot (scaling is a
+     motion trigger), the deposit kept. */
+  const POP_BY = 0.30, POP_HOLD = 0.12, POP_FOR = 0.40, BOOST_FOR = 0.2, BOOST_BY = 2;
+  let lastRecruitAt = -1;
+  const popAt = age => (!NEW || (cut && cut.reduced) || age < 0 || age >= POP_FOR) ? 1
+    : 1 + POP_BY * (age <= POP_HOLD ? 1 : Math.pow(1 - (age - POP_HOLD) / (POP_FOR - POP_HOLD), 2));
   let vigBase = null, vigNow = null, beatT = 0, countFrom = 0, countTo = 0, aliveLen = 0;
   const realNow = () => performance.now();
   let kickAt = -1, kickX = 0, kickZ = 0, slashAt = -1, slashOn = false;
@@ -254,6 +266,7 @@ export function createFollow (ctx) {
       if (src >= 0) m.adoptOwn(i + 1, WILD_BASE + src);
       m.setCutMix(i + 1, 1);
       fading.set(i + 1, RECRUIT_FADE);
+      if (NEW && !dying) lastRecruitAt = ctx.sim.time;
     }
     for (const [slot, left] of fading) {
       const t = left - dt;
@@ -266,7 +279,7 @@ export function createFollow (ctx) {
   const now = ctx.sim.time;
   for (let i = 0; i < n; i++) {
     m.aPos.setXYZ(i + 1, f[i].x, 0, f[i].z); m.aHead.setX(i + 1, f[i].head);
-    const want = sizeFor(joinMix(f[i], now), ctx.sim.params);
+    const want = sizeFor(joinMix(f[i], now), ctx.sim.params) * popAt(now - f[i].born);
     if (m.aSize.getX(i + 1) !== want) { m.aSize.setX(i + 1, want); sizeDirty = true; }
   }
     /* Park what the train no longer uses, rather than leaving a stale manta
@@ -462,6 +475,7 @@ export function createFollow (ctx) {
            get zoomDrawn () { return zoomDrawn; }, get burstMix () { return burstMix; },
            get kick () { return kickNow(); }, get slashing () { return slashOn; }, get look () { return NEW ? 'new' : 'classic'; },
            get vignette () { return vigNow; }, get card () { return { from: countFrom, to: countTo, t: beatT }; },
+           get recruitBoost () { return NEW && lastRecruitAt >= 0 && ctx.sim.time - lastRecruitAt < BOOST_FOR ? BOOST_BY : 1; }, popAt,
            /* THE VIEW THE ROOM IS TOLD is the base one, without the burst's
               widening: roomcore's MARGIN (400 units beyond the view) covers
               the extra 12% with room to spare (at the far zoom on a phone

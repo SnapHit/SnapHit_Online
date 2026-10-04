@@ -247,7 +247,8 @@ const stamper = createStamper({ mantas, COUNT, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN,
                                 STAMP_SLOTS, BURST_SLOT, P,
                                 get lm () { return lm; }, get lmSlow () { return lmSlow; },
                                 get sim () { return sim; },
-                                spillSlotOf: g => follower.spillSlotOf(g) });   // follower: below, read at run time
+                                spillSlotOf: g => follower.spillSlotOf(g),   // follower: below, read at run time
+                                recruitBoost: () => follower ? follower.recruitBoost : 1 });
 const stampMantas = dt => stamper.stampMantas(dt);
 window.__lab.stamper = stamper;                // which slots lay wakes, for the checks
 

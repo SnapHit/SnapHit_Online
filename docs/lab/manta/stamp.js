@@ -103,7 +103,9 @@ export function createStamper (ctx) {
       const jumped = moved > 200;
       const speed = dt > 0 ? moved / dt : 0;
       const speedFactor = Math.min(Math.max(speed / CRUISE, 0.25), 1.5);
-      const s = STAMP_BASE * P.stamp * (dt * 60) * speedFactor;
+      /* Your leader's deposit doubles for 0.2 s after a recruit (4A stage 3, change 3; follow.js). */
+      const boost = sl === 0 && ctx.recruitBoost ? ctx.recruitBoost() : 1;
+      const s = STAMP_BASE * P.stamp * (dt * 60) * speedFactor * boost;
       /* A wake takes the colour of the train that made it (7.2), and a wild
          manta is not in one: it stirs only the plankton's own faint blue-green,
          at a fraction of the deposit, so a dark animal does not paint a dark
