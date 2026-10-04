@@ -50,6 +50,13 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
      it a second later, it was not caught and it shows again. */
   const pinkView = { a: null, b: null, roll: -1, flee: false, predictedAt: 0 };
   const pink = { alive: false, x: 0, z: 0, head: 0, roll: -1, state: 'drift', caught: 0 };
+  /* THE WHALE SHARK (4A stage 5): the room's, drawn at the render delay
+     between its last two samples; its length and width from the room's
+     parameters; a crash into its body predicted where you see it. */
+  const sharkView = { a: null, b: null };
+  const shark = { alive: false, x: 0, z: 0, head: 0, appeared: 0 };
+  const sharkTail = () => ({ x: shark.x + Math.sin(shark.head) * (params.sharkLen || 320), z: shark.z + Math.cos(shark.head) * (params.sharkLen || 320) });
+  const sharkDist = (x, z) => { const t = sharkTail(), ax = shark.x, az = shark.z, dx = t.x - ax, dz = t.z - az, L2 = dx * dx + dz * dz || 1e-9; const u = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2)); return Math.hypot(x - (ax + dx * u), z - (az + dz * u)); };
   const you = { id: -1, x: 0, z: 0, head: 0, s: 0, followers: [], dead: 0, peak: 0, lastPeak: 0, len: 0, watched: -1 };
   const rivals = [], wild = [], events = [], board = [];
   const drawn = new Map();                 // train id -> what is drawn for it
@@ -273,6 +280,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     if (m.rd) { const nowMs = performance.now(), sp = params.spacing || 19; for (const r of m.rd) if (!(play && r[0] === play.id)) radar.update(r[0], r[1], r[2], r[3], r[5], r[4], nowMs, sp); }
     if (m.pk) { pinkView.a = pinkView.b; pinkView.b = { t: m.time, x: m.pk.x, z: m.pk.z, h: m.pk.h }; pinkView.roll = m.pk.roll; pinkView.flee = m.pk.flee; }
     else { pinkView.a = pinkView.b = null; pinkView.predictedAt = 0; }
+    if (m.sk) { sharkView.a = sharkView.b; sharkView.b = { t: m.time, x: m.sk.x, z: m.sk.z, h: m.sk.h }; } else sharkView.a = sharkView.b = null;
     setNames(m.names);
     /* After the mirror took this snapshot's paths: the prediction lays its
        followers along this train's path, up to the true leader. */
@@ -302,6 +310,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
        a hit not predicted) plays now, a crash with your camera's shake.
        Everyone else's are held so they land where their trains are drawn. */
     for (const e of m.ev || []) {
+      if (e.k === 'shark') { if (e.what === 'appear') shark.appeared++; continue; }   // seen, not announced
       if (e.k === 'pink') {
         /* Your own predicted catch, confirmed: nothing more to play. */
         if (e.what === 'catch' && play && e.by === play.id && pinkView.predictedAt) { pinkView.predictedAt = 0; pink.caught++; continue; }
@@ -450,6 +459,21 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
       const e = pending.shift();
       if (e.time >= T - 0.5) events.push({ kind: e.kind, what: e.what, x: e.x, z: e.z, by: e.by });
     }
+    /* The whale shark at T, between its last two samples; a crash into its
+       body, as drawn, plays at once like a hit on a train (hits.note). */
+    {
+      const a = sharkView.a, b = sharkView.b;
+      if (b) { const f = a && b.t > a.t ? Math.max(0, Math.min(1, (T - a.t) / (b.t - a.t))) : 1;
+        shark.x = a ? a.x + (b.x - a.x) * f : b.x; shark.z = a ? a.z + (b.z - a.z) * f : b.z; shark.head = b.h; shark.alive = true; }
+      else shark.alive = false;
+      if (shark.alive && hits && play && play.live && !paused && !(you.dead > 0)) {
+        const t = performance.now();
+        if (sharkDist(you.x, you.z) <= (params.sharkWide || 70) / 2 + (params.leaderR || 14) * (params.trainScale || 1)) {
+          const h = hits.note('crash', you.x, you.z, t);
+          if (h) events.push({ kind: 'crash', x: h.x, z: h.z, by: play.id, id: you.id, predicted: true });
+        }
+      }
+    }
     /* The pink manta at T, between its last two samples. */
     {
       const a = pinkView.a, b = pinkView.b;
@@ -467,7 +491,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   }
 
   const mirror = {
-    watching: !play, params, you, rivals, trains: board, wild, events, time: 0, radar, pink,
+    watching: !play, params, you, rivals, trains: board, wild, events, time: 0, radar, pink, shark, sharkTail,
     input, blooms: [],
     step,
     zoom: () => zoomFor(you.len, params),

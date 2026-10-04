@@ -58,7 +58,7 @@
  */
 import { createMotion } from './motion.js';
 
-export const PROTOCOL = 3;             // 3: the pink manta (4A stage 4): flag 32, event kinds 2 to 4
+export const PROTOCOL = 4;             // 3: the pink manta (4A stage 4): flag 32, event kinds 2 to 4; 4: the whale shark (stage 5): flag 64, kinds 5 and 6
 export const SNAP_HZ = 20;
 export const WILD_EVERY = 4;             // snapshots between full wild lists: 5 a second
 export const MARGIN = 400;               // units beyond the view a phone is sent
@@ -151,10 +151,10 @@ export function snapFor (sim, phone, n, events, step = 0) {
   w.put8(countAt, count);
 
   const evAt = w.at; w.u8(0); let ne = 0;
-  for (const e of events) if ((e.kind === 'crash' || e.kind === 'cut' || e.kind === 'pink') && near(view, e.x, e.z) && ne < 255) {
+  for (const e of events) if ((e.kind === 'crash' || e.kind === 'cut' || e.kind === 'pink' || e.kind === 'shark') && (e.kind === 'shark' || near(view, e.x, e.z)) && ne < 255) {
     const by = e.kind === 'crash' ? e.id : e.by;
-    /* 0 crash, 1 cut; the pink manta (4A stage 4): 2 caught, 3 appeared, 4 left. */
-    const kind = e.kind === 'cut' ? 1 : e.kind === 'pink' ? (e.what === 'catch' ? 2 : e.what === 'appear' ? 3 : 4) : 0;
+    /* 0 crash, 1 cut; the pink manta (4A stage 4): 2 caught, 3 appeared, 4 left; the whale shark (stage 5): 5 appeared, 6 left, to every phone. */
+    const kind = e.kind === 'cut' ? 1 : e.kind === 'pink' ? (e.what === 'catch' ? 2 : e.what === 'appear' ? 3 : 4) : e.kind === 'shark' ? (e.what === 'appear' ? 5 : 6) : 0;
     w.u8(kind); w.i16(e.x - cx); w.i16(e.z - cz); w.u8(Number.isInteger(by) && by >= 0 && by < 255 ? by : 255); ne++;
   }
   w.put8(evAt, ne);
@@ -250,6 +250,13 @@ export function snapFor (sim, phone, n, events, step = 0) {
     const pk = sim.pink;
     w.i16(pk.x - cx); w.i16(pk.z - cz); w.u8(ang(pk.head)); w.u8(pk.roll < 0 ? 255 : Math.min(254, Math.round(pk.roll * 254))); w.u8(pk.state === 'flee' ? 1 : 0);
   }
+  /* THE WHALE SHARK (flag 64, 4A stage 5): while it is in the water, its
+     head and heading, every snapshot and to every phone (it is on every
+     radar); five bytes. Its length and width are the room's parameters. */
+  if (sim.shark && sim.shark.alive) {
+    flags |= 64;
+    w.i16(sim.shark.x - cx); w.i16(sim.shark.z - cz); w.u8(ang(sim.shark.head));
+  }
   /* PLAY MODE (flag 8): the player's own leader, true and unrounded
      enough to predict from, and its clock: how early its inputs arrived
      (the worst since the last snapshot, with the newest seq that covers),
@@ -299,7 +306,7 @@ export function decodeSnap (buf) {
     tr.push(q);
   }
   const ev = [];
-  for (let c = u8(); c > 0; c--) { const kind = u8(); const e = { k: kind === 1 ? 'cut' : kind >= 2 ? 'pink' : 'crash', x: cx + i16(), z: cz + i16() }, by = u8(); e.by = by === 255 ? -1 : by; if (kind >= 2) e.what = kind === 2 ? 'catch' : kind === 3 ? 'appear' : 'leave'; ev.push(e); }
+  for (let c = u8(); c > 0; c--) { const kind = u8(); const e = { k: kind === 1 ? 'cut' : kind >= 5 ? 'shark' : kind >= 2 ? 'pink' : 'crash', x: cx + i16(), z: cz + i16() }, by = u8(); e.by = by === 255 ? -1 : by; if (kind >= 2) e.what = kind === 2 ? 'catch' : (kind === 3 || kind === 5) ? 'appear' : 'leave'; ev.push(e); }
   const m = { t: 'snap', n, k, time: k / 60, tr, ev };
   if (flags & 1) { m.bd = []; for (let c = u8(); c > 0; c--) { const id = u8(); m.bd.push([id, u16()]); } }
   const rec = () => { const slot = u16(), x = cx + i16(), z = cz + i16(), h = unang(u8()), fl = u8(), col = u8(); return [slot, x, z, h, fl, col === 255 ? -1 : col]; };
@@ -307,6 +314,7 @@ export function decodeSnap (buf) {
   if (flags & 4) { m.wa = []; for (let c = u16(); c > 0; c--) m.wa.push(rec()); m.wg = []; for (let c = u16(); c > 0; c--) m.wg.push(u16()); }
   if (flags & 16) { m.rd = []; for (let c = u8(); c > 0; c--) m.rd.push([u8(), cx + i16(), cz + i16(), u16(), u16(), u8()]); }   // [id, x, z, len, runs, alive]
   if (flags & 32) { const x = cx + i16(), z = cz + i16(), h = unang(u8()), r = u8(), f = u8(); m.pk = { x, z, h, roll: r === 255 ? -1 : r / 254, flee: f === 1 }; }   // the pink manta (4A stage 4)
+  if (flags & 64) { m.sk = { x: cx + i16(), z: cz + i16(), h: unang(u8()) }; }   // the whale shark (4A stage 5)
   if (flags & 8) {
     const f32 = () => { const v = dv.getFloat32(o, true); o += 4; return v; };
     const f = u8(), me = { x: f32(), z: f32(), h: f32(), s: i32() / 16, len: u16(), runs: u16() };
@@ -432,6 +440,16 @@ export function createHits () {
       lastOn.set(best.r.id, nowMs);
       if (kind === 'cut' && prev !== undefined && nowMs - prev < HIT_CROSSING) return null;
       const hit = { kind, x: kind === 'cut' ? best.x : you.x, z: kind === 'cut' ? best.z : you.z, t: nowMs, on: best.r.id };
+      if (kind === 'crash') crashLock = true;
+      pend.push(hit); predicted++;
+      return hit;
+    },
+    /* A crash predicted against something that is not a train (the whale
+       shark's body, 4A stage 5): recorded exactly as detect records one,
+       so the room's crash event confirms it the same way. */
+    note (kind, x, z, nowMs) {
+      if (crashLock) return null;
+      const hit = { kind, x, z, t: nowMs, on: -2 };
       if (kind === 'crash') crashLock = true;
       pend.push(hit); predicted++;
       return hit;

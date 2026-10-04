@@ -50,6 +50,8 @@ const simParams = P => ({
   burstCost: P.burstCost, scatterGlow: P.scatterGlow,
   /* The pink manta (4A stage 4): the room's own, as every gameplay value. */
   pinkOn: P.pinkOn, pinkWait: P.pinkWait, pinkClear: P.pinkClear, pinkNotice: P.pinkNotice, pinkFlee: P.pinkFlee, pinkReward: P.pinkReward, pinkStay: P.pinkStay,
+  /* The whale shark (4A stage 5): the drawer's defaults, which keep it OFF; rooms keep it off until Nathan says otherwise. */
+  sharkOn: P.sharkOn, sharkEvery: P.sharkEvery, sharkStay: P.sharkStay, sharkSpeed: P.sharkSpeed, sharkLen: P.sharkLen, sharkWide: P.sharkWide,
 });
 
 const MAX_PLAYERS = 10;           // at most 12 (3G); the ocean has ten trains to drive
@@ -90,6 +92,12 @@ export function createOcean (env, url, opts = {}) {
   const race = staged && url.searchParams.get('xb') === '2';
   /* ?mine=N (3L, tests only): the seated train laid at N at once, no put-backs. */
   const mine = staged ? Math.round(clamp(url.searchParams.get('mine') || 0, 0, 650)) : 0;
+  /* ?shark=cross (4A stage 5, tests only): each time the whale shark appears
+     in a staged room it is set across the seated train, so a cut by it
+     through a room is deterministic (driving a train across its path under
+     lag was not). */
+  const sharkCross = staged && url.searchParams.get('shark') === 'cross';
+  let sharkPlaced = 0;
   let sim = null, build = null, seed = 0;
   let timer = null, last = 0, owed = 0, n = 0, steps = 0;
   const ready = loadDefaults(env, url).then(d => {
@@ -102,6 +110,9 @@ export function createOcean (env, url, opts = {}) {
        sets neither, so production keeps the drawer's defaults. */
     if (env && env.PINK_WAIT > 0) sim.params.pinkWait = +env.PINK_WAIT;
     if (env && env.PINK_STAY > 0) sim.params.pinkStay = +env.PINK_STAY;
+    /* And the whale shark on, in seconds (--var SHARK_ON:1 SHARK_EVERY:5): the room tests only. */
+    if (env && env.SHARK_ON === '1') sim.params.sharkOn = 1;
+    if (env && env.SHARK_EVERY > 0) sim.params.sharkEvery = +env.SHARK_EVERY;
     sim.you.dead = 1e9; sim.you.followers.length = 0;   // no human manta yet
     if (staged) stage();
   });
@@ -236,6 +247,7 @@ export function createOcean (env, url, opts = {}) {
       applyInputs(steps + 1);
       if (staged && !mine && (steps + 1) % CYCLE === 0) putBack();
       if (race && (steps + 1) % CYCLE === 55) cluster();
+      if (sharkCross && sim.shark && sim.shark.alive && sharkPlaced !== sim.shark.appeared) crossSeat();
       sim.step(); owed -= STEP; k++; steps++;
     }
     if (owed > STEP * 12) owed = 0;               // a stall is not caught up
@@ -272,6 +284,20 @@ export function createOcean (env, url, opts = {}) {
     for (const t of sim.rivals) if (t.id > 2) { t.dead = 1e9; t.followers.length = 0; }
     putBack();
     if (mine) layLong(trainOf(1), mine, sim.params);
+  }
+  /* The shark across the seated train at its sixth follower, heading
+     across the train's line there, its head 40 past the line so the body
+     spans it; the leader is six spacings away along the train, clear of
+     the body. Once per appearance; it swims on from there. */
+  function crossSeat () {
+    const t = trainOf(1), sh = sim.shark;
+    sharkPlaced = sh.appeared;
+    if (!t || t.dead > 0 || t.followers.length < 8) return;
+    const f = t.followers, a = f[5], b = f[7], c = f[6];
+    const dx = a.x - b.x, dz = a.z - b.z, n = Math.hypot(dx, dz) || 1;
+    sh.head = Math.atan2(-dx, -dz) + Math.PI / 2;
+    const sx = -Math.sin(sh.head), sz = -Math.cos(sh.head);
+    sh.x = c.x + sx * 40; sh.z = c.z + sz * 40; sh.turn = 0;
   }
   function cluster () {
     let n = 0;
