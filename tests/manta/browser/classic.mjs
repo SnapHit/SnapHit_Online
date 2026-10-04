@@ -24,13 +24,24 @@ async function shot (q, name) {
   await p.goto(O + '/lab/manta/?seed=7&paused=1&hint=0&tier=low&backend=webgl2' + (q ? '&' + q : ''), { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));
   await p.waitForFunction(() => window.__labReady === true && window.__labDrew === true, null, { timeout: 25000, polling: 100 }).catch(() => console.log('(no ready)'));
   await p.waitForTimeout(500);
-  const r = await p.evaluate(n => { const L = window.__lab, S = window.__sim; const t0 = S.time; for (let i = 0; i < n; i++) L.step(1 / 60); return { t0, t: S.time, len: S.you.followers.length, seed: L.mantas && L.mantas.seed, zoom: L.zoom() }; }, STEPS);
+  const r = await p.evaluate(n => { const L = window.__lab, S = window.__sim; const t0 = S.time; for (let i = 0; i < n; i++) L.step(1 / 60); const P0 = L.post(); return { t0, t: S.time, len: S.you.followers.length, seed: L.mantas && L.mantas.seed, zoom: L.zoom(), post: !!P0, lens: S.trains.map(t => t.followers.length).join(',') }; }, STEPS);
+  console.log('  ' + name + ': ' + JSON.stringify(r));
   const path = OUT + '/' + name + '.png';
   /* The canvas alone: the interface is DOM and is not what the look changes. */
   const el = await p.$('#gl'); await el.screenshot({ path });
   await ctx.close();
   return { r, path };
 }
+/* A warm-up load first: the first page a fresh browser draws has come out
+   brighter at the corners and dimmer at the centre than every load after
+   it, with the simulation identical, so the measured loads are never the
+   first. */
+{ const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
+  const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  await p.goto(O + '/lab/manta/?seed=7&paused=1&hint=0&tier=low&backend=webgl2', { waitUntil: 'load' }).catch(() => {});
+  await p.waitForFunction(() => window.__labReady === true && window.__labDrew === true, null, { timeout: 25000, polling: 100 }).catch(() => {});
+  await p.evaluate(() => { for (let i = 0; i < 5; i++) window.__lab.step(1 / 60); }).catch(() => {});
+  await ctx.close(); }
 const same = (a, c) => { const A = PNG.sync.read(fs.readFileSync(a)), C = PNG.sync.read(fs.readFileSync(c)); if (A.width !== C.width || A.height !== C.height) return { n: -1, pct: 100 }; let n = 0; for (let i = 0; i < A.data.length; i += 4) if (A.data[i] !== C.data[i] || A.data[i + 1] !== C.data[i + 1] || A.data[i + 2] !== C.data[i + 2]) n++; return { n, pct: 100 * n / (A.width * A.height) }; };
 if (MODE === 'self') {
   const a = await shot('', 'classic-a'), c = await shot(Q, 'classic-b');

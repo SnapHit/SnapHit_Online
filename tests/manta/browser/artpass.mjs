@@ -155,12 +155,12 @@ if (WANT.includes('4')) {
 if (WANT.includes('5')) {
   /* The first frame of a session: the drawn zoom against the camera's own, and the board, through the first 1.2 s of scene time. */
   for (const look of ['new', 'classic', 'reduced']) {
-    const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
+    /* Reduced motion as the system preference: the reveal reads it on the first frame, before any checkbox could be ticked. */
+    const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true, reducedMotion: look === 'reduced' ? 'reduce' : 'no-preference' });
     const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
     p.on('pageerror', e => errs.push('pageerror: ' + e.message.slice(0, 140)));
     await p.goto(O + '/lab/manta/?seed=7&paused=1&hint=0&tier=low&backend=webgl2' + (look === 'classic' ? '&look=classic' : ''), { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));
     await p.waitForFunction(() => window.__labReady === true && window.__labDrew === true, null, { timeout: 25000, polling: 100 }).catch(() => console.log('(no ready)'));
-    if (look === 'reduced') await p.evaluate(() => { const c = document.getElementById('reduceFlash'); c.checked = true; c.dispatchEvent(new Event('change')); });
     const r = await p.evaluate(() => { const L = window.__lab, F = L.follower, out = [], vis = () => getComputedStyle(document.getElementById('board')).visibility;
       L.step(1 / 60); out.push({ t: 1 / 60, ratio: F.zoomDrawn / F.zoom, board: vis() });
       for (let k = 2; k <= 90; k++) { L.step(1 / 60); if (k === 36 || k === 72 || k === 73 || k === 90) out.push({ t: k / 60, ratio: F.zoomDrawn / F.zoom, board: vis() }); }

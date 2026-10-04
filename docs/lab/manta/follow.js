@@ -103,6 +103,16 @@ export function createFollow (ctx) {
      its 2% a frame cap are untouched and the tests still read them. */
   const BURST_OUT = 0.3, BURST_BACK = 0.6;
   let burstMix = 0, zoomDrawn = null, baseScale = 1;
+  /* THE FIRST SWIM'S REVEAL (4A stage 3, change 5): on a session's first
+     frame the view is INTRO_BY wider than the close zoom and eases in over
+     INTRO_FOR seconds of scene time (a smoothstep), so the first frame
+     shows the ocean around you before the close-up settles; the board
+     waits for it (body.intro, the pages' CSS), so the first frame has one
+     focal point. A one-off camera move on top of the zoom curve, which is
+     untouched, and only on the first frame: a restart starts at the
+     curve. Reduced flash and motion: no move. ?look=classic: none. */
+  const INTRO_BY = 0.25, INTRO_FOR = 1.2;
+  let introMix = 1, introOn = false;
 
   /* THE BOARD. Top ten by current length, and every bot says it is a bot:
      nobody should ever wonder whether they were beaten by a person. Twice a
@@ -224,6 +234,7 @@ export function createFollow (ctx) {
     /* On the scene clock, like everything drawn: a zero-second step moves
        nothing, and the tests drive it with the injectable clock. */
     const edt = Math.max(0, Math.min(0.25, dt));
+    if (zoomNow === null && ctx.look !== 'classic' && !(cut && cut.reduced) && !watching) { introMix = 0; introOn = true; document.body.classList.add('intro'); }
     if (zoomNow === null || restarted) zoomNow = target;
     else {
       const tau = Math.max(0.05, (ZP.zoomEase || 1) * (target < zoomNow ? 1 : 2));
@@ -238,7 +249,9 @@ export function createFollow (ctx) {
     burstMix = bursting ? Math.min(1, burstMix + edt / BURST_OUT) : Math.max(0, burstMix - edt / BURST_BACK);
     const pct = Math.max(0, ZP.burstZoom ?? 12) * (cut && cut.reduced ? 0.5 : 1) / 100;
     const ease = burstMix * burstMix * (3 - 2 * burstMix);
-    zoomDrawn = zoomNow / (1 + pct * ease);
+    if (introOn) { introMix = Math.min(1, introMix + edt / INTRO_FOR); if (introMix >= 1) { introOn = false; document.body.classList.remove('intro'); } }
+    const introEase = introMix * introMix * (3 - 2 * introMix);
+    zoomDrawn = zoomNow / ((1 + pct * ease) * (1 + INTRO_BY * (1 - introEase)));
     baseScale = zoomDrawn / zoomNow;          // the base view is the drawn one times this (1 when not bursting)
     if (setZoom(zoomDrawn)) applyView(ctx.view);
     uCam.value.set(at.x, at.z);
@@ -475,6 +488,7 @@ export function createFollow (ctx) {
            get zoomDrawn () { return zoomDrawn; }, get burstMix () { return burstMix; },
            get kick () { return kickNow(); }, get slashing () { return slashOn; }, get look () { return NEW ? 'new' : 'classic'; },
            get vignette () { return vigNow; }, get card () { return { from: countFrom, to: countTo, t: beatT }; },
+           get introMix () { return introMix; },
            get recruitBoost () { return NEW && lastRecruitAt >= 0 && ctx.sim.time - lastRecruitAt < BOOST_FOR ? BOOST_BY : 1; }, popAt,
            /* THE VIEW THE ROOM IS TOLD is the base one, without the burst's
               widening: roomcore's MARGIN (400 units beyond the view) covers

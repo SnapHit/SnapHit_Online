@@ -25,7 +25,8 @@ const desk = await b.newContext({ viewport: { width: 1366, height: 768 }, device
 /* ---------------------------------------------------------------- the burst zoom */
 {
   const p = await open(desk, '/lab/manta/?tier=low&backend=webgl2&bots=0&train=40&hint=0');
-  await p.evaluate(async () => { const m = await import('/lab/manta/params.js'); m.setParam('bots', 0); window.__lab.pause(); window.__lab.step(1 / 60); });
+  /* Past the first swim's reveal (4A stage 3, change 5: 1.2 s of scene time), so the ratios below are the burst's alone. */
+  await p.evaluate(async () => { const m = await import('/lab/manta/params.js'); m.setParam('bots', 0); window.__lab.pause(); for (let i = 0; i < 80; i++) window.__lab.step(1 / 60); });
   const read = () => p.evaluate(() => ({ z: window.__lab.zoom(), d: window.__lab.zoomDrawn(), w: window.__lab.view.w, rw: window.__lab.roomView.w, rh: window.__lab.roomView.h, mix: window.__lab.follower.burstMix, len: window.__sim.you.followers.length }));
   const r0 = await read();
   await p.keyboard.down('Space');
