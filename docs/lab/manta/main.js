@@ -138,7 +138,12 @@ if (shadows) shadows.attach(mantas.shadowMesh);
 const createRoomView = ROOM ? (await import('./roomview.js')).createRoomView : null;
 /* ?bots=N (solo, tests only): the bot count from the address. */
 if (!ROOM && query.get('bots') !== null) P.bots = Math.max(0, Math.min(20, +query.get('bots') || 0));
-const sim = SPIKE ? null : ROOM ? createRoomView({ room: ROOM, build: panel.BUILD, view, play: PLAY, name: () => window.MANTA_NAME || savedName() }) : createSim({ seed: mantas.seed, params: {
+/* What the room is told about the view: the close-up camera's own view,
+   not the burst zoom's wider one (follow.js baseView says why). Read at
+   call time, because the camera is built further down. */
+let follower = null;
+const roomView = { get w () { return follower ? follower.baseView.w : view.w; }, get h () { return follower ? follower.baseView.h : view.h; } };
+const sim = SPIKE ? null : ROOM ? createRoomView({ room: ROOM, build: panel.BUILD, view: roomView, play: PLAY, name: () => window.MANTA_NAME || savedName() }) : createSim({ seed: mantas.seed, params: {
   cruise: P.cruise, burst: P.burstSpeed, turnCruise: P.turnCruise, turnBurst: P.turnBurst,
   recruitR: P.recruitR, spacing: P.spacing, wildCount: P.wildCount, regrow: P.regrow,
   wildSize: P.wildSize, bloomPull: P.bloomPull, trainScale: P.trainScale,
@@ -276,13 +281,15 @@ function applyView (v) {
 }
 
 /* The camera and every instance live in follow.js. */
-const follower = createFollow({ mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS,
+follower = createFollow({ mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS,
                                 PARKED, camera, zoomFor, setZoom, applyView, uCam, cut,
                                 get view () { return view; }, get sim () { return sim; }, get P () { return P; },
                                 get lm () { return lm; }, get lmSlow () { return lmSlow; },
                                 get shadows () { return shadows; } });
 const followCamera = dt => follower.followCamera(dt);
 window.__lab.zoom = () => follower.zoom;   // the eased camera zoom (3L), for the tests
+window.__lab.zoomDrawn = () => follower.zoomDrawn;   // with the burst zoom (4A) applied
+window.__lab.roomView = roomView;                // the view the room is told (4A tests)
 window.__lab.view = view;                   // the live view in world units, what the room is told (4A tests)
 window.__lab.follower = follower;              // events skipped off screen, for the checks
 

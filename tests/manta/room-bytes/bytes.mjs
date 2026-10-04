@@ -1,6 +1,9 @@
 /* 3L stage 1: bytes per phone at the far zoom with a 500-long train. The
    staged room with ?mine=500; the phone reports the far view (zoom 0.4 on
-   412x915: 962 x 2138 units). 25 s; in + out per second. */
+   412x915: 962 x 2138 units). 25 s; in + out per second. 4A: WIDE=1.12
+   widens that view by the burst zoom (zoom 0.357: 1077 x 2395), the widest
+   view a phone ever reports, so the limits are checked at the burst too;
+   lib/rooms.sh passes VIEW_W and VIEW_H through to the client. */
 import { player } from './playclient.mjs';
 const PORT = +process.env.PORT, LABEL = process.env.LABEL || PORT;
 const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 85000);

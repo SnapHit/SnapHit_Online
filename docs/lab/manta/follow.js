@@ -40,6 +40,15 @@ export function createFollow (ctx) {
   const SPILL_BASE = mantas.SPILL_BASE;
   let bestPeak = 0, beatShown = false, boardAt = 0, offScreen = 0;
   let zoomNow = null, wasDying = false, lastRuns = undefined;   // the eased camera (3L)
+  /* THE BURST ZOOM (4A, 10.2's zoom row): while you burst the view widens a
+     further burstZoom percent, easing out over BURST_OUT seconds and back
+     over BURST_BACK. burstMix runs 0 to 1 at those rates and the widening
+     follows a smoothstep of it, so both ends ease. Reduced motion halves
+     the widening (7.2: slow motion and distortion dropped, information
+     kept). Kept apart from zoomNow, so the close-up camera's own ease and
+     its 2% a frame cap are untouched and the tests still read them. */
+  const BURST_OUT = 0.3, BURST_BACK = 0.6;
+  let burstMix = 0, zoomDrawn = null, baseScale = 1;
 
   /* THE BOARD. Top ten by current length, and every bot says it is a bot:
      nobody should ever wonder whether they were beaten by a person. Twice a
@@ -168,7 +177,16 @@ export function createFollow (ctx) {
       const cap = 0.02 * Math.max(1, edt * 60);
       zoomNow = Math.max(zoomNow * (1 - cap), Math.min(zoomNow * (1 + cap), z));
     }
-    if (setZoom(zoomNow)) applyView(ctx.view);
+    /* Bursting: the simulation says so in solo (sim.js); in a room the
+       prediction carries the same flag, and the input says so until it does. */
+    const bursting = !dying && !watching && (you.bursting === true ||
+      (!!(ctx.sim.input && ctx.sim.input.burst) && you.followers.length > 0));
+    burstMix = bursting ? Math.min(1, burstMix + edt / BURST_OUT) : Math.max(0, burstMix - edt / BURST_BACK);
+    const pct = Math.max(0, ZP.burstZoom ?? 12) * (cut && cut.reduced ? 0.5 : 1) / 100;
+    const ease = burstMix * burstMix * (3 - 2 * burstMix);
+    zoomDrawn = zoomNow / (1 + pct * ease);
+    baseScale = zoomDrawn / zoomNow;          // the base view is the drawn one times this (1 when not bursting)
+    if (setZoom(zoomDrawn)) applyView(ctx.view);
     uCam.value.set(at.x, at.z);
     camera.position.set(at.x, 1000, at.z);
     camera.lookAt(at.x, 0, at.z);
@@ -368,5 +386,14 @@ export function createFollow (ctx) {
 
 
   return { followCamera, get peak () { return peakLength; }, get offScreen () { return offScreen; }, get zoom () { return zoomNow; },
+           get zoomDrawn () { return zoomDrawn; }, get burstMix () { return burstMix; },
+           /* THE VIEW THE ROOM IS TOLD is the base one, without the burst's
+              widening: roomcore's MARGIN (400 units beyond the view) covers
+              the extra 12% with room to spare (at the far zoom on a phone
+              the widening is 57 units in x and 128 in z), so nothing pops
+              at the edge and the bytes a phone is sent do not change with
+              a burst. Measured with the burst view reported instead: the
+              median rose from under to over the 10 KB/s bar. */
+           get baseView () { const v = ctx.view; return { w: v.w * baseScale, h: v.h * baseScale }; },
            spillSlotOf: g => spillSlot.get(g) };
 }

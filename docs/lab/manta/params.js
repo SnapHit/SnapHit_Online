@@ -151,6 +151,12 @@ export const SPEC = [
   { key: 'zoomFar',        label: 'zoom far',             def: 0.4,   min: 0.25, max: 1.0,   step: 0.05,  gpu: false },
   { key: 'zoomHalf',       label: 'zoom half length',     def: 50,    min: 10,   max: 200,   step: 5,     gpu: false },
   { key: 'zoomEase',       label: 'zoom ease (s)',        def: 1,     min: 0.2,  max: 4,     step: 0.1,   gpu: false },
+  /* A burst widens the view a further 12 percent (4A, 10.2's zoom row),
+     easing out over 0.3 s and back over 0.6 s, so you can see where you are
+     cutting; 0 turns it off, and reduced motion halves whatever is set.
+     Read by follow.js from this page's values; a look setting, so it stays
+     on each phone and the room never sees it. */
+  { key: 'burstZoom',      label: 'burst zoom (%)',       def: 12,    min: 0,    max: 30,    step: 1,     gpu: false },
   /* Section 10.2's three touch schemes: 0 is A (steer to your finger,
      double-tap and hold to burst), 1 is B (first finger steers, a second
      anywhere bursts), 2 is C (a joystick on the left half, a burst button on
