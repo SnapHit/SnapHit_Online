@@ -293,7 +293,7 @@ function applyView (v) {
 follower = createFollow({ mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS,
                                 PARKED, camera, zoomFor, setZoom, applyView, uCam, cut, look: LOOK, slashSlot: SLASH_SLOT,
                                 get view () { return view; }, get sim () { return sim; }, get P () { return P; },
-                                get lm () { return lm; }, get lmSlow () { return lmSlow; },
+                                get lm () { return lm; }, get lmSlow () { return lmSlow; }, get post () { return post; },
                                 get shadows () { return shadows; } });
 const followCamera = dt => follower.followCamera(dt);
 window.__lab.zoom = () => follower.zoom;   // the eased camera zoom (3L), for the tests

@@ -71,6 +71,34 @@ if (WANT.includes('1')) {
     await ctx.close();
   }
 }
+if (WANT.includes('2')) {
+  /* The crash: a 30-long train cut to 10 (peak 30), then the crash, the beat stepped by sixtieths. */
+  const crashRun = async (p, steps) => p.evaluate(n => { const S = window.__sim, F = window.__lab.follower, P0 = window.__lab.post();
+    S.cutAt(S.you, 10, S.rivals[0], null, null); for (let i = 0; i < 6; i++) window.__lab.step(1 / 60);
+    const len = S.you.followers.length, peak = S.you.peak; S.you.dead = 1.5; const t0 = S.time;
+    /* Sampled against SCENE time: the beat, the card and the vignette all run on it, and the crash's slow-motion beat stretches it. */
+    const out = []; for (let k = 0; k < n; k++) { window.__lab.step(1 / 60); if (k === 5 || k === 23 || k === 35 || k === 47 || k === 59 || k === 71 || k === 83) out.push({ k, t: +(S.time - t0).toFixed(4), vig: P0 ? P0.vignette : null, card: document.getElementById('beat').textContent, dead: S.you.dead }); }
+    return { len, peak, out, vig: P0 ? P0.vignette : null, card: document.getElementById('beat').textContent, dead: S.you.dead, runs: S.you.runs }; }, steps);
+  for (const look of ['new', 'classic', 'reduced']) {
+    const { p, ctx } = await open(look === 'classic' ? 'look=classic' : '');
+    if (look === 'reduced') await p.evaluate(() => { const c = document.getElementById('reduceFlash'); c.checked = true; c.dispatchEvent(new Event('change')); });
+    const r = await crashRun(p, 84);
+    await p.screenshot({ path: OUT + '/art-crash-' + look + '.png' });
+    const at = k => r.out.find(o => o.k === k) || {};
+    const near = (a, b, t = 0.012) => a !== null && Math.abs(a - b) < t;
+    if (look === 'classic') {
+      ok('classic: the vignette stays at 0.15 through the beat and the card shows the peak at once', r.out.every(o => near(o.vig, 0.15) && o.card === String(r.peak)), JSON.stringify(r.out.slice(0, 3)));
+    } else {
+      const vigWant = t => 0.15 + 0.27 * Math.min(1, t / 0.4), cardWant = t => r.len + Math.round((r.peak - r.len) * Math.min(1, t / 0.5));
+      ok(look + ': the vignette deepens 0.15 to 0.42 over 0.4 s of scene time and holds (' + r.out.map(o => o.t.toFixed(2) + 's:' + (o.vig === null ? 'null' : o.vig.toFixed(3))).join(' ') + ')', r.out.every(o => near(o.vig, vigWant(o.t))) && r.out.some(o => o.t >= 0.4) && near(at(83).vig, 0.42));
+      ok(look + ': the card counts up from the length the crash took (' + r.len + ') to the peak (' + r.peak + ') over 0.5 s of scene time (' + r.out.map(o => o.t.toFixed(2) + 's:' + o.card).join(' ') + ')', r.len < r.peak && r.out.every(o => Math.abs(+o.card - cardWant(o.t)) <= 1) && r.out.some(o => o.t >= 0.55 && o.card === String(r.peak)));   // the card's clock starts on the beat's first frame, one frame behind t0
+    }
+    /* Through the restart: the vignette is back at 0.15 within 0.3 s. */
+    const back = await p.evaluate(() => { const S = window.__sim, P0 = window.__lab.post(); let restartK = -1; for (let k = 0; k < 120; k++) { window.__lab.step(1 / 60); if (restartK < 0 && !(S.you.dead > 0)) restartK = k; } const atRestart = P0.vignette; for (let k = 0; k < 20; k++) window.__lab.step(1 / 60); return { restartK, atRestart, after: P0.vignette, dead: S.you.dead }; });
+    ok(look + ': after the restart the vignette is back at 0.15 within 0.3 s (' + (back.after === null ? 'null' : back.after.toFixed(3)) + ')', back.restartK >= 0 && near(back.after, 0.15), JSON.stringify(back));
+    await ctx.close();
+  }
+}
 const real = errs.filter(e => !/popErrorScope/.test(e));
 ok('no console errors', real.length === 0, JSON.stringify([...new Set(real)]).slice(0, 300));
 clearTimeout(die); await b.close(); process.exit(bad ? 1 : 0);

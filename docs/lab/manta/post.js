@@ -95,6 +95,7 @@ export function createPost ({ renderer, scene, camera, tone = 'neutral' }) {
       renderer.toneMapping = TONE_MODES[name] !== undefined ? TONE_MODES[name] : NeutralToneMapping;
     },
     setVignette (v) { uVignette.value = v; },
+    get vignette () { return uVignette.value; },
     get passes () { return 1 + 1 + bloomPass._nMips * 2 + 1; },   // scene, high pass, blurs, composite
     dispose () { try { bloomPass.dispose(); } catch (e) {} },
   };

@@ -27,6 +27,15 @@ export function createFollow (ctx) {
      frame for 120 ms. Reduced flash and motion: no kick, the slash at 30
      percent. Both cost a few adds and one stamp: nothing a tier pays for. */
   const KICK = 9, KICK_TAU = 55, KICK_FOR = 300, SLASH_FOR = 120, SLASH_LEN = 140, SLASH_W = 18, SLASH_AMOUNT = 0.30;
+  /* THE CRASH READS AS THE END (4A stage 3, change 2). Through the death
+     beat the vignette deepens from its setting to VIG_DEEP over VIG_IN
+     seconds and holds, then comes back over VIG_OUT at the restart; the
+     card's number counts up from the length the crash took to the run's
+     peak over COUNT_FOR seconds when they differ. One uniform write a
+     frame and a text change; nothing flashes or moves fast, so reduced
+     flash and motion keep all of it. */
+  const VIG_DEEP = 0.42, VIG_IN = 0.4, VIG_OUT = 0.3, COUNT_FOR = 0.5;
+  let vigBase = null, vigNow = null, beatT = 0, countFrom = 0, countTo = 0, aliveLen = 0;
   const realNow = () => performance.now();
   let kickAt = -1, kickX = 0, kickZ = 0, slashAt = -1, slashOn = false;
   const slashSeg = { x0: 0, z0: 0, x1: 0, z1: 0, r: 1, g: 1, b: 1, k: 1 };
@@ -424,10 +433,27 @@ export function createFollow (ctx) {
   const card = document.getElementById('beat');
     if (card) {
       if (dying && !beatShown) {
-        beatShown = true;
-        card.textContent = String(Math.max(you.peak, you.lastPeak));
+        beatShown = true; beatT = 0;
+        countTo = Math.max(you.peak, you.lastPeak); countFrom = NEW ? Math.min(countTo, aliveLen) : countTo;
+        card.textContent = String(countFrom);
         card.className = 'on';
       } else if (!dying && beatShown) { beatShown = false; card.className = ''; }
+      if (!dying) aliveLen = you.followers.length;   // the length the crash took, for the count-up
+      if (NEW && beatShown) {
+        beatT += Math.max(0, dt);
+        const n = countFrom + Math.round((countTo - countFrom) * Math.min(1, beatT / COUNT_FOR));
+        if (String(n) !== card.textContent) card.textContent = String(n);
+      }
+    }
+    /* The vignette through the beat (post.js owns the uniform; ctx.post is read at call time). */
+    if (NEW && ctx.post) {
+      const P0 = ctx.post;
+      if (vigBase === null) { vigBase = P0.vignette; vigNow = vigBase; }
+      if (!dying && !beatShown && vigNow === vigBase && vigBase !== P0.vignette) { vigBase = P0.vignette; vigNow = vigBase; }   // ?vig= or a later setting moved it
+      const want = dying ? VIG_DEEP : vigBase;
+      const rate = (VIG_DEEP - vigBase) / (dying ? VIG_IN : VIG_OUT);
+      vigNow = dying ? Math.min(want, vigNow + rate * Math.max(0, dt)) : Math.max(want, vigNow - rate * Math.max(0, dt));
+      if (P0.vignette !== vigNow) P0.setVignette(vigNow);
     }
   }
 
@@ -435,6 +461,7 @@ export function createFollow (ctx) {
   return { followCamera, get peak () { return peakLength; }, get offScreen () { return offScreen; }, get zoom () { return zoomNow; },
            get zoomDrawn () { return zoomDrawn; }, get burstMix () { return burstMix; },
            get kick () { return kickNow(); }, get slashing () { return slashOn; }, get look () { return NEW ? 'new' : 'classic'; },
+           get vignette () { return vigNow; }, get card () { return { from: countFrom, to: countTo, t: beatT }; },
            /* THE VIEW THE ROOM IS TOLD is the base one, without the burst's
               widening: roomcore's MARGIN (400 units beyond the view) covers
               the extra 12% with room to spare (at the far zoom on a phone
