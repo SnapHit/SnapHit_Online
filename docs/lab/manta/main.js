@@ -282,6 +282,7 @@ const follower = createFollow({ mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_B
                                 get shadows () { return shadows; } });
 const followCamera = dt => follower.followCamera(dt);
 window.__lab.zoom = () => follower.zoom;   // the eased camera zoom (3L), for the tests
+window.__lab.view = view;                   // the live view in world units, what the room is told (4A tests)
 window.__lab.follower = follower;              // events skipped off screen, for the checks
 
 /* Hoisted out of the hooks so the step hook below can drive it. The cut owns
@@ -467,6 +468,7 @@ function makeControls () {
     x: sim.you.x + (u - 0.5) * view.w,
     z: sim.you.z + (v - 0.5) * view.h,
   }), () => P.scheme);
+  window.__lab.controls = controls;           // the keys and mouse harness drives it (4A)
 }
 lab.start().then(ok => {
   if (!ok) { window.__labReady = true; return; }

@@ -9,8 +9,21 @@
  *   C  a floating joystick where your thumb first lands on the left half of
  *      the screen, and a burst button anywhere on the right half.
  *
- * Keyboard and mouse sit alongside all three and do not change: the lab is
- * judged on a phone but written on a laptop.
+ * Keyboard and mouse sit alongside all three (4A, design doc 7.1): the
+ * arrow keys or WASD name a direction ON SCREEN, up meaning up the screen
+ * whichever way the manta faces, two keys a diagonal, and the manta turns
+ * towards it at its normal rate; with no key held it keeps its heading.
+ * Space bursts while held. The mouse steers towards the pointer through the
+ * live view, so the zoom is allowed for, and a held button bursts. The
+ * right button never opens a menu.
+ *
+ * Why the keys felt inverted to a Reddit tester (October 2026): they turned
+ * the manta RELATIVE TO ITS OWN NOSE, and with the sign mirrored. Left
+ * subtracted from the heading, and forward is (-sin, -cos), so a smaller
+ * heading swings the nose towards +x, which is screen right: left turned
+ * right. Fixing the sign alone would still have left "left" meaning the
+ * manta's own left, which is screen right whenever it swims down the screen.
+ * Screen directions, as a finger gives them, remove both.
  *
  * It writes into sim.input and nothing else. The simulation never reads a
  * device, so a test can drive the same two fields itself.
@@ -28,12 +41,13 @@ export function createControls (canvas, input, screenToWorld, getScheme = () => 
   canvas.style.webkitUserSelect = 'none';
   canvas.style.webkitTouchCallout = 'none';
 
-  let left = false, right = false, keyBurst = false;
+  const keys = { up: false, down: false, left: false, right: false };
+  let keyBurst = false, firstKeyAt = null;
   const now = () => performance.now();
 
   /* Every touch that is down, in the order it went down. */
   const touches = new Map();          // pointerId -> { x, y, sx, sy, at, role }
-  let mouse = null;                   // the cursor, in world units
+  let mouse = null;                   // the pointer, in CSS px (client), converted each step through the live view
   let mouseBurst = false;
   let lastTapAt = -1e9, tapHold = false;   // scheme A's double tap
 
@@ -57,7 +71,7 @@ export function createControls (canvas, input, screenToWorld, getScheme = () => 
   canvas.addEventListener('pointerdown', e => {
     /* Capture can refuse an id it has not seen; steering must not care. */
     try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* fine */ }
-    if (e.pointerType === 'mouse') { mouse = toWorld(e.clientX, e.clientY); mouseBurst = true; return; }
+    if (e.pointerType === 'mouse') { mouse = { x: e.clientX, y: e.clientY }; mouseBurst = true; return; }
     const r = rect();
     const t = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, at: now(), role: 'steer' };
     const s = scheme();
@@ -85,7 +99,12 @@ export function createControls (canvas, input, screenToWorld, getScheme = () => 
   }, { passive: true });
 
   canvas.addEventListener('pointermove', e => {
-    if (e.pointerType === 'mouse') { if (mouse || e.buttons) mouse = toWorld(e.clientX, e.clientY); return; }
+    /* A mouse steers from the moment it moves over the water, as slither's
+       does: no click needed to start. Kept in screen space and converted at
+       each step, so a still pointer is still "that way on screen" after the
+       camera has moved on, not a fixed spot of water the manta reaches and
+       then circles. */
+    if (e.pointerType === 'mouse') { mouse = { x: e.clientX, y: e.clientY }; return; }
     const t = touches.get(e.pointerId);
     if (!t) return;
     t.x = e.clientX; t.y = e.clientY;
@@ -105,18 +124,29 @@ export function createControls (canvas, input, screenToWorld, getScheme = () => 
   };
   canvas.addEventListener('pointerup', up, { passive: true });
   canvas.addEventListener('pointercancel', up, { passive: true });
+  /* A button released off the canvas still ends the burst. */
+  addEventListener('pointerup', e => { if (e.pointerType === 'mouse') mouseBurst = false; }, { passive: true });
+  /* The right button bursts like any other; it never opens a menu. */
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
 
+  const KEYS = { arrowup: 'up', w: 'up', arrowdown: 'down', s: 'down', arrowleft: 'left', a: 'left', arrowright: 'right', d: 'right' };
   const key = (e, down) => {
-    const k = e.key.toLowerCase();
-    if (k === 'arrowleft' || k === 'a') { left = down; }
-    else if (k === 'arrowright' || k === 'd') { right = down; }
-    else if (k === ' ' || k === 'arrowup' || k === 'w') { keyBurst = down; }
+    /* Typing a name is not steering: a key in a text box is left alone. */
+    const t = e.target, tag = t && t.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || (t && t.isContentEditable)) return;
+    const k = (e.key || '').toLowerCase(), dir = KEYS[k];
+    if (dir) keys[dir] = down;
+    else if (k === ' ' || k === 'spacebar') keyBurst = down;
     else return;
+    if (firstKeyAt === null) firstKeyAt = now();
     /* Only the keys we use: Escape still pauses and Tab still leaves. */
     e.preventDefault();
   };
   addEventListener('keydown', e => key(e, true));
   addEventListener('keyup', e => key(e, false));
+  /* Keys that are still down when the window loses focus would steer for
+     ever: Hurtle clears its steering on blur for the same reason. */
+  addEventListener('blur', () => { keys.up = keys.down = keys.left = keys.right = false; keyBurst = false; mouseBurst = false; });
 
   /* The heading whose forward vector (-sin, -cos) points along (dx, dz).
      Mirrored, this steered away from the touch on one axis. */
@@ -150,16 +180,29 @@ export function createControls (canvas, input, screenToWorld, getScheme = () => 
       burst = burst || all.some(o => o.role === 'burst');
     }
 
-    if (left !== right) {
-      const rate = 3.2 * dt * (left ? -1 : 1);
-      want = leader.head + rate * 12;              // a steady lean, not a snap
+    /* THE KEYS NAME A DIRECTION ON SCREEN. Screen right is +x and screen up
+       is -z (the camera looks straight down with up at -z), so the key
+       vector is the world vector and `towards` turns it into the heading
+       whose forward points that way; two keys give the diagonal, opposite
+       keys cancel and the manta holds its course. The keys win over a
+       finger and the mouse while any is held. */
+    const kx = (keys.right ? 1 : 0) - (keys.left ? 1 : 0), kz = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
+    if (kx !== 0 || kz !== 0) {
+      want = Math.atan2(-kx, -kz);
     } else if (want === null && mouse) {
-      want = towards(mouse.x - leader.x, mouse.z - leader.z);
+      /* Through the live view, so the zoom is allowed for: the pointer's
+         place on screen, as world units at this step's zoom, relative to
+         where the leader is drawn. */
+      const w = toWorld(mouse.x, mouse.y);
+      want = towards(w.x - leader.x, w.z - leader.z);
     }
     input.want = want;
     input.burst = burst;
   }
 
   return { apply, get scheme () { return scheme(); },
-           get touches () { return touches.size; } };
+           get touches () { return touches.size; },
+           /* For the hint: has a key or the mouse been used this session. */
+           get keyed () { return firstKeyAt !== null; },
+           get moused () { return mouse !== null; } };
 }

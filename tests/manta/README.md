@@ -118,6 +118,8 @@ One line each: what it checks, how to run it, roughly how long.
 - `rows.mjs`: the wild and mantas rows and the ordinary wild count. About 40 s.
 - `newocean.mjs`: New ocean in the page. About 40 s.
 - `zoom.mjs`: the close-up camera: zoom against length, labels and radar at both ends, a wake through a zoom step, the ease after a cut, a restart's first frame. About 80 s.
+- `keys.mjs`: desktop controls (4A): from four headings, every arrow or WASD key and every pair turns the manta towards the matching screen direction at its normal rate; the mouse steers towards the pointer at the near and the far zoom; space and a held button burst; right-click opens no menu. Real key and mouse events, the loop paused and the simulation stepped by hand. About 40 s.
+- `desktop.mjs`: the desktop layout (4A) at 1366x768, 1920x1080 and 2560x1440 with a mouse: the feedback page (solo, and the first visit's name panel) and the lab page, nothing overlapping, text at least 13 px, the radar growing with the screen, no overflow; screenshots `desk-<w>x<h>[-name|-lab].png` in `MANTA_OUT`, to be looked at. `SIZE=1920x1080` picks one size and `PART=feed|name|lab` one page; 2560x1440 needs the parts, each about 40 s.
 - `camera.mjs`: the close-up camera's restart and cut, with no rival trains and a train swimming straight so nothing can crash it: a restart's first frame at the curve for its length, read on that frame; after a cut that halves the train, the view eases back in. About 30 s.
 - `watch.mjs`: the WebGPU error watch: the page's errors and error-watch rows. Run with `CHROME=$CHROME153`; `BACK=gl` for the WebGL2 side. About 30 s.
 - `gpu.mjs`: the WebGPU sweep 0 to 650 and a cut to 150, zero page errors. `TIER` env; run with `CHROME=$CHROME153`. About 60 s.

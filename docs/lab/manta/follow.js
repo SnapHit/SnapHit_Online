@@ -121,7 +121,9 @@ export function createFollow (ctx) {
     } else if (!sim.watching && you && you.watched >= 0 && !(you.dead > 0)) {
       model.update(you.watched, you.x, you.z, you.followers.length, true, you.runs, now, sp, true);
     }
-    const short = Math.min(innerWidth, innerHeight), size = Math.round(Math.max(96, Math.min(160, short * (P.radarSize || 28) / 100)));
+    /* 96 to 160 CSS px on a phone; a desktop screen (short side 900 and
+       up, 4A) may have up to 220, so the map stays readable at 1440p. */
+    const short = Math.min(innerWidth, innerHeight), size = Math.round(Math.max(96, Math.min(short >= 900 ? 220 : 160, short * (P.radarSize || 28) / 100)));
     const mine = you && you.watched >= 0 ? you.watched : (you ? you.id : -1);
     perf2.last = radarUI.draw(model, { size, opacity: P.radarOpacity ?? 0.4, arenaR: sim.params.arenaR || P.arenaR || 2000, range: P.radarRange || 0,
       you: you ? { id: mine, x: you.x, z: you.z, len: sim.watching ? you.len : you.followers.length } : null, view: ctx.view, colourOf: radarColour }, now);

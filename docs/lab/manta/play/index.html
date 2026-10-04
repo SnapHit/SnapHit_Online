@@ -232,6 +232,21 @@
     color: #cfe6f5; text-shadow: 0 1px 3px #000a, 0 0 10px #0009;
     letter-spacing: 0.02em;
   }
+  /* DESKTOP (4A): a wide screen with a mouse gets larger interface text,
+     so the board, the score line and the names in the water stay readable
+     at 1080p and 1440p; the radar's own cap is in follow.js. Pointer: fine
+     keeps a phone in landscape out of it. */
+  @media (min-width: 1200px) and (min-height: 700px) and (pointer: fine) {
+    #board { font-size: 14px; top: 64px; right: 14px; }
+    #len { font-size: 14px; left: 14px; bottom: 14px; }
+    :root { --label-size: 13px; }
+    #beat { font-size: 110px; }
+  }
+  @media (min-width: 2200px) and (min-height: 1200px) and (pointer: fine) {
+    #board { font-size: 16px; }
+    #len { font-size: 16px; }
+    :root { --label-size: 15px; }
+  }
   /* THE FEEDBACK PAGE: no lab tools unless asked for (body.lab). */
   body:not(.lab) #chip, body:not(.lab) #panel, body:not(.lab) #bar, body:not(.lab) #plain { display: none !important; }
   #corner { position: fixed; left: 0; top: 0; width: 48px; height: 48px; z-index: 6; touch-action: none; }
@@ -293,6 +308,17 @@
   /* Too short for the board under the play bar (landscape with the keyboard
      up): the board steps aside rather than run into the stats line (3K). */
   @media (max-height: 330px) { body:not(.lab) #board { display: none; } }
+  @media (min-width: 1200px) and (min-height: 700px) and (pointer: fine) {
+    #stats { font-size: 14px; right: 14px; bottom: 34px; }
+    #fb { font-size: 15px; top: calc(env(safe-area-inset-top, 0px) + 12px); right: calc(env(safe-area-inset-right, 0px) + 12px); }
+    #fb button, #fb a.btn { min-height: 38px; padding: 0 14px; }
+    body:not(.lab) #board { top: calc(env(safe-area-inset-top, 0px) + 108px); }
+    body:not(.lab) #signal { top: calc(env(safe-area-inset-top, 0px) + 108px) !important; }
+    #namePanel { width: min(400px, calc(100vw - 32px)); font-size: 16px; padding: 20px; }
+    #nameBox { font-size: 18px; }
+    #playBtn { font-size: 22px; min-height: 56px; }
+    #radar { --radar-bottom: 58px; }
+  }
   @media (max-height: 260px) {
     #namePanel { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 8px 12px; gap: 8px; }
     #namePanel label { flex-basis: 100%; font-size: 13px; }

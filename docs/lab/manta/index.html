@@ -237,6 +237,21 @@
     color: #cfe6f5; text-shadow: 0 1px 3px #000a, 0 0 10px #0009;
     letter-spacing: 0.02em;
   }
+  /* DESKTOP (4A): a wide screen with a mouse gets larger interface text,
+     so the board, the score line and the names in the water stay readable
+     at 1080p and 1440p; the radar's own cap is in follow.js. Pointer: fine
+     keeps a phone in landscape out of it. */
+  @media (min-width: 1200px) and (min-height: 700px) and (pointer: fine) {
+    #board { font-size: 14px; top: 64px; right: 14px; }
+    #len { font-size: 14px; left: 14px; bottom: 14px; }
+    :root { --label-size: 13px; }
+    #beat { font-size: 110px; }
+  }
+  @media (min-width: 2200px) and (min-height: 1200px) and (pointer: fine) {
+    #board { font-size: 16px; }
+    #len { font-size: 16px; }
+    :root { --label-size: 15px; }
+  }
 </style>
 </head>
 <body>

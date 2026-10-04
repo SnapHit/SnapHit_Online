@@ -16,7 +16,7 @@
  * follower however the train is turned, and scales with the zoom. It never
  * rotates. Off screen, crashed or in its death beat, a leader has none. */
 const STYLE = 'position:absolute;left:0;top:0;white-space:nowrap;pointer-events:none;' +
-  'font:500 11px/1.2 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;letter-spacing:0.01em;' +
+  'font:500 var(--label-size,11px)/1.2 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;letter-spacing:0.01em;' +
   'opacity:0.7;will-change:transform;' +
   'text-shadow:0 0 2px rgba(0,0,0,0.85),0 0 1px rgba(0,0,0,0.9)';
 export const PALE = '#e6f1fb';
