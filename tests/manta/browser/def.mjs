@@ -80,6 +80,15 @@ const copied=await p.evaluate(async()=>{try{return await navigator.clipboard.rea
      lines.slice(-3).join(' | '));
 }
 
+/* --- ?paused=1 (4A): the loop starts paused, so a pixel comparison can step from the first frame --- */
+{ const q=await ctx.newPage(); q.setDefaultTimeout(30000); q.setDefaultNavigationTimeout(30000);
+  await q.goto(O+'/lab/manta/?tier=low&backend=webgl2&paused=1&hint=0',{waitUntil:'load'}).catch(()=>{});
+  await q.waitForFunction(()=>window.__labReady===true,null,{timeout:25000,polling:100}).catch(()=>{});
+  await q.waitForTimeout(1500);
+  const a=await q.evaluate(()=>({ time: window.__sim.time, rate: window.__lab.lab ? 1 : 1 }));
+  const b=await q.evaluate(()=>{ window.__lab.step(0.5); return window.__sim.time; });
+  ok('?paused=1 starts the loop paused: the simulation stays at 0 after 1.5 s, and a driven step still advances it', a.time===0 && Math.abs(b-0.5)<1e-6, 'time '+a.time+' -> '+b);
+  await q.close(); }
 /* --- the scene clock and the step hook --- */
 await p.evaluate(()=>window.__lab.pause());
 await p.waitForTimeout(300);

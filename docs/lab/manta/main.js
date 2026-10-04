@@ -298,8 +298,14 @@ window.__lab.follower = follower;              // events skipped off screen, for
    250 ms beat of slow motion is 250 ms of the player's life — while the scene
    advances in scaled time, so everything in the water slows together. That
    scaled total is the one clock every shader reads; see clock.js. */
-function advance (now, dt) {
-  const scale = cut.update(dt) * dbg.rate;     // the debug block's slow motion and pause
+/* ?paused=1 (4A): the debug clock starts paused, the light memory and the
+   simulation are HELD until the first driven step, and the loop stops at
+   the first frame, so two loads at one seed draw the same pixels after the
+   same driven steps. The step hook drives through the paused clock. */
+const PAUSED_AT_LOAD = query.get('paused') === '1';
+let held = PAUSED_AT_LOAD;
+function advance (now, dt, drive = false) {
+  const scale = cut.update(dt) * (drive ? 1 : dbg.rate);     // the debug block's slow motion and pause
   const owed = dbg.takeOwed();                 // and its single step
   if (sim && ROOM) {
     /* Watch mode: no steps and no drawer values. The room's clock is real
@@ -405,6 +411,7 @@ const lab = createLab({
          and not the last one's. */
       if (dbg.flat) return;                    // flat shapes: no light memory, no shadows
       if (shadows) shadows.render(renderer);
+      if (held) return;                        // ?paused=1: nothing deposited or faded until the first driven step
       lm.setFade(P.fade);
       lm.render(renderer, dt);
       if (lmSlow && P.longMemory > 0) {
@@ -442,6 +449,9 @@ const lab = createLab({
     },
     onFirstFrame () {
       panel.markFirstFrame();
+      /* ?paused=1: the pipeline, the memory and the bakes exist now; from
+         here only the step hook draws. */
+      if (PAUSED_AT_LOAD) lab.pause();
       /* Something has been drawn, so from here an uncaught error is a mark
          and not a verdict. */
       window.__labDrew = true;
@@ -464,7 +474,8 @@ window.__lab.renderer = () => lab.renderer;
 window.__lab.step = (seconds = 1 / 60) => {
   const r = lab.renderer;
   if (!r) return null;
-  advance(performance.now(), seconds);
+  held = false;
+  advance(performance.now(), seconds, true);
   if (lm) { lm.setFade(P.fade); lm.render(r, seconds); }
   if (post) post.render(); else r.render(scene, camera);
   return simTime;

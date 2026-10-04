@@ -42,7 +42,10 @@ export function createDebug ({ sim, seed, step, scene }) {
      button bar on a phone, and a switch you cannot reach is no switch. */
   panel.insertBefore(box, document.getElementById('rows'));
 
-  let rate = 1, paused = false, owed = 0, flat = false;
+  /* ?paused=1 starts paused (4A): a pixel comparison between two builds
+     has to step the scene by exact sixtieths from its very first frame,
+     and pausing from a harness after load already lets real frames in. */
+  let rate = 1, paused = new URLSearchParams(location.search).get('paused') === '1', owed = 0, flat = false;
 
   const button = (id, text, on) => {
     const b = document.createElement('button');
