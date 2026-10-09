@@ -27,7 +27,9 @@ WRANGLER_SEND_METRICS=false CI=1 timeout 600 node "$WRANGLER" dev --port "$PORT"
 WPID=$!; PIDS=""
 cleanup () { for p in $PIDS; do kill "$p" 2>/dev/null; done; kill "$WPID" 2>/dev/null; sleep 2; kill -0 "$WPID" 2>/dev/null && kill -9 "$WPID"; wait 2>/dev/null; rm -rf -- "${P:?}"; D="$ROOT/.wrangler"; [ -d "$D" ] && rm -rf -- "${D:?}"; }
 trap cleanup EXIT
-up=0; for i in $(seq 1 60); do c=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "http://127.0.0.1:$PORT/lab/manta/rooms/echo" 2>/dev/null); [ "$c" = 426 ] && { up=1; break; }; sleep 1; done
+# Ready when the echo answers: 426 (wants a WebSocket), or, with rooms switched
+# off (VARS="--var ROOMS_OPEN:false", 4B), 503 "rooms are off".
+up=0; for i in $(seq 1 60); do c=$(curl -s -w ' %{http_code}' --max-time 2 "http://127.0.0.1:$PORT/lab/manta/rooms/echo" 2>/dev/null); case "$c" in *' 426'|'rooms are off 503') up=1; break;; esac; sleep 1; done
 echo "rooms.sh: wrangler dev ready=$up (pid $WPID) port $PORT, output $MANTA_OUT"; [ $up = 1 ] || exit 1
 run1 () { # run1 <client> <port> <label> <log>
   (cd "$(dirname "$1")" && PORT=$2 LABEL="$3" timeout ${CLIENT_TIMEOUT:-590} node "$(basename "$1")" > "$4" 2>&1); }

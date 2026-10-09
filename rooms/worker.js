@@ -12,10 +12,16 @@
 import { DurableObject } from 'cloudflare:workers';
 import { createOcean, bench, MAX_PLAYERS } from './ocean.js';
 
-/* THE OFF SWITCH. false refuses every rooms request, the room paths and the
-   echo alike, with a 503 "rooms are off", and the lab falls back to solo.
-   One line, never a revert. */
+/* THE OFF SWITCH, in two places. Here in the code: false refuses every
+   rooms request, the room paths and the echo alike, with a 503 "rooms are
+   off", and players go solo with a note. One line, never a revert. And, from
+   4B, as a Worker variable Nathan sets in Cloudflare's dashboard, from his
+   phone and without a push: ROOMS_OPEN set to false (or off, no, 0) turns
+   rooms off; unset or anything else leaves them on. wrangler.jsonc has
+   keep_vars, so no deploy overwrites what he set. */
 const ROOMS_OPEN = true;
+const OFF = /^\s*(false|off|no|0)\s*$/i;
+const roomsOpen = env => ROOMS_OPEN && !OFF.test(String((env && env.ROOMS_OPEN) ?? ''));
 
 const ROOMS = '/lab/manta/rooms/';
 
@@ -33,7 +39,12 @@ const REGISTRY = '#registry';
 const REG = 'https://registry.internal/';
 const ALPHABET = '23456789abcdefghjkmnpqrstuvwxyz';   // no 0/o, 1/l/i
 const CODE = /^[2-9a-hjkmnp-z]{8}$/;
-const LIVE_CAP = 20;              // live rooms, lobby included; lobby is never refused
+/* THE LIVE ROOM CAP: live rooms, lobby included (lobby is never refused).
+   3 unless the Worker variable LIVE_CAP, set in Cloudflare's dashboard and
+   kept through deploys (keep_vars), names another from 1 to 20 (lobby-20 is
+   the last public room's name). Until 4B: 20, in code. */
+const LIVE_CAP = 3;
+const capOf = env => { const n = Math.floor(Number(env && env.LIVE_CAP)); return n >= 1 ? Math.min(20, n) : LIVE_CAP; };
 const NEW_EVERY_MS = 10000;       // one new room per connection address per 10 s
 const CODE_TTL_MS = 24 * 3600e3;  // a code with no players for this long is gone
 const LIVE_FOR_MS = 150000;       // a live room reports every minute; silence ends it
@@ -147,7 +158,7 @@ export class Room extends DurableObject {
   async registry (url) {
     const s = this.ctx.storage, now = Date.now(), op = url.pathname.slice(1);
     const name = url.searchParams.get('name') || '';
-    const ttl = +this.env.CODE_TTL_MS || CODE_TTL_MS, cap = +this.env.LIVE_CAP || LIVE_CAP;
+    const ttl = +this.env.CODE_TTL_MS || CODE_TTL_MS, cap = capOf(this.env);
     const live = [];
     for (const [k, until] of await s.list({ prefix: 'live:' })) if (until > now) live.push(k.slice(5)); else await s.delete(k);
     /* Players sent to a public room and not yet seated there (3O):
@@ -233,7 +244,11 @@ export default {
     /* The safety net: nothing outside the rooms path should ever arrive
        here, and if it does it gets the static site, unchanged. */
     if (!path.startsWith(ROOMS)) return env.ASSETS.fetch(request);
-    if (!ROOMS_OPEN) return text('rooms are off', 503);
+    /* ?fake= (4B, lab only): this one request answered as if rooms were off,
+       or every room full, so the plain notes can be seen without switching
+       anything off or filling anything. It touches no one else. */
+    const fake = url.searchParams.get('fake') || '';
+    if (!roomsOpen(env) || fake === 'off') return text('rooms are off', 503);
 
     /* Under wrangler dev only: time the simulation inside workerd. */
     if (path === ROOMS + 'bench' && LOCAL.test(url.hostname)) {
@@ -247,10 +262,18 @@ export default {
       const ip = (LOCAL.test(url.hostname) && request.headers.get('X-Test-Address')) || request.headers.get('CF-Connecting-IP') || '';
       return registry(env).fetch(REG + 'new?ip=' + encodeURIComponent(ip));
     }
+    /* Why a room cannot be reached (4B): asked once by a page whose socket
+       would not open. Rooms off is answered above; open, this. */
+    if (path === ROOMS + 'status') {
+      if (request.method !== 'POST') return text('expected a POST', 405);
+      if (!originAllowed(request, url)) return text('not from this site', 403);
+      return text('rooms are open', 200);
+    }
     /* The public game (3O): which public room a joining player swims in. */
     if (path === ROOMS + 'public') {
       if (request.method !== 'POST') return text('expected a POST', 405);
       if (!originAllowed(request, url)) return text('not from this site', 403);
+      if (fake === 'full') return text('every room is full: try again soon', 503);
       return registry(env).fetch(REG + 'public?full=' + encodeURIComponent(url.searchParams.get('full') || ''));
     }
     /* The probe page's room echo is the room "probe" and no other. */

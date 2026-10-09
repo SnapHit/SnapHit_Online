@@ -71,6 +71,13 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
      is full, and the page goes solo. Watching stays on "lobby". */
   const publicGame = room === 'lobby' && new URLSearchParams(location.search).get('stage') !== 'cut';   // never the staged test room
   let seatRoom = null, foundFull = '', allFull = false, asking = false;
+  /* ROOMS OFF (4B): the public game, or a socket that would not open and
+     then asked why, was told rooms are off; the page goes solo with a
+     note (play/index.html) and this stops trying. statusAt: when it last
+     asked. ?fake=off|full rides on every rooms request (lab only). */
+  let roomsOff = false, statusAt = -1e9;
+  const fakeQ = (() => { const f = new URLSearchParams(location.search).get('fake') || ''; return /^(off|full|80|95)$/.test(f) ? f : ''; })();
+  const withFake = path => fakeQ ? path + (path.includes('?') ? '&' : '?') + 'fake=' + fakeQ : path;
   let rtt = null, delay = 0.1, offset = null, lastArrive = null, lastSnap = null, snapCount = 0;
   let wildNow = null;
   /* Predicted pickups (3I): play mode only. The limit is your round trip
@@ -97,7 +104,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     if (pencil) pencil.hidden = !(connected && play && play.id >= 0);
     if (!connected) {
       mark.style.color = '#ff8a80';
-      sig.textContent = '● ' + (navigator.onLine === false ? 'offline' : everOpen ? 'reconnecting…' : 'connecting…');
+      sig.textContent = '● ' + (roomsOff ? 'rooms are off' : allFull ? 'every room is full' : navigator.onLine === false ? 'offline' : everOpen ? 'reconnecting…' : 'connecting…');
       return;
     }
     mark.style.color = rtt === null ? '#8fa6bb' : rtt < 150 ? '#7fe3d0' : rtt < 400 ? '#ffc46b' : '#ff8a80';
@@ -198,11 +205,11 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     if (stopped || asking) return;
     if (publicGame && play && !seatRoom) {
       asking = true;
-      fetch('/lab/manta/rooms/public' + (foundFull ? '?full=' + foundFull : ''), { method: 'POST', cache: 'no-store' })
+      fetch(withFake('/lab/manta/rooms/public' + (foundFull ? '?full=' + foundFull : '')), { method: 'POST', cache: 'no-store' })
         .then(r => r.ok ? r.json().then(j => { if (/^lobby(-\d+)?$/.test(j.room)) seatRoom = j.room; })
-                        : r.status === 503 ? r.text().then(t => { if (/full/.test(t)) allFull = true; }) : null)
+                        : r.status === 503 ? r.text().then(t => { if (/full/.test(t)) allFull = true; if (/off/.test(t)) roomsOff = true; }) : null)
         .catch(() => { /* the page's own five seconds decide */ })
-        .then(() => { asking = false; foundFull = ''; if (allFull) { showSignal(); return; } if (seatRoom) connect(); else later(); });
+        .then(() => { asking = false; foundFull = ''; if (allFull || roomsOff) { showSignal(); return; } if (seatRoom) connect(); else later(); });
       return;
     }
     const target = publicGame && play ? seatRoom : room;
@@ -213,7 +220,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     const kind = q.get('stage') === 'cut' ? 'stage/' : 'ocean/';
     /* ?xb=1 with the staged room (3H, tests only): bot 2 cuts your train. */
     const extra = kind === 'stage/' && q.get('xb') === '1' ? '?xb=1' : '';
-    try { s = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/lab/manta/rooms/' + kind + target + extra); }
+    try { s = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + withFake('/lab/manta/rooms/' + kind + target + extra)); }
     catch (e) { later(); return; }
     ws = s;
     s.binaryType = 'arraybuffer';
@@ -222,7 +229,20 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
       let m; try { m = typeof e.data === 'string' ? JSON.parse(e.data) : decodeSnap(e.data); } catch (_) { return; }
       if (m && ws === s) receive(m);
     };
-    s.onclose = () => { if (ws !== s) return; ws = null; connected = false; showSignal(); later(); };
+    let opened = false;
+    s.addEventListener('open', () => { opened = true; });
+    s.onclose = () => { if (ws !== s) return; ws = null; connected = false; showSignal(); if (!opened) askWhy(); later(); };
+  }
+  /* A socket that would not open says nothing of why, so ask once (at most
+     every 10 s): rooms off stops the trying, and the page goes solo with
+     its note. Anything else, and the trying goes on as before. */
+  function askWhy () {
+    const t = performance.now();
+    if (t - statusAt < 10000 || roomsOff) return;
+    statusAt = t;
+    fetch(withFake('/lab/manta/rooms/status'), { method: 'POST', cache: 'no-store' })
+      .then(r => r.status === 503 ? r.text().then(x => { if (/off/.test(x)) { roomsOff = true; stopped = true; clearTimeout(retry); showSignal(); } }) : null)
+      .catch(() => { /* unreachable: keep trying */ });
   }
   /* Half a second, doubling to eight, reset by a good init: a room that is
      restarting for a deploy is back in seconds, one that is down is not
@@ -523,6 +543,8 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
       get play () { return !!play; }, get me () { return play ? play.me : null; },
       /* The public room this player swims in, and whether every room was full (3O). */
       get seatRoom () { return seatRoom; }, get allFull () { return allFull; },
+      /* Rooms switched off (4B): the page goes solo with its note. */
+      get roomsOff () { return roomsOff; },
       get corrections () { return play ? play.corrections : []; }, get seq () { return play ? play.seq : 0; },
       get ack () { return play ? play.ack : 0; }, get name () { return play ? play.name : null; },
       /* Play mode's clock (3E): steps ahead of the room, inputs the room

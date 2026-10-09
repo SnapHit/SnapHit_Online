@@ -585,7 +585,8 @@ window.MANTA_LAB = window.MANTA_ROOT + 'lab/manta/';
   var P = window.__play, $ = function (id) { return document.getElementById(id); };
   var ROOMS = '/lab/manta/rooms/';
   var NOTES = { slow: 'The room could not be reached within 5 seconds, so this is solo.',
-                full: 'Every room is full just now, so this is solo.' };
+                full: 'Every room is full just now, so this is solo.',
+                off: 'Rooms are off for now, so this is solo.' };
   /* Test switches ride along; nothing else does. */
   function keep (u) { var q = new URLSearchParams(location.search); ['backend', 'tier'].forEach(function (k) { if (q.get(k)) u.searchParams.set(k, q.get(k)); }); return u; }
   function go (params) { var u = new URL(location.pathname, location.href); for (var k in params) u.searchParams.set(k, params[k]); location.replace(keep(u).href); }
@@ -671,9 +672,17 @@ window.MANTA_LAB = window.MANTA_ROOT + 'lab/manta/';
       if (t0 === null) t0 = performance.now();
       if (R.connected && (R.me || !R.play)) { clearInterval(wait); return; }   // playing, or watching (a full room, or the name panel)
       if (R.allFull) { clearInterval(wait); goSolo('full'); return; }        // every room full (3O)
+      if (R.roomsOff) { clearInterval(wait); goSolo('off'); return; }        // rooms switched off (4B)
       if (performance.now() - t0 > 5000) { clearInterval(wait); goSolo('slow'); }
     }, 100);
   }
+
+  /* Rooms switched off while playing (4B): the switch redeploys, every
+     socket drops, the reconnect is refused and asks why; solo, with the note. */
+  if (P.room) setInterval(function () {
+    var R = window.__lab && window.__lab.room;
+    if (R && R.roomsOff) goSolo('off');
+  }, 250);
 
   /* Runs, best peak and cuts landed. Every cut names the leader that made
      it, solo and in a room alike (3H), and only your own are counted. */

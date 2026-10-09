@@ -46,6 +46,13 @@ the commit that added it cannot take rooms down. The off switch is one line in
 solo play. Removing rooms entirely is a deliberate migration, never a revert.
 Migration tags are permanent: append, never edit or remove.
 
+**Two switches live in Cloudflare's dashboard, not the repo.** Worker variables
+on `snaphit-online`: `ROOMS_OPEN` set to `false` turns rooms off without a push,
+and `LIVE_CAP` sets how many rooms may run at once, 1 to 20, default 3.
+`wrangler.jsonc` has `keep_vars` and declares neither, so a deploy never
+overwrites them. Never add them to `wrangler.jsonc`. Changing either redeploys
+the Worker, which disconnects everyone playing, the same as a push.
+
 **Every push restarts the rooms.** Anyone playing is disconnected. No pushes
 during a playtest.
 

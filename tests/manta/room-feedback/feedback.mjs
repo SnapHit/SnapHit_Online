@@ -1,5 +1,6 @@
 /* 3G stage 3: the feedback page /lab/manta/play/ under wrangler dev (PORT).
-   OFF=1: the same page against a rooms-off copy, which must go solo. */
+   OFF=1: the same page with rooms switched off (4B: VARS="--var
+   ROOMS_OPEN:false"), which must go solo with the plain note. */
 import { chromium } from '../lib/tools.mjs';
 const O = 'http://127.0.0.1:' + process.env.PORT, SHOTS = (process.env.SHOTS || process.env.MANTA_OUT || '/tmp') || '/tmp';
 const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 88000);
@@ -40,7 +41,7 @@ if (process.env.OFF) {
   const tLoad = Date.now() - t0;
   const [s, t] = await until(p, s => s.url.includes('solo=1') && s.solo && s.x !== null, 20000);
   let started = null; if (s) { const [s2] = await until(p, q => q.x !== null && Math.hypot(q.x - s.x, q.z - s.z) > 5, 4000); started = s2; }
-  ok('rooms off: solo starts itself, with the one-line note', s && s.solo && /could not be reached/.test(s.note) && s.noteShown, s && (s.url + ' note "' + s.note + '"'));
+  ok('rooms off: solo starts itself, with the one-line note', s && s.solo && /^Rooms are off for now, so this is solo\.$/.test(s.note) && s.noteShown, s && (s.url + ' note "' + s.note + '"'));
   ok('rooms off: solo within 5 s of the room starting to try (' + (t / 1000).toFixed(1) + ' s from opening, page load ' + (tLoad / 1000).toFixed(1) + ' s)', t > 0 && t - tLoad < 5000 + 3000, 'solo in ' + t + ' ms; load ' + tLoad + ' ms');
   ok('and the solo manta moves', !!started, started ? 'moved' : 'did not move');
   ok('zero off-origin requests', off.length === 0, off.slice(0, 3).join(' '));
