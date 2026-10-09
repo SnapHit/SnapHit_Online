@@ -89,8 +89,8 @@ export function createFollow (ctx) {
      wild manta past the wild block — goes to the spill after the fixed slots,
      dressed in its train's colour, and the pool grows to fit. spillDress
      remembers what each spill slot is dressed as, so it is re-dressed only
-     when that changes. */
-  const spillDress = [];
+     when that changes, and spillScale its tint's scale (4B). */
+  const spillDress = [], spillScale = [];
   /* Train id -> the slot that draws its leader; follower -> its spill slot
      this frame (stamp.js reads it, so the spill lays wakes too). */
   const dressOf = new Map();
@@ -420,22 +420,30 @@ export function createFollow (ctx) {
       const glow = q.loose && q.glow > 0;
       const dress = glow && dressOf.has(q.wasColour) ? dressOf.get(q.wasColour)
                          : WILD_BASE + ((q.colour >= 0 ? q.colour : 0) % WILD_SLOTS);
-      spill.push([q, dress, sizeFor(q.loose ? looseMix(q) : 0, ctx.sim.params)]);
+      /* Drawn as the block draws it: brighter while it glows, dimming and
+         shrinking away as it sinks. A room's 570 wild mantas (4B) leave the
+         block room for 110 scattered at once, not 380, so the debris of a
+         long train's crash lands here, and without this it neither glowed
+         brighter nor sank: it sat at full size and vanished. */
+      const sp = ctx.sim.params, sink = q.sinking > 0 ? Math.max(0.08, q.sinking / sp.drain) : 1;
+      spill.push([q, dress, sizeFor(q.loose ? looseMix(q) : 0, sp) * (sink < 1 ? 0.35 + 0.65 * sink : 1),
+                  glow ? 1 + 1.2 * (q.glow / sp.scatterGlow) : (sink < 1 ? sink : 1)]);
     }
 
     /* The spill, packed from SPILL_BASE; the drawn count is exactly what is
        used, and ensure() grows the pool when it has to. */
     /* A new deal (Reroll, or a palette switch) repaints every slot from its
        role, and a spill slot's role is a stand-in: dress them all again. */
-    if (m.colours !== spillDeal) { spillDress.length = 0; spillDeal = m.colours; }
+    if (m.colours !== spillDeal) { spillDress.length = 0; spillScale.length = 0; spillDeal = m.colours; }
     spillSlot = new Map();
     m.ensure(SPILL_BASE + spill.length);
     const fsize = m.aSize.getX(RIVAL_BASE + 1);
     for (let j = 0; j < spill.length; j++) {
-      const slot = SPILL_BASE + j, [g, dress, size] = spill[j];
+      const slot = SPILL_BASE + j, [g, dress, size, scale = 1] = spill[j];
       spillSlot.set(g, slot);
       m.aPos.setXYZ(slot, g.x, 0, g.z); m.aHead.setX(slot, g.head);
-      if (spillDress[j] !== dress) { m.wearTrain(slot, dress); m.setTintScale(slot, 1); m.setCutMix(slot, 0); spillDress[j] = dress; }
+      if (spillDress[j] !== dress) { m.wearTrain(slot, dress); m.setTintScale(slot, 1); m.setCutMix(slot, 0); spillDress[j] = dress; spillScale[j] = 1; }
+      if (spillScale[j] !== scale) { m.setTintScale(slot, scale); spillScale[j] = scale; }
       const sz = size || fsize;
       if (m.aSize.getX(slot) !== sz) { m.aSize.setX(slot, sz); sizeDirty = true; }
     }
