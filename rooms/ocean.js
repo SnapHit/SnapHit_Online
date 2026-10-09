@@ -72,6 +72,14 @@ const roomParams = P => ({ ...simParams(P), bots: ROOM_TRAINS, arenaR: ROOM_AREN
 export const MAX_PLAYERS = ROOM_TRAINS;   // every train a seat (3G allowed 12 of 10)
 const MAX_WATCHERS = 4;
 const MAX_SOCKETS = MAX_PLAYERS + MAX_WATCHERS + 2;   // the rest are still saying hello
+/* THE DAILY BUDGET (4B, design doc 10.6 Cost): the registry's answer to
+   each report this room sends (worker.js) says what all rooms have used
+   today. At REST_AT of either allowance a new player goes solo with a note
+   saying when rooms return; at LEAVE_AT each player still here goes solo
+   after their next crash. A level older than BUDGET_STALE_MS (the registry
+   could not be reached) counts as nothing, so rooms keep running. */
+export const REST_AT = 0.8, LEAVE_AT = 0.95, BUDGET_STALE_MS = 180000;
+const nextMidnight = t => { const d = new Date(t); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1); };
 const HOLD_MS = 15000;            // a dropped player's train waits this long for its token
 const AWAY_MS = 2000;             // no inputs this long and a player is away (3G): benched as for a drop
 const REWIND_MAX = 15;            // steps (250 ms); the simulation keeps no more
@@ -101,6 +109,38 @@ const viewOf = m => ({ x: clamp(m && m.x, -1e5, 1e5), z: clamp(m && m.z, -1e5, 1
 
 export function createOcean (env, url, opts = {}) {
   const phones = new Map();           // socket -> what this phone has been sent
+  /* The day's use, as the registry last said: { r, d } fractions of the
+     request and run-time allowances, when it was heard, and when the day
+     ends on this room's clock. A phone's ?fake= (lab only) is for that
+     phone alone: 80, the day was at 80 percent when it came (it goes solo
+     at once); 95, the day reaches 95 percent while it plays (it plays,
+     and goes solo after its next crash). */
+  let budget = null, heard = null, answered = false;
+  /* The room hears the day's level from its first report's answer, a
+     moment after the first phone arrives: a new player waits for it (a
+     second at most, then rooms carry on), so no one slips in before it.
+     Once (answered), whatever came: a report answered with no level (the
+     guard down) or no answer within the second, and nobody waits again. */
+  const firstHeard = new Promise(r => { heard = r; });
+  const levelNow = () => { const t = Date.now(); return budget && t - budget.at < BUDGET_STALE_MS && t < budget.resetAt ? Math.max(budget.r, budget.d) : 0; };
+  const joinLevel = phone => Math.max(levelNow(), phone.fake === 80 ? 0.8 : 0);
+  const stayLevel = phone => Math.max(levelNow(), phone.fake === 95 ? 0.95 : 0);
+  const restUntil = () => budget && Date.now() < budget.resetAt ? budget.resetAt : nextMidnight(Date.now());
+  const budgetMsg = phone => JSON.stringify({ t: 'budget', r: budget ? Math.round(budget.r * 1000) / 1000 : null, d: budget ? Math.round(budget.d * 1000) / 1000 : null, f: phone.fake || 0 });
+  /* Rooms resting (4B): this phone goes solo, with the time rooms return.
+     A player is unseated at once (a bot holds the train); the page leaves by
+     itself, and the room closes the socket after closeAt if it has not. */
+  function rest (ws, phone, crash) {
+    try { ws.send(JSON.stringify({ t: 'rest', until: restUntil(), c: crash ? 1 : 0 })); } catch (_) { /* gone */ }
+    /* Unseated, and its hold dropped: a resting player cannot take the
+       manta back by saying hello again. */
+    if (phone.player) { const tok = phone.player.token; unseat(phone); held.delete(tok); }
+    phone.resting = true; phone.closeAt = Date.now() + (crash ? 5000 : 1000);
+    if (opts.onChange) opts.onChange();
+  }
+  /* How long this room has ticked, for the budget: a ticking room is billed
+     for run time whatever its players (Cloudflare bills 128 MB a second). */
+  let runMs = 0, runFrom = 0;
   const staged = opts.stage === 'cut';
   /* The crossing train's length, 20 unless a test asks (?len=, 2 to 40). */
   const crossLen = Math.round(clamp(url.searchParams.get('len') || 20, 2, 40));
@@ -269,6 +309,11 @@ export function createOcean (env, url, opts = {}) {
     if (owed > STEP * 12) owed = 0;               // a stall is not caught up
     const events = sim.events.splice(0);
     n++;
+    /* 95 PERCENT (4B): a player whose train has just crashed goes solo
+       after this tick's snapshot has shown them the crash. */
+    const leaving = [];
+    for (const e of events) if (e.kind === 'crash') for (const [ws, phone] of phones) if (phone.player && phone.player.id === e.id && stayLevel(phone) >= LEAVE_AT) leaving.push([ws, phone]);
+    for (const [ws, phone] of phones) if (phone.closeAt && now >= phone.closeAt) { try { ws.close(4004, 'rooms are resting'); } catch (_) { /* gone */ } leave(ws); if (opts.onChange) opts.onChange(ws); }
     if (held.size) forgetHeld(now);
     /* AWAY (3G): a player whose inputs have stopped for AWAY_MS (the phone
        sends one at least every 500 ms, 4B) is benched whatever the phone is
@@ -299,6 +344,7 @@ export function createOcean (env, url, opts = {}) {
         }
       } catch (_) { /* gone */ }
     }
+    for (const [ws, phone] of leaving) rest(ws, phone, true);
   }
 
   /* THE STAGED CUT (tests only, see the top). Bot 2 swims east across the
@@ -366,8 +412,8 @@ export function createOcean (env, url, opts = {}) {
     lay(cross, -60, 0, -Math.PI / 2, crossLen);     // heading +x, across the seat's path
     if (cross) cross.human = { want: -Math.PI / 2, burst: false, rewind: 0 };
   }
-  const start = () => { if (timer) return; last = Date.now(); owed = 0; timer = setInterval(tick, 1000 / SNAP_HZ); };
-  const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+  const start = () => { if (timer) return; last = Date.now(); owed = 0; runFrom = last; timer = setInterval(tick, 1000 / SNAP_HZ); };
+  const stop = () => { if (timer) { clearInterval(timer); timer = null; runMs += Date.now() - runFrom; } };
   function leave (ws) {
     const phone = phones.get(ws);
     if (phone) unseat(phone);
@@ -377,7 +423,7 @@ export function createOcean (env, url, opts = {}) {
   }
 
   return {
-    join (ws, local) { phones.set(ws, { view: viewOf(null), watch: -1, sent: new Map(), debug: false, local, ready: false }); },
+    join (ws, local, fake) { phones.set(ws, { view: viewOf(null), watch: -1, sent: new Map(), debug: false, local, ready: false, fake: fake === '95' ? 95 : fake === '80' ? 80 : 0 }); },
     get crowded () { return phones.size >= MAX_SOCKETS; },
     leave,
     async message (ws, raw) {
@@ -416,6 +462,13 @@ export function createOcean (env, url, opts = {}) {
         }
       }
       if (m.p === 1) {
+        /* RESTING (4B): at 80 percent of the day's allowance a new player
+           goes solo. One taking back its own held manta is not new. */
+        const h = typeof m.k === 'string' ? held.get(m.k) : null, back = !!h && h.until > Date.now();
+        /* A staged room (tests only) never reports, so never hears it. */
+        if (!back && !answered && !phone.fake && !opts.stage) { await Promise.race([firstHeard, new Promise(r => setTimeout(r, 1000))]); answered = true; }
+        if (!phones.has(ws)) return;
+        if (phone.resting || (!back && joinLevel(phone) >= REST_AT)) { rest(ws, phone, false); return; }
         me = seat(phone, m);
         if (!me) {
           ws.send(JSON.stringify({ t: 'full' }));
@@ -437,8 +490,22 @@ export function createOcean (env, url, opts = {}) {
         return [t.id, t.runs, pts];
       });
       ws.send(JSON.stringify(init));
+      if (budget || phone.fake) ws.send(budgetMsg(phone));   // the lab panel's "rooms today" (4B)
       start();
     },
+    /* The day's use from the registry (worker.js report), passed on to every
+       phone for the lab panel. */
+    setBudget (j) {
+      budget = { r: +j.r || 0, d: +j.d || 0, at: Date.now(), resetAt: Date.now() + Math.max(0, +j.left || 0) };
+      answered = true; heard();
+      for (const [ws, phone] of phones) if (phone.ready) { try { ws.send(budgetMsg(phone)); } catch (_) { /* gone */ } }
+    },
+    /* Milliseconds ticked since the last ask, for the next report; given
+       back if that report did not arrive. */
+    takeRunMs () { const t = Date.now(); let v = runMs; if (timer) { v += t - runFrom; runFrom = t; } runMs = 0; return v; },
+    giveRunMs (v) { runMs += v; },
+    /* A report came back with no level (the guard down, or unreachable). */
+    noBudget () { answered = true; heard(); },
     get stepping () { return timer !== null; },
     get build () { return build; },
     get players () { return players().length; },

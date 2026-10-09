@@ -169,6 +169,14 @@ let controls = null;
 let simAcc = 0;
 let stepCost = 0, stepCount = 0;
 window.__sim = sim;
+/* ROOMS TODAY (4B): the day's use of Cloudflare's free allowances, as the
+   room last heard it from the registry; solo has none. */
+function showBudget () {
+  const b = ROOM && sim && sim.room ? sim.room.budget : null;
+  if (!ROOM) { panel.set('budget', 'solo: no room'); return; }
+  if (!b || b.r === null) { panel.set('budget', b && b.f ? 'faking ' + b.f + '% (the real use comes with the next report)' : 'waiting for the room\u2019s report'); return; }
+  panel.set('budget', 'requests ' + Math.round(b.r * 100) + '%, time ' + Math.round(b.d * 100) + '%' + (b.f ? '  \u00b7  faking ' + b.f + '%' : ''));
+}
 /* What is drawn and what the pool holds, not the fixed slot count: the
    pool grows past 1071 for long trains, and a row that stayed at 1071 said
    nothing about it (3A). Refreshed with the sim step row and on growth. */
@@ -373,7 +381,7 @@ function advance (now, dt, drive = false) {
     }
   }
   simTime += dt * scale + owed;
-  if ((++dbgFrames & 15) === 0) dbg.show();
+  if ((++dbgFrames & 15) === 0) { dbg.show(); showBudget(); }
   setSceneTime(simTime);
   /* The loose mantas wrap inside a box that travels with the player, so
      the world is never empty behind you. Set before the script runs, not

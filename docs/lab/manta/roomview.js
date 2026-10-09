@@ -76,6 +76,11 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
      note (play/index.html) and this stops trying. statusAt: when it last
      asked. ?fake=off|full rides on every rooms request (lab only). */
   let roomsOff = false, statusAt = -1e9;
+  /* ROOMS RESTING (4B): the day's budget is near its end. rest: { until
+     (ms, when rooms return), crash (sent after your crash, at 95 percent) },
+     and the page goes solo with a note. budget: the day's use, { r, d, f },
+     for the lab panel's "rooms today". */
+  let rest = null, budget = null;
   const fakeQ = (() => { const f = new URLSearchParams(location.search).get('fake') || ''; return /^(off|full|80|95)$/.test(f) ? f : ''; })();
   const withFake = path => fakeQ ? path + (path.includes('?') ? '&' : '?') + 'fake=' + fakeQ : path;
   let rtt = null, delay = 0.1, offset = null, lastArrive = null, lastSnap = null, snapCount = 0;
@@ -100,11 +105,14 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   document.body.appendChild(mark);
   /* Your name as the room has it (a typed one once the room took it). */
   const myName = () => play ? (names.get(play.id) || play.name || null) : null;
+  /* When rooms return, on this phone's own clock and in its own way of
+     writing a time (00:00 UTC is 11am in Sydney in daylight saving). */
+  const restTime = t => { try { return new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }); } catch (_) { return 'tomorrow'; } };
   function showSignal () {
     if (pencil) pencil.hidden = !(connected && play && play.id >= 0);
     if (!connected) {
       mark.style.color = '#ff8a80';
-      sig.textContent = '● ' + (roomsOff ? 'rooms are off' : allFull ? 'every room is full' : navigator.onLine === false ? 'offline' : everOpen ? 'reconnecting…' : 'connecting…');
+      sig.textContent = '● ' + (rest ? 'rooms resting until ' + restTime(rest.until) : roomsOff ? 'rooms are off' : allFull ? 'every room is full' : navigator.onLine === false ? 'offline' : everOpen ? 'reconnecting…' : 'connecting…');
       return;
     }
     mark.style.color = rtt === null ? '#8fa6bb' : rtt < 150 ? '#7fe3d0' : rtt < 400 ? '#ffc46b' : '#ff8a80';
@@ -202,14 +210,15 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   }
 
   function connect () {
-    if (stopped || asking) return;
+    if (stopped || asking || rest) return;
     if (publicGame && play && !seatRoom) {
       asking = true;
       fetch(withFake('/lab/manta/rooms/public' + (foundFull ? '?full=' + foundFull : '')), { method: 'POST', cache: 'no-store' })
         .then(r => r.ok ? r.json().then(j => { if (/^lobby(-\d+)?$/.test(j.room)) seatRoom = j.room; })
-                        : r.status === 503 ? r.text().then(t => { if (/full/.test(t)) allFull = true; if (/off/.test(t)) roomsOff = true; }) : null)
+                        : r.status === 503 ? r.text().then(t => { if (/full/.test(t)) allFull = true; if (/off/.test(t)) roomsOff = true;
+                            const rs = /resting: (\d+)/.exec(t); if (rs) rest = { until: +rs[1], crash: false }; }) : null)
         .catch(() => { /* the page's own five seconds decide */ })
-        .then(() => { asking = false; foundFull = ''; if (allFull || roomsOff) { showSignal(); return; } if (seatRoom) connect(); else later(); });
+        .then(() => { asking = false; foundFull = ''; if (allFull || roomsOff || rest) { showSignal(); return; } if (seatRoom) connect(); else later(); });
       return;
     }
     const target = publicGame && play ? seatRoom : room;
@@ -248,7 +257,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
      restarting for a deploy is back in seconds, one that is down is not
      hammered. */
   function later () {
-    if (stopped) return;
+    if (stopped || rest) return;
     clearTimeout(retry);
     retry = setTimeout(connect, backoff * 1000);
     backoff = Math.min(backoff * 2, 8);
@@ -279,6 +288,13 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
        steering message, and has to be short). */
     if (m.t === 'pong') { rtt = ((performance.now() - m.c) % 1e6 + 1e6) % 1e6; rtts5.push(rtt); if (rtts5.length > 5) rtts5.shift(); showSignal(); return; }
     if (m.t === 'names') { setNames(m.names); return; }
+    if (m.t === 'budget') { budget = { r: m.r, d: m.d, f: m.f || 0 }; return; }
+    /* The room says rooms are resting: stop, and let the page go solo (after
+       the crash's beat, when it came at your crash). */
+    if (m.t === 'rest') { rest = { until: +m.until || 0, crash: m.c === 1 }; clearTimeout(retry);
+      /* After a crash the room carries on drawing through the death card;
+         nothing reconnects (connect and later check rest). */
+      const s = ws; setTimeout(() => { stopped = true; try { if (s) s.close(1000, 'resting'); } catch (_) { /* closed */ } }, rest.crash ? 2500 : 0); showSignal(); return; }
     /* The room benched this player (no inputs for 2 s, or the page said it
        was hidden): rejoin at once if the page is showing, with the token,
        which takes the manta back while the bot still holds it. */
@@ -545,6 +561,8 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
       get seatRoom () { return seatRoom; }, get allFull () { return allFull; },
       /* Rooms switched off (4B): the page goes solo with its note. */
       get roomsOff () { return roomsOff; },
+      /* The day's budget (4B): rooms resting, and the day's use for the panel. */
+      get rest () { return rest; }, get budget () { return budget; },
       get corrections () { return play ? play.corrections : []; }, get seq () { return play ? play.seq : 0; },
       get ack () { return play ? play.ack : 0; }, get name () { return play ? play.name : null; },
       /* Play mode's clock (3E): steps ahead of the room, inputs the room
