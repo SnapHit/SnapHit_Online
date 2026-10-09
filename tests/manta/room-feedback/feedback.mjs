@@ -26,7 +26,7 @@ async function page (w, h, other) {
 const Q = 'backend=webgl2&tier=low';
 const state = p => p.evaluate(() => {
   const R = window.__lab && window.__lab.room, S = window.__sim, vis = id => { const e = document.getElementById(id); if (!e) return null; const cs = getComputedStyle(e); return cs.display !== 'none' && cs.visibility !== 'hidden' && !e.hidden && e.getClientRects().length > 0; };
-  return { url: location.search, room: R ? { connected: R.connected, play: R.play, me: !!R.me, id: R.id, name: (window.__sim && window.__sim.youName && window.__sim.youName()) || R.name, snaps: R.snaps } : null, solo: !!S && !R,
+  return { url: location.search, room: R ? { connected: R.connected, play: R.play, me: !!R.me, id: R.id, name: (window.__sim && window.__sim.youName && window.__sim.youName()) || R.name, snaps: R.snaps, players: R.players || [] } : null, solo: !!S && !R,
     x: S && S.you ? S.you.x : null, z: S && S.you ? S.you.z : null, stats: (document.getElementById('stats') || {}).textContent, note: (document.getElementById('note') || {}).textContent,
     noteShown: vis('noteRow'), share: vis('shareRow') ? document.getElementById('shareLink').value : null, board: (document.getElementById('board') || {}).textContent || '',
     lab: ['chip', 'panel', 'bar', 'plain', 'drawerToggle'].filter(vis), feedback: vis('feedback'), privacy: vis('privacyRow'),
@@ -101,8 +101,9 @@ ok('Copy says it copied', /Copied/.test(await p.textContent('#copyLink')));
 /* 3. A second browser, landscape, opens the link and is in the same room. */
 const q = await page(915, 412, true);
 await q.goto(s2.share + '&' + Q, { waitUntil: 'load' });
-const [s3, t3] = await until(q, s => s.room && s.room.connected && s.room.me && s.room.id >= 0 && s.board.includes(s2.room.name), 20000);
-ok('the link joins the same room from a second browser (its board shows the first player)', t3 > 0 && s3.room.id !== s2.room.id, s3 ? s3.room.name + ' #' + s3.room.id + ' sees ' + s2.room.name + ' ' + JSON.stringify(s3.room) + ' board ' + JSON.stringify(s3.board.slice(0, 120)) : 'not joined');
+/* 4B: the room names every player; the top-ten board of 20 trains need not show a new one. */
+const [s3, t3] = await until(q, s => s.room && s.room.connected && s.room.me && s.room.id >= 0 && s.room.players.includes(s2.room.name), 20000);
+ok('the link joins the same room from a second browser (the room names the first player to it)', t3 > 0 && s3.room.id !== s2.room.id, s3 ? s3.room.name + ' #' + s3.room.id + ' sees ' + s2.room.name + ' ' + JSON.stringify(s3.room) : 'not joined');
 ok('landscape: no horizontal overflow', s3 && s3.overflow === 0, s3 && 'overflow ' + s3.overflow);
 await q.screenshot({ path: SHOTS + '/feedback-915x412.png' });
 await tail();

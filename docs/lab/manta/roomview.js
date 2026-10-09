@@ -523,6 +523,9 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
          said came too late for their step, and earliness reports received. */
       get lead () { return play ? play.lead : null; }, get late () { return play ? play.late : 0; },
       get reported () { return play ? play.reported : 0; }, get id () { return play ? play.id : -1; },
+      /* For the tests: the names of every player in the room (4B: with 20
+         trains the top-ten board no longer shows everyone). */
+      get players () { return [...names.values()]; },
     },
   };
   addEventListener('online', showSignal); addEventListener('offline', showSignal);
