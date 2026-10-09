@@ -11,7 +11,7 @@
  *   init adds me:{id, name, token} and names. A player's snapshots carry
  *   its own leader and its clock in the binary (flag 8 below); who drives
  *   what comes as {t:'names', names:[[id, name], ...]} whenever it changed.
- *   The player's own train is always in the trains. An 11th player gets
+ *   The player's own train is always in the trains. A 21st player gets
  *   {t:'full'} and is closed.
  *   {t:'view', x, z, w, h, watch}                 when the view moves
  *   watch is the bot the camera follows (-1 for none): the room always

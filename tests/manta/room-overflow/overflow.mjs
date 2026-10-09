@@ -3,7 +3,8 @@
    reached with a few dozen phones rather than two hundred. Scripted phones
    (room-radar/playclient.mjs) ask /lab/manta/rooms/public for their room, as
    roomview.js does, then join it as players, one after another:
-     25 joiners land 10, 10 and 5; one leaves and the next joiner takes that
+     45 joiners land 20, 20 and 5 (4B: 20 seats a room; 3O had 10, 10 and
+     5 from 25); one leaves and the next joiner takes that
      seat; the cap holds (public and private rooms together); and the
      feedback page, every room full, starts solo with its one-line note. */
 import { player } from '../room-radar/playclient.mjs';
@@ -24,15 +25,15 @@ async function join () {
 }
 const count = list => { const m = {}; for (const j of list) if (j.ok) m[j.room] = (m[j.room] || 0) + 1; return m; };
 
-/* 1. Twenty-five players, one after another. */
+/* 1. Forty-five players, one after another. */
 const phones = [];
-for (let i = 0; i < 25; i++) phones.push(await join());
+for (let i = 0; i < 45; i++) phones.push(await join());
 const c1 = count(phones);
-ok('25 players joining one after another land 10, 10 and 5 (lobby, lobby-2, lobby-3), every one seated', c1.lobby === 10 && c1['lobby-2'] === 10 && c1['lobby-3'] === 5 && phones.every(j => j.ok), JSON.stringify(c1));
-/* A room's trains are the bots setting's ten, players and bots together:
-   a player drives one of them, and bots drive the rest (ocean.js). */
+ok('45 players joining one after another land 20, 20 and 5 (lobby, lobby-2, lobby-3), every one seated', c1.lobby === 20 && c1['lobby-2'] === 20 && c1['lobby-3'] === 5 && phones.every(j => j.ok), JSON.stringify(c1));
+/* A room's trains are the room's twenty, players and bots together: a
+   player drives one of them, and bots drive the rest (ocean.js). */
 const trains = [...new Set(phones.filter(j => j.ok).map(j => (j.c.inits.at(-1).kinds || []).length))];
-ok('bots still fill every room: each overflow room has the same ten trains as lobby, players and bots together', trains.length === 1 && trains[0] === 10, JSON.stringify(trains) + ' trains a room');
+ok('bots still fill every room: each overflow room has the same twenty trains as lobby, players and bots together', trains.length === 1 && trains[0] === 20, JSON.stringify(trains) + ' trains a room');
 
 /* 2. One leaves lobby-2; the next joiner takes that seat. */
 const leaver = phones.find(j => j.room === 'lobby-2');
@@ -76,9 +77,9 @@ await wait(2000);
 await wait(2000);
 
 /* 3. The cap: 4 live rooms. Fill lobby-3, then make a private room and join it: now 4 live, all full or private. */
-for (let i = 0; i < 5; i++) phones.push(await join());
+for (let i = 0; i < 15; i++) phones.push(await join());
 const c3 = count(phones.filter(j => j !== leaver));
-ok('lobby-3 fills to 10 before anything new opens', c3['lobby-3'] === 10 && !c3['lobby-4'], JSON.stringify(c3));
+ok('lobby-3 fills to 20 before anything new opens', c3['lobby-3'] === 20 && !c3['lobby-4'], JSON.stringify(c3));
 const made = await fetch(B + '/lab/manta/rooms/new', { method: 'POST', headers: { Origin: B, 'X-Test-Address': 'cap-1' } });
 const code = made.ok ? (await made.json()).code : null;
 let priv = null; if (code) { priv = player(PORT, code); await priv.opened; for (let i = 0; i < 100 && !seated(priv); i++) await wait(50); }
@@ -88,7 +89,7 @@ const over = await ask('cap-2');
 ok('the cap holds: every public room full and 4 rooms live (private included), the next joiner is told every room is full', /^HTTP 503 every room is full/.test(over), over);
 const made2 = await fetch(B + '/lab/manta/rooms/new', { method: 'POST', headers: { Origin: B, 'X-Test-Address': 'cap-3' } });
 ok('and no new private room opens past the cap either', made2.status === 503, made2.status + ' ' + (await made2.text()));
-/* The room refuses an 11th player itself, whatever the registry thought. */
+/* The room refuses a 21st player itself, whatever the registry thought. */
 const extra = player(PORT, 'lobby'); await extra.opened; for (let i = 0; i < 60 && !extra.full && !seated(extra); i++) await wait(50);
 ok('a phone going straight to a full lobby is refused by the room', extra.full && !seated(extra), extra.full ? 'full' : 'seated?');
 

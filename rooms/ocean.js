@@ -54,7 +54,22 @@ const simParams = P => ({
   sharkOn: P.sharkOn, sharkEvery: P.sharkEvery, sharkStay: P.sharkStay, sharkSpeed: P.sharkSpeed, sharkLen: P.sharkLen, sharkWide: P.sharkWide,
 });
 
-const MAX_PLAYERS = 10;           // at most 12 (3G); the ocean has ten trains to drive
+/* THE ROOM'S OCEAN (4B, design doc 10.6): up to 20 people in an ocean
+   scaled for 21 mantas, so each train has the same share of ocean, wild
+   mantas and blooms as in solo (11 mantas: radius 2000, 300 wild, 4
+   blooms). 20 trains swim, every one a seat, with bots in the seats nobody
+   has; the 21st manta is the simulation's own solo one, parked out of the
+   water, as the 11th always was. Radius 2000 x sqrt(21/11), wild 300 x
+   21/11 and blooms 4 x (2760/2000)^2, each rounded. Solo keeps params.js, so
+   nothing here can change it. Measured before it was set, in plain Node
+   with the room's own code (tests/manta/room-size/cost.mjs): a step at 21
+   mantas with 20 phones' snapshots, the brain driving every train, 3.0 to
+   3.6 ms mean and 7.1 to 7.7 ms at the 99th percentile over three seeds,
+   against a bar of 4 and 10. */
+export const ROOM_TRAINS = 20, ROOM_ARENA = 2760, ROOM_WILD = 570, ROOM_BLOOMS = 8;
+const roomParams = P => ({ ...simParams(P), bots: ROOM_TRAINS, arenaR: ROOM_ARENA, arenaRWanted: ROOM_ARENA, wildCount: ROOM_WILD, blooms: ROOM_BLOOMS });
+
+export const MAX_PLAYERS = ROOM_TRAINS;   // every train a seat (3G allowed 12 of 10)
 const MAX_WATCHERS = 4;
 const MAX_SOCKETS = MAX_PLAYERS + MAX_WATCHERS + 2;   // the rest are still saying hello
 const HOLD_MS = 15000;            // a dropped player's train waits this long for its token
@@ -103,7 +118,7 @@ export function createOcean (env, url, opts = {}) {
   const ready = loadDefaults(env, url).then(d => {
     build = d.build;
     seed = crypto.getRandomValues(new Uint32Array(1))[0];
-    sim = createSim({ seed, params: simParams(d.P) });
+    sim = createSim({ seed, params: roomParams(d.P) });
     sim.params.history = true;          // the ring lag compensation reads (sim.js)
     /* Under wrangler dev only (--var PINK_WAIT:4 PINK_STAY:40): the pink
        manta in seconds rather than a minute, for the room tests. A deploy
@@ -423,12 +438,13 @@ export function createOcean (env, url, opts = {}) {
   };
 }
 
-/* Under wrangler dev only: n steps of a fresh ocean at the defaults, so a
+/* Under wrangler dev only: n steps of a fresh room's ocean (its own solo
+   manta swims here, so 21 trains), so a
    test can time the simulation inside workerd from outside (its clocks do
    not move during a request). */
 export async function bench (env, url, count) {
   const d = await loadDefaults(env, url);
-  const s = createSim({ seed: 7, params: simParams(d.P) });
+  const s = createSim({ seed: 7, params: roomParams(d.P) });
   for (let i = 0; i < count; i++) { s.input.want = Math.sin(i / 90) * 2; s.step(); s.events.length = 0; }
   return { steps: count, wild: s.wild.filter(w => w && w.alive).length, followers: s.rivals.reduce((a, t) => a + t.followers.length, 0) };
 }

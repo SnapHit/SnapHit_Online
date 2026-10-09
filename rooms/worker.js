@@ -10,7 +10,7 @@
  * once the Room class is deployed, a revert cannot remove it.
  */
 import { DurableObject } from 'cloudflare:workers';
-import { createOcean, bench } from './ocean.js';
+import { createOcean, bench, MAX_PLAYERS } from './ocean.js';
 
 /* THE OFF SWITCH. false refuses every rooms request, the room paths and the
    echo alike, with a 503 "rooms are off", and the lab falls back to solo.
@@ -27,7 +27,7 @@ const LOBBY = 'lobby';
 /* OVERFLOW ROOMS (3O): the public game is "lobby", then "lobby-2" up to
    "lobby-20" as each fills. Every one of those names is the server's own. */
 const PUBLIC = /^lobby(-([2-9]|1[0-9]|20))?$/;
-const SEATS = 10;                 // players in one room: ocean.js MAX_PLAYERS
+const SEATS = MAX_PLAYERS;        // players in one room (20 from 4B), from ocean.js so the two cannot differ
 const SENT_FOR_MS = 10000;        // a player sent to a public room counts this long until it reports
 const REGISTRY = '#registry';
 const REG = 'https://registry.internal/';
@@ -69,7 +69,7 @@ export class Room extends DurableObject {
     const staged = LOCAL.test(url.hostname) && url.pathname.startsWith(ROOMS + 'stage/');
     if (url.pathname.startsWith(ROOMS + 'ocean/') || staged) {
       if (!this.ocean) this.ocean = createOcean(this.env, url, { stage: staged ? 'cut' : null });
-      /* At most 10 players and 4 watchers (ocean.js); a socket beyond
+      /* At most 20 players and 4 watchers (ocean.js); a socket beyond
          everything a room could seat is refused before it is accepted. */
       if (this.ocean.crowded) return text('room full', 503);
       if (!staged) this.name = url.pathname.slice((ROOMS + 'ocean/').length);
@@ -274,7 +274,7 @@ export default {
     if (room) return env.ROOMS.get(env.ROOMS.idFromName(room[1])).fetch(request);
     if (ocean) {
       /* Lobby always; a code only while the registry knows it, and only
-         while fewer than 20 rooms are live (or it is one of them). */
+         while fewer than the cap are live (or it is one of them). */
       if (ocean[1] !== LOBBY && !testName) {
         const r = await registry(env).fetch(REG + 'enter?name=' + ocean[1]);
         if (r.status !== 200) return text(await r.text(), r.status);

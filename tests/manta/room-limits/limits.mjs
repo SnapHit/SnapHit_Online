@@ -83,18 +83,21 @@ const until = async (f, ms = 5000) => { const t0 = Date.now(); while (Date.now()
     e1.end();
   }
 }
-/* 5. Seats: at most 10 players (12 allowed; the ocean has 10 trains) and 4 watchers. */
+/* 5. Seats: at most 20 players (4B: the room's 20 trains) and 4 watchers. */
 { const { code } = await mint(); const ps = [], ws = [];
-  for (let i = 0; i < 11; i++) { ps.push(player(R + 'ocean/' + code)); await wait(60); }
+  for (let i = 0; i < 21; i++) { ps.push(player(R + 'ocean/' + code)); await wait(60); }
   for (let i = 0; i < 5; i++) { ws.push(watch(R + 'ocean/' + code)); await wait(60); }
   await until(() => ps.every(c => c.init() || c.closed) && ws.every(c => c.init() || c.closed), 8000);
   const seated = ps.filter(c => c.init() && c.init().me).length, pfull = ps.filter(c => c.msgs.some(m => m.t === 'full')).length;
   const watching = ws.filter(c => c.init() && !c.closed).length, wfull = ws.filter(c => c.msgs.some(m => m.t === 'full')).length;
-  ok('players: 10 seated, the 11th told the room is full', seated === 10 && pfull === 1, seated + ' seated, ' + pfull + ' full');
+  ok('players: 20 seated, the 21st told the room is full', seated === 20 && pfull === 1, seated + ' seated, ' + pfull + ' full');
+  const P = (ps.find(c => c.init()) || { init: () => ({}) }).init().params || {};
+  ok('the room\'s ocean (4B): 20 trains, radius 2760, 570 wild mantas, 8 blooms, the pink manta on and the whale shark off', P.bots === 20 && P.arenaR === 2760 && P.wildCount === 570 && P.blooms === 8 && P.pinkOn === 1 && P.sharkOn === 0,
+     JSON.stringify({ bots: P.bots, arenaR: P.arenaR, wildCount: P.wildCount, blooms: P.blooms, pinkOn: P.pinkOn, sharkOn: P.sharkOn }));
   ok('watchers: 4 watch, the 5th told the room is full', watching === 4 && wfull === 1, watching + ' watching, ' + wfull + ' full');
   const extra = []; for (let i = 0; i < 4; i++) extra.push(sock(R + 'ocean/' + code));
   await Promise.all(extra.map(c => c.opened)); await wait(300);
-  ok('with 14 seated, two more sockets are let in to say hello and the next are refused before opening', extra.filter(c => c.open).length === 2 && extra.filter(c => !c.open).length === 2, extra.map(c => c.open ? 'open' : 'refused').join(','));
+  ok('with 24 seated, two more sockets are let in to say hello and the next are refused before opening', extra.filter(c => c.open).length === 2 && extra.filter(c => !c.open).length === 2, extra.map(c => c.open ? 'open' : 'refused').join(','));
   for (const c of [...ps, ...ws, ...extra]) c.end();
   await wait(1500);
 }

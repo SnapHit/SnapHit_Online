@@ -246,7 +246,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
 
   function receive (m) {
     if (m.t === 'reload') { stopped = true; clearTimeout(retry); try { ws.close(); } catch (_) {} ws = null; connected = false; showSignal(); showReload(); return; }
-    /* A room with ten players already: watch it instead of playing. */
+    /* A room with every seat taken (20, 4B): watch it instead of playing. */
     if (m.t === 'full' && publicGame && play) { foundFull = seatRoom || room; seatRoom = null; return; }   // the close that follows asks again
     if (m.t === 'full') { if (!play) return; play.stop(); play = null;
       mirror.watching = true; watched = -1; you.watched = -1; you.followers.length = 0; you.dead = 0; showSignal(); return; }

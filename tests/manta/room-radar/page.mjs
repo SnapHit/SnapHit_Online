@@ -15,6 +15,14 @@ for (const [first, tag] of [[false, 'play'], [true, 'first']]) {
   await p.goto(O + '/lab/manta/play/?backend=webgl2&tier=low', { waitUntil: 'load' });
   await p.waitForFunction(() => window.__lab && window.__lab.room && window.__lab.room.connected && window.__radar && window.__radar.last, null, { timeout: 30000 }).catch(() => {});
   await wait(2500);
+  /* 4B: the radar maps the room's whole arena onto its disc. A room's
+     arena is 2760 (solo 2000): the disc's radius in px is the arena's
+     radius times the drawing scale, and no train is drawn outside it. */
+  const fit = await p.evaluate(() => { const L = window.__radar && window.__radar.last, M = window.__radar && window.__radar.model, A = window.__sim && window.__sim.params && window.__sim.params.arenaR;
+    if (!L || !M || !A) return null; let worst = 0, n = 0;
+    for (const t of M.trains.values()) if (t.alive) { n++; worst = Math.max(worst, Math.hypot(t.x, t.z) * L.scale); }
+    return { arenaR: A, disc: +(L.centre - 1.5).toFixed(2), mapped: +(L.scale * A).toFixed(2), furthest: +worst.toFixed(2), trains: n }; });
+  ok(tag + ': the radar maps the room\'s whole arena (radius 2760) onto its disc, and every train is inside it', !!fit && fit.arenaR === 2760 && Math.abs(fit.mapped - fit.disc) < 0.05 && fit.trains >= 10 && fit.furthest <= fit.disc + 0.5, JSON.stringify(fit));
   for (const [w, h, name] of [[412, 915, 'portrait'], [915, 412, 'landscape'], [915, 190, 'landscape-keyboard']]) {
     await p.setViewportSize({ width: w, height: h }); await wait(1500);
     const r = await p.evaluate(() => { const vis = e => e && getComputedStyle(e).display !== 'none' && !e.hidden && e.getBoundingClientRect().width > 0;

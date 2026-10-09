@@ -73,7 +73,7 @@ if (PARTS.includes('bytes')) jobs.push((async () => {
     pairs.sort((a, b) => a - b); return { in50: q(i, 0.5), out50: q(o, 0.5), both50: q(pairs, 0.5), both95: q(pairs, 0.95) }; });
   const trains = ps[0].board ? ps[0].board.length : null;
   ps.forEach(p => p.close());
-  ok('three players share a room with the seven bots left, each with a generated name', ids.every(v => typeof v === 'number') && new Set(ids).size === 3 && names.every(n => /^[a-z]+ [a-z]+$/.test(n || '')),
+  ok('three players share a room with the seventeen bots left, each with a generated name', ids.every(v => typeof v === 'number') && new Set(ids).size === 3 && names.every(n => /^[a-z]+ [a-z]+$/.test(n || '')),
      JSON.stringify(names) + ' ids ' + ids + ', ' + trains + ' trains on the board');
   ok('bytes per phone, both directions: median at most 10 KB/s, 95th percentile at most 16 KB/s', rows.every(r => r.both50 <= 10240 && r.both95 <= 16384),
      rows.map(r => 'in ' + (r.in50 / 1024).toFixed(2) + ' + out ' + (r.out50 / 1024).toFixed(2) + ' = ' + (r.both50 / 1024).toFixed(2) + ' KB/s (p95 ' + (r.both95 / 1024).toFixed(2) + ')').join('; '));
