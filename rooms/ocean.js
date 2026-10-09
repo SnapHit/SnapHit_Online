@@ -91,7 +91,8 @@ const opt = (v, ok) => v === undefined || ok(v);
 const watchOk = v => Number.isInteger(v) && v >= -1 && v < 1e4;
 const inOk = (m, steps) => Number.isSafeInteger(m.seq) && m.seq > 0 &&
   opt(m.k, k => Number.isSafeInteger(k) && Math.abs(k - steps) <= 36000) &&
-  opt(m.w, w => w === null || num(w, -7, 7)) && opt(m.b, b => b === 0 || b === 1) && opt(m.d, d => num(d, 0, 600));
+  opt(m.w, w => w === null || num(w, -7, 7)) && opt(m.b, b => b === 0 || b === 1) && opt(m.d, d => num(d, 0, 600)) &&
+  opt(m.c, c => num(c, 0, 1e12));
 const viewOk = m => num(m.x, -1e6, 1e6) && num(m.z, -1e6, 1e6) && num(m.w, 0, 1e5) && num(m.h, 0, 1e5) && opt(m.a, watchOk);
 const hiOk = m => typeof m.b === 'string' && m.b.length <= 24 && opt(m.k, k => typeof k === 'string' && /^[0-9a-f]{12}$/.test(k)) &&
   opt(m.p, p => p === 0 || p === 1) && opt(m.a, watchOk) && opt(m.l, l => l === 0) && opt(m.g, g => g === 1);
@@ -270,12 +271,19 @@ export function createOcean (env, url, opts = {}) {
     n++;
     if (held.size) forgetHeld(now);
     /* AWAY (3G): a player whose inputs have stopped for AWAY_MS (the phone
-       sends one at least every 200 ms) is benched whatever the phone is
+       sends one at least every 500 ms, 4B) is benched whatever the phone is
        doing: a bot takes the manta, labelled as a bot, and holds it as for
        a drop. The phone is told, and rejoins with its token once shown. */
     for (const [ws, phone] of phones) if (phone.player && now - phone.player.lastIn > AWAY_MS) bench(ws, phone);
     for (const [ws, phone] of phones) {
       if (!phone.ready) continue;
+      /* A PLAYER'S VIEW IS ON ITS OWN LEADER (4B): the phone's camera sits
+         on its leader, so the room centres the view there itself (on the
+         wreck through the death beat) and the phone sends only the view's
+         size, when it changes: five view messages a second fewer from
+         every player, on a plan where messages are what runs out first. */
+      const mt = phone.player && trainOf(phone.player.id);
+      if (mt) { phone.view.x = clamp(mt.dead > 0 ? mt.crashX : mt.x, -1e5, 1e5); phone.view.z = clamp(mt.dead > 0 ? mt.crashZ : mt.z, -1e5, 1e5); }
       /* Binary (roomcore.js has the layout, a player's own fields
          included); who drives what, as JSON when it changed; the truth
          after it only for a debug phone, which only wrangler dev allows. */
@@ -377,7 +385,8 @@ export function createOcean (env, url, opts = {}) {
       if (!phone) return;
       let m; try { m = JSON.parse(raw); } catch (_) { return; }
       if (!m || typeof m !== 'object' || Array.isArray(m)) return;
-      if (m.t === 'in') { if (inOk(m, steps)) input(phone, m); return; }
+      /* A ping may ride on an input (4B): answered as a ping is. */
+      if (m.t === 'in') { if (inOk(m, steps)) { input(phone, m); if (m.c !== undefined) ws.send(JSON.stringify({ t: 'pong', c: m.c })); } return; }
       if (m.t === 'away') { if (phone.player) bench(ws, phone); return; }
       if (m.t === 'nm') { if (typeof m.n === 'string') nameIt(phone, m.n); return; }
       if (m.t === 'ping') { if (num(m.c, 0, 1e12)) ws.send(JSON.stringify({ t: 'pong', c: m.c })); return; }

@@ -42,7 +42,31 @@ const EASE = 0.15;                 // seconds for a correction to fade out
 const SNAP = 60;                   // units: a bigger correction is drawn at once
 const HIST = 256;                  // numbered local steps remembered (4 s)
 const MAX_REPLAY = 120;            // steps: a longer replay means the clock is lost
-const SEND_MIN = 50, SEND_MAX = 200, WANT_EPS = 0.02;
+/* FEWER MESSAGES (4B, design doc 10.6). On Cloudflare's free plan every
+   incoming message is a twentieth of a billed request, and they run out
+   first, so steering goes only when it has changed by a noticeable step
+   (STEER_STEP, about three degrees): ordinary changes at most every GAP (10
+   a second), and at least every BEAT one goes anyway (2 a second, well
+   inside the room's 2 s away rule), carrying the exact heading, so one held
+   a hair off is put right within half a second. A burst pressed or let go,
+   a finger put down or lifted, and a sharp turn (SHARP, about 30 degrees)
+   go at once, whatever the gap. Each message carries every step's input
+   since the last: the phone steers only with what it has sent (frame(): a
+   step uses sentWant), so every step between two messages had the input
+   the first one named, from the step it named. Until 4B: every change of
+   0.02 rad, every 50 ms at most, every 200 ms at least. */
+const GAP = 100, BEAT = 500, STEER_STEP = 0.05, SHARP = 0.5;
+const CAP = 16;                    // this phone's play messages in any second, of every kind: the room closes at 30, and the page's own (hello, name, away) are rare
+/* The view and the ping (4B), sent from here in play rather than by the
+   page: the room centres a player's view on its own leader, so only the
+   view's size goes, when it changes by VIEW_GROW (the 400-unit margin
+   covers far more), at most every VIEW_GAP; and the round trip's ping rides
+   on a steering message once a second, alone only when none has for
+   PING_ALONE. Every one of these counts against CAP. Until 4B: a view up
+   to five times a second and a ping a second, six messages a second before
+   any steering. */
+const VIEW_GROW = 0.04, VIEW_GAP = 250, PING_EVERY = 1000, PING_ALONE = 1500;
+const MSG_MAX = 64;                // bytes: the room's limit (worker.js)
 const LEAD0 = 3;                   // steps ahead of the room to start with
 const MARGIN = 1;                  // steps early an input should arrive, at worst
 const SLEW = 0.1;                  // steps a frame the clock may be pulled
@@ -51,7 +75,7 @@ const LEAD_MAX = 45;
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 const r4 = v => Math.round(v * 1e4) / 1e4;
 
-export function createPlay ({ room, params, core, you, input, send, rtt, view, now = () => performance.now() }) {
+export function createPlay ({ room, params, core, you, input, send: wire, rtt, view, viewNow = null, now = () => performance.now() }) {
   const motion = createMotion(params);
   /* 3G: tokens became twelve hex digits, so the key changed with them and
      a stale 32-digit token cannot stick. */
@@ -65,6 +89,16 @@ export function createPlay ({ room, params, core, you, input, send, rtt, view, n
   const off = { x: 0, z: 0, h: 0, f: [], age: EASE };
   let myId = -1, name = null, me = null, ack = 0, seq = 0, runs = null;
   let sentWant = null, sentBurst = false, sentAt = -1e9, live = false, fresh = true;
+  /* Every message this phone's play sends, for the cap; when the last ping
+     went; the view's size as last sent. */
+  const sentTimes = []; let pingAt = -1e9, aloneAt = -1e9, sampleAt = -1e9, viewAt = -1e9, sentView = null, viewDirty = true;
+  const send = m => { sentTimes.push(now()); if (sentTimes.length > CAP + 4) sentTimes.shift(); wire(m); };
+  const roomFor = t => { let n = 0; for (const v of sentTimes) if (t - v < 1000) n++; return n < CAP; };
+  /* The ping's stamp: whole milliseconds, modulo a million so it stays
+     short. Rounded down, never up: a stamp a fraction of a millisecond
+     ahead of the clock made a round trip under half a millisecond (a room
+     on the same machine) come back as a million. */
+  const stamp = () => Math.floor(now()) % 1e6;
   /* THE RESTART GAP (3F). An offset may only be taken from a `you` that a
      frame has drawn from this prediction. At 300 ms and a few frames a
      second, two snapshots could arrive between frames just after a
@@ -87,7 +121,7 @@ export function createPlay ({ room, params, core, you, input, send, rtt, view, n
   const rtts = []; let lastRtt = null, rttUse = null, outliers = 0, rttIgnored = 0;
   function takeRtt (r) {
     if (r === null || r === undefined || r === lastRtt) return;
-    lastRtt = r;
+    lastRtt = r; sampleAt = now();
     if (rtts.length >= 3) {
       const sorted = rtts.slice().sort((a, b) => a - b), med = sorted[sorted.length >> 1];
       const mad = sorted.map(v => Math.abs(v - med)).sort((a, b) => a - b)[sorted.length >> 1];
@@ -111,32 +145,58 @@ export function createPlay ({ room, params, core, you, input, send, rtt, view, n
     /* A new connection resends every path and may be a new room clock, so
        the next snapshot is a fresh start, not a correction to ease into. */
     fresh = true; live = false; shown = false; me = null; est = null; clk = null; pk = -1; hist.clear();
-    reports = []; settled = true; leadSeq = seq;
+    reports = []; settled = true; leadSeq = seq; viewDirty = true;
+    /* Seated afresh, the room's train holds no input (rooms/ocean.js seat):
+       predict the same until this phone's first input, and send that at
+       once rather than at the next beat. */
+    sentWant = null; sentBurst = false; sentAt = -1e9;
     if (!m.me) return;
     myId = m.me.id; name = m.me.name || null; keepToken(m.me.token);
     you.id = myId; you.watched = myId;
   }
 
-  /* Only when something changed, never more than every 50 ms, and at least
-     every 200 ms: the room keeps the last input, so silence is not a loss,
-     but the heartbeat keeps the earliness reports and v current. The input
-     is for step k, the first this phone has not simulated yet. */
+  /* The rules above (FEWER MESSAGES), checked once a frame. The room keeps
+     the last input, so silence is not a loss; the beat keeps the earliness
+     reports and d current. The input is for step k, the first this phone
+     has not simulated yet, and holds from there until the next. */
   function maybeSend (t, connected, frameMs, k) {
     if (!connected || myId < 0) return;
     const since = t - sentAt;
-    if (since < SEND_MIN) return;
     const w = input.want === null || input.want === undefined ? null : r4(wrap(input.want)), b = !!input.burst;
-    const changed = b !== sentBurst || (w === null) !== (sentWant === null) ||
-                    (w !== null && Math.abs(wrap(w - sentWant)) > WANT_EPS);
-    /* A frame early rather than a frame late: checked once a frame, the
-       heartbeat must not slip past 200 ms waiting for the next one. */
-    if (!changed && since + frameMs <= SEND_MAX) return;
+    const turn = w === null || sentWant === null ? 0 : Math.abs(wrap(w - sentWant));
+    const urgent = b !== sentBurst || (w === null) !== (sentWant === null) || turn >= SHARP;
+    /* A frame early rather than a frame late: checked once a frame, the beat
+       must not slip past BEAT waiting for the next one. */
+    const go = roomFor(t) && (urgent || (turn >= STEER_STEP && since >= GAP) || since + frameMs > BEAT);
+    if (!go) return;
     seq++; sentWant = w; sentBurst = b; sentAt = t;
     /* d: how many steps behind this one the other trains are drawn here. */
     const v = view ? view() : null, m = { t: 'in', seq, k, w };
     if (b) m.b = 1;
     if (v !== null && v !== undefined) m.d = Math.max(0, Math.round(k - v));
+    /* The ping rides along once a second, when it fits in the room's 64 bytes. */
+    if (t - pingAt >= PING_EVERY) { m.c = stamp(); if (JSON.stringify(m).length <= MSG_MAX) pingAt = t; else delete m.c; }
     send(m);
+  }
+
+  /* The page calls this once a frame while connected, in play, in place of
+     its own view and ping (roomview.js tick): the view's size when it has
+     changed (the room centres it on this phone's leader), and a ping alone
+     only when no steering message has carried one for PING_ALONE (before
+     the first input, and while the clock is not running). */
+  function tick () {
+    const t = now();
+    const v = viewNow ? viewNow() : null;
+    if (v && myId >= 0) {
+      const grown = !sentView || Math.abs(v.w - sentView.w) > sentView.w * VIEW_GROW || Math.abs(v.h - sentView.h) > sentView.h * VIEW_GROW;
+      if ((viewDirty || grown) && t - viewAt >= VIEW_GAP && roomFor(t)) {
+        send({ t: 'view', x: Math.round(v.x), z: Math.round(v.z), w: Math.round(v.w), h: Math.round(v.h), a: myId });
+        sentView = v; viewAt = t; viewDirty = false;
+      }
+    }
+    /* Alone only when no round trip has come back lately: a ping riding on
+       an input the room refused gets no answer. */
+    if (t - Math.max(sampleAt, aloneAt) >= PING_ALONE && roomFor(t)) { send({ t: 'ping', c: stamp() }); aloneAt = pingAt = t; }
   }
 
   /* One step of the leader, exactly as the room steps a player's train:
@@ -333,7 +393,7 @@ export function createPlay ({ room, params, core, you, input, send, rtt, view, n
   function stop () { live = false; shown = false; me = null; myId = -1; }
 
   return {
-    hello, onInit, onSnap, frame, stop, setExtra,
+    hello, onInit, onSnap, frame, tick, stop, setExtra,
     get id () { return myId; }, get name () { return name; }, get me () { return me; },
     get corrections () { return corrections; }, get seq () { return seq; }, get ack () { return ack; },
     /* The clock, for the panel and the tests: steps ahead of the room, the
@@ -341,6 +401,8 @@ export function createPlay ({ room, params, core, you, input, send, rtt, view, n
     get lead () { return lead; }, get late () { return late; }, get reported () { return reported; },
     get leadMoves () { return leadMoves; }, get step () { return pk; }, get live () { return live; },
     get sentBurst () { return sentBurst; },
+    /* For the tests: the rules' numbers, so a harness can say what it held the phone to. */
+    get rules () { return { GAP, BEAT, STEER_STEP, SHARP, CAP, VIEW_GROW, VIEW_GAP, PING_EVERY, PING_ALONE }; },
     get rttUse () { return rttUse; }, get rttIgnored () { return rttIgnored; },
   };
 }

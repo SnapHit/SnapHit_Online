@@ -21,8 +21,9 @@
    THE PHONES: n-1, each seated on a train, as a player's phone is. Each
    says hello, then every 50 ms of the room's clock: a view of its leader at
    its zoom every 200 ms when it moved, a ping a second, and inputs at the
-   rate phones send them now (each change, at most 20 and at least 5 a
-   second), steering towards a point that moves every few seconds, with a
+   rate phones sent them before 4B part 3 (each change, at most 20 and at
+   least 5 a second: more incoming messages than phones now send, so the
+   room's cost is not understated), steering towards a point that moves every few seconds, with a
    burst now and then (PLAYERS=scripted), or steering and bursting as the
    room's bot brain would for that train (PLAYERS=bot), so they eat, give
    way and grow as bots do and the trains are longer, or sending no

@@ -173,7 +173,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   /* The step the other trains are drawn at, on the room's count: what an
      input tells the room this phone was looking at, for lag compensation. */
   const viewStep = () => offset === null || !snaps.length ? null : (performance.now() / 1000 - offset - delay) * 60;
-  if (playing) play = createPlay({ room, params, core, you, input, send, rtt: () => rtt, view: viewStep });
+  if (playing) play = createPlay({ room, params, core, you, input, send, rtt: () => rtt, view: viewStep, viewNow });
   /* For tests against a local room only (the room ignores both elsewhere):
      ?lagcomp=0 turns lag compensation off, ?truth=1 asks for the true state. */
   const q = new URLSearchParams(location.search);
@@ -255,7 +255,9 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
       /* Every bot's kind, once on joining, so the board says timid, greedy or
          bully for bots that have never been near you (3D). */
       for (const [id, k] of m.kinds || []) kinds.set(id, k); connected = true; backoff = 0.5; viewDirty = true; showSignal(); return; }
-    if (m.t === 'pong') { rtt = performance.now() - m.c; rtts5.push(rtt); if (rtts5.length > 5) rtts5.shift(); showSignal(); return; }
+    /* The stamp is milliseconds modulo a million (4B: a ping rides on a
+       steering message, and has to be short). */
+    if (m.t === 'pong') { rtt = ((performance.now() - m.c) % 1e6 + 1e6) % 1e6; rtts5.push(rtt); if (rtts5.length > 5) rtts5.shift(); showSignal(); return; }
     if (m.t === 'names') { setNames(m.names); return; }
     /* The room benched this player (no inputs for 2 s, or the page said it
        was hidden): rejoin at once if the page is showing, with the token,
@@ -345,9 +347,13 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   });
 
   /* The view, at most five times a second and only when it moved; a ping a
-     second, which is also what keeps the signal mark honest. */
+     second, which is also what keeps the signal mark honest. In play, the
+     phone's own play mode sends both, and far fewer (4B, roomplay.js tick):
+     the room centres a player's view on its leader, and the ping rides on
+     a steering message. */
   function tick (now) {
     if (!connected) return;
+    if (play) { play.tick(); return; }
     const v = viewNow();
     const moved = !sentView || Math.abs(v.x - sentView.x) + Math.abs(v.z - sentView.z) > 10 ||
                   Math.abs(v.w - sentView.w) > 1 || Math.abs(v.h - sentView.h) > 1;
@@ -355,7 +361,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
       send(viewMsg(v));
       sentView = v; viewAt = now; viewDirty = false;
     }
-    if (now - pingAt >= 1) { send({ t: 'ping', c: Math.round(performance.now()) }); pingAt = now; }
+    if (now - pingAt >= 1) { send({ t: 'ping', c: Math.floor(performance.now()) % 1e6 }); pingAt = now; }
   }
 
   /* -------------------------------------------------------- one frame */
@@ -543,7 +549,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     if (play || stopped) return false;
     playing = true;
     if (publicGame && !seatRoom) seatRoom = room;   // seated in place on the lobby connection; full there, it asks
-    play = createPlay({ room, params, core, you, input, send, rtt: () => rtt, view: viewStep });
+    play = createPlay({ room, params, core, you, input, send, rtt: () => rtt, view: viewStep, viewNow });
     pickups = createPickups(); hits = createHits();
     if (!pencil) makePencil();
     mirror.watching = false; watched = -1; you.watched = -1; you.followers.length = 0; you.dead = 0;

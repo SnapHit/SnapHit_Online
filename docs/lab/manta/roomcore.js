@@ -5,15 +5,20 @@
  * Phone -> room, JSON text:
  *   {t:'hello', build, view:{x,z,w,h}, watch, debug?}   first, after open
  *   PLAY MODE: hello also carries play:true, token?, lagComp?; then
- *   {t:'in', seq, k, w, b?, d}: k is the room's simulation step the input
- *   is for, w the heading wanted (null: straight on), b:1 bursting, d how
- *   many steps behind k this phone is drawing the other trains.
+ *   {t:'in', seq, k, w, b?, d, c?}: k is the room's simulation step the
+ *   input is for, w the heading wanted (null: straight on), b:1 bursting, d
+ *   how many steps behind k this phone is drawing the other trains, and c a
+ *   ping riding along (4B), answered {t:'pong', c}. The input holds from
+ *   step k until the next one: sent only on a noticeable change, 2 to 10 a
+ *   second (roomplay.js).
  *   init adds me:{id, name, token} and names. A player's snapshots carry
  *   its own leader and its clock in the binary (flag 8 below); who drives
  *   what comes as {t:'names', names:[[id, name], ...]} whenever it changed.
  *   The player's own train is always in the trains. A 21st player gets
  *   {t:'full'} and is closed.
- *   {t:'view', x, z, w, h, watch}                 when the view moves
+ *   {t:'view', x, z, w, h, watch}                 when the view moves; a
+ *   player's view is centred on its own leader by the room (4B), so in play
+ *   only w and h count and it is sent only when they change
  *   watch is the bot the camera follows (-1 for none): the room always
  *   sends that train, wherever it is, so the camera can find it.
  *   {t:'ping', c}                                 the room answers {t:'pong', c}
