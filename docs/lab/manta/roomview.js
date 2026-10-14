@@ -256,8 +256,18 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   /* Half a second, doubling to eight, reset by a good init: a room that is
      restarting for a deploy is back in seconds, one that is down is not
      hammered. */
+  /* HIDDEN, PARKED (4B): the room closes a socket silent for a minute (a
+     hidden page sends nothing), and a hidden page does not reconnect on a
+     timer, or it would start the room ticking again for nobody: it waits
+     to be shown, then reconnects at once. */
+  let parked = false;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden || !parked) return;
+    parked = false; backoff = 0.5; if (!ws) connect();
+  });
   function later () {
     if (stopped || rest) return;
+    if (document.hidden) { parked = true; return; }
     clearTimeout(retry);
     retry = setTimeout(connect, backoff * 1000);
     backoff = Math.min(backoff * 2, 8);

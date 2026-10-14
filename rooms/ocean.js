@@ -82,6 +82,13 @@ export const REST_AT = 0.8, LEAVE_AT = 0.95, BUDGET_STALE_MS = 180000;
 const nextMidnight = t => { const d = new Date(t); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1); };
 const HOLD_MS = 15000;            // a dropped player's train waits this long for its token
 const AWAY_MS = 2000;             // no inputs this long and a player is away (3G): benched as for a drop
+/* SILENT FOR A MINUTE, GONE (4B). A page on screen sends something every
+   second at least (a player its inputs, a watcher its ping); a hidden tab
+   sends nothing, yet kept its room ticking, and a room ticking all day is 85
+   percent of the free plan's run time (worker.js, THE DAILY BUDGET GUARD).
+   So a socket silent this long is closed; the page reconnects when it is
+   shown again (roomview.js, HIDDEN, PARKED). */
+const SILENT_MS = 60000;
 const REWIND_MAX = 15;            // steps (250 ms); the simulation keeps no more
 const AHEAD_MAX = 120;            // an input stamped further ahead than this is applied at that
 const QUEUE_MAX = 64;             // inputs a player may have waiting
@@ -313,6 +320,7 @@ export function createOcean (env, url, opts = {}) {
        after this tick's snapshot has shown them the crash. */
     const leaving = [];
     for (const e of events) if (e.kind === 'crash') for (const [ws, phone] of phones) if (phone.player && phone.player.id === e.id && stayLevel(phone) >= LEAVE_AT) leaving.push([ws, phone]);
+    for (const [ws, phone] of phones) if (now - phone.heard > SILENT_MS) { try { ws.close(4003, 'silent'); } catch (_) { /* gone */ } leave(ws); if (opts.onChange) opts.onChange(ws); }
     for (const [ws, phone] of phones) if (phone.closeAt && now >= phone.closeAt) { try { ws.close(4004, 'rooms are resting'); } catch (_) { /* gone */ } leave(ws); if (opts.onChange) opts.onChange(ws); }
     if (held.size) forgetHeld(now);
     /* AWAY (3G): a player whose inputs have stopped for AWAY_MS (the phone
@@ -423,12 +431,13 @@ export function createOcean (env, url, opts = {}) {
   }
 
   return {
-    join (ws, local, fake) { phones.set(ws, { view: viewOf(null), watch: -1, sent: new Map(), debug: false, local, ready: false, fake: fake === '95' ? 95 : fake === '80' ? 80 : 0 }); },
+    join (ws, local, fake) { phones.set(ws, { view: viewOf(null), watch: -1, sent: new Map(), debug: false, local, ready: false, fake: fake === '95' ? 95 : fake === '80' ? 80 : 0, heard: Date.now() }); },
     get crowded () { return phones.size >= MAX_SOCKETS; },
     leave,
     async message (ws, raw) {
       const phone = phones.get(ws);
       if (!phone) return;
+      phone.heard = Date.now();
       let m; try { m = JSON.parse(raw); } catch (_) { return; }
       if (!m || typeof m !== 'object' || Array.isArray(m)) return;
       /* A ping may ride on an input (4B): answered as a ping is. */
