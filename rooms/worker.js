@@ -362,10 +362,18 @@ export default {
       return registry(env).fetch(REG + 'new?ip=' + encodeURIComponent(ip));
     }
     /* Why a room cannot be reached (4B): asked once by a page whose socket
-       would not open. Rooms off is answered above; open, this. */
+       would not open. Rooms off is answered above. For a private room or an
+       overflow room (?room=), whether the registry would refuse it for the
+       live-room cap ("every room is busy", 503); anything else is "rooms
+       are open", so a page never sees an error from asking. */
     if (path === ROOMS + 'status') {
       if (request.method !== 'POST') return text('expected a POST', 405);
       if (!originAllowed(request, url)) return text('not from this site', 403);
+      const name = url.searchParams.get('room') || '';
+      if (name !== LOBBY && (PUBLIC.test(name) || CODE.test(name))) {
+        const r = await registry(env).fetch(REG + 'enter?name=' + name);
+        if (r.status === 503) return text(await r.text(), 503);
+      }
       return text('rooms are open', 200);
     }
     /* The public game (3O): which public room a joining player swims in. */

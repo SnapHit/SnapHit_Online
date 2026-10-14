@@ -240,17 +240,28 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     };
     let opened = false;
     s.addEventListener('open', () => { opened = true; });
-    s.onclose = () => { if (ws !== s) return; ws = null; connected = false; showSignal(); if (!opened) askWhy(); later(); };
+    s.onclose = () => { if (ws !== s) return; ws = null; connected = false; showSignal(); if (!opened) askWhy(target); later(); };
   }
   /* A socket that would not open says nothing of why, so ask once (at most
      every 10 s): rooms off stops the trying, and the page goes solo with
-     its note. Anything else, and the trying goes on as before. */
-  function askWhy () {
+     its note. For a private room or an overflow room, the room is named, and
+     the live-room cap may be why (a room that emptied while its phones were
+     away, and others took its place): an overflow room is dropped, so the
+     next try asks the public game again (a room with a seat, or every room
+     full); a private room's page goes solo with the full note (allFull). A
+     room that cannot be reached for any other reason is tried as before. */
+  function askWhy (target) {
     const t = performance.now();
     if (t - statusAt < 10000 || roomsOff) return;
     statusAt = t;
-    fetch(withFake('/lab/manta/rooms/status'), { method: 'POST', cache: 'no-store' })
-      .then(r => r.status === 503 ? r.text().then(x => { if (/off/.test(x)) { roomsOff = true; stopped = true; clearTimeout(retry); showSignal(); } }) : null)
+    const named = target && target !== 'lobby' && q.get('stage') !== 'cut' ? '?room=' + encodeURIComponent(target) : '';
+    fetch(withFake('/lab/manta/rooms/status' + named), { method: 'POST', cache: 'no-store' })
+      .then(r => r.status === 503 ? r.text().then(x => {
+        if (/off/.test(x)) { roomsOff = true; stopped = true; clearTimeout(retry); showSignal(); return; }
+        if (!/busy/.test(x)) return;
+        if (publicGame && play) { if (seatRoom === target) seatRoom = null; return; }
+        allFull = true; stopped = true; clearTimeout(retry); showSignal();
+      }) : null)
       .catch(() => { /* unreachable: keep trying */ });
   }
   /* Half a second, doubling to eight, reset by a good init: a room that is

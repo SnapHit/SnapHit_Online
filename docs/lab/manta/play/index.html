@@ -695,6 +695,10 @@ window.MANTA_LAB = window.MANTA_ROOT + 'lab/manta/';
     var R = window.__lab && window.__lab.room;
     if (!R || leaving) return;
     if (R.roomsOff) { leaving = true; goSolo('off'); return; }
+    /* Every room full after this page had already joined (4B): a seat
+       taken while it was away, Play pressed on a first visit's name panel
+       with every room full, or a private room shut out by the live-room cap. */
+    if (R.allFull) { leaving = true; goSolo('full'); return; }
     if (R.rest) { leaving = true; setTimeout(function () { goSolo('rest', R.rest.until); }, R.rest.crash ? 1800 : 0); }
   }, 250);
 
