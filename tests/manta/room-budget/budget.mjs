@@ -10,8 +10,10 @@
    2. 80 percent (use added through the test control): a player already in
       lobby plays on; a new one is told rooms are resting until 00:00 UTC;
       the public game says so too, with the time.
-   3. The lab panel's line: the lab page watching lobby shows "requests
-      N%, time N%" from the room's report.
+   3. Watchers: at 80 percent the lab page watching is turned away and a
+      first visit's name panel goes solo with the resting note. The lab
+      panel's line: at 50 percent the lab page watching lobby shows
+      "requests N%, time N%" from the room's report.
    4. The feedback page, in Sydney's time zone and Australian English: at
       ?fake=80 it goes solo saying rooms rest until 11:00 am; at ?fake=95 in
       the staged room the player crashes, sees the death card, then goes
@@ -90,13 +92,33 @@ async function page (named) {
   p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
   p.ctx = ctx; return p;
 }
+/* Watchers are under the guard too (4B review): at 85 percent the lab page
+   watching is turned away and says so, and a first visit's name panel (a
+   watcher until Play) goes solo with the resting note. At 50 percent the
+   lab page watches and shows the day's use. */
+const signalOf = () => ([...document.querySelectorAll('div')].map(d => d.textContent).find(t => /^● /.test(t || '')) || '');
+{
+  const p = await page(false);
+  await p.goto(O + '/lab/manta/?backend=webgl2&tier=low&room=lobby', { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));
+  await p.waitForFunction('/resting/.test((' + signalOf.toString() + ')())', null, { timeout: 15000 }).catch(() => {});
+  const sig = await p.evaluate(signalOf).catch(() => ''), inits = await p.evaluate(() => !!(window.__lab && window.__lab.room && window.__lab.room.snaps)).catch(() => null);
+  ok('at 80 percent the lab page watching is turned away and says rooms are resting', /rooms resting until/.test(sig) && inits === false, '"' + sig + '", snapshots ' + inits);
+  await p.ctx.close();
+  const q = await page(false);
+  await q.goto(O + '/lab/manta/play/?backend=webgl2&tier=low', { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));
+  await q.waitForURL(/note=rest/, { timeout: 20000 }).catch(() => {}); await wait(1200);
+  const s = await q.evaluate(() => ({ url: location.search, note: (document.getElementById('note') || {}).textContent || '' })).catch(e => ({ url: 'ERR ' + e.message, note: '' }));
+  ok('at 80 percent a first visit (the name panel watches) goes solo with the resting note', /solo=1/.test(s.url) && /note=rest/.test(s.url) && /^Rooms are resting until /.test(s.note), s.url + ' | "' + s.note + '"');
+  await q.ctx.close();
+}
+await budget('?extra=0.5');
 {
   const p = await page(false);
   await p.goto(O + '/lab/manta/?backend=webgl2&tier=low&room=lobby', { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));
   const lineOf = () => { const dt = [...document.querySelectorAll('dt')].find(e => e.textContent === 'rooms today'); return dt ? dt.textContent + ': ' + dt.nextElementSibling.textContent : ''; };
   await p.waitForFunction('/requests \\d+%, time \\d+%/.test((' + lineOf.toString() + ')())', null, { timeout: 15000 }).catch(() => {});
   const line = await p.evaluate(lineOf).catch(() => '');
-  ok('the lab page\'s panel has the line "rooms today: requests N%, time N%"', /^rooms today: requests 8\d%, time 8\d%/.test(line), line);
+  ok('the lab page\'s panel has the line "rooms today: requests N%, time N%"', /^rooms today: requests 5\d%, time 5\d%/.test(line), line);
   await p.ctx.close();
 }
 await budget('?extra=0');

@@ -320,6 +320,11 @@ export function createOcean (env, url, opts = {}) {
        after this tick's snapshot has shown them the crash. */
     const leaving = [];
     for (const e of events) if (e.kind === 'crash') for (const [ws, phone] of phones) if (phone.player && phone.player.id === e.id && stayLevel(phone) >= LEAVE_AT) leaving.push([ws, phone]);
+    /* And every phone here without a manta (a watcher, or a player benched
+       while its page was hidden) goes at once: it has no crash to wait for,
+       and a room left ticking for watchers alone would spend the last 5
+       percent and break every room. */
+    for (const [ws, phone] of phones) if (phone.ready && !phone.player && !phone.resting && stayLevel(phone) >= LEAVE_AT) rest(ws, phone, false);
     for (const [ws, phone] of phones) if (now - phone.heard > SILENT_MS) { try { ws.close(4003, 'silent'); } catch (_) { /* gone */ } leave(ws); if (opts.onChange) opts.onChange(ws); }
     for (const [ws, phone] of phones) if (phone.closeAt && now >= phone.closeAt) { try { ws.close(4004, 'rooms are resting'); } catch (_) { /* gone */ } leave(ws); if (opts.onChange) opts.onChange(ws); }
     if (held.size) forgetHeld(now);
@@ -460,6 +465,16 @@ export function createOcean (env, url, opts = {}) {
       /* A second hello on the same socket gives its train back first. */
       if (phone.player) unseat(phone);
       let me = null;
+      /* RESTING (4B): at 80 percent of the day's allowance a new player
+         goes solo, and so does a new watcher (a first visit's name panel,
+         or the lab watching), which would otherwise start or keep a room
+         ticking with nobody playing. One taking back its own held manta is
+         not new. */
+      const h = m.p === 1 && typeof m.k === 'string' ? held.get(m.k) : null, back = !!h && h.until > Date.now();
+      /* A staged room (tests only) never reports, so never hears it. */
+      if (!back && !answered && !phone.fake && !opts.stage) { await Promise.race([firstHeard, new Promise(r => setTimeout(r, 1000))]); answered = true; }
+      if (!phones.has(ws)) return;
+      if (phone.resting || (!back && joinLevel(phone) >= REST_AT)) { rest(ws, phone, false); return; }
       if (m.p !== 1) {
         let watching = 0;
         for (const p of phones.values()) if (p !== phone && p.ready && !p.player) watching++;
@@ -471,13 +486,6 @@ export function createOcean (env, url, opts = {}) {
         }
       }
       if (m.p === 1) {
-        /* RESTING (4B): at 80 percent of the day's allowance a new player
-           goes solo. One taking back its own held manta is not new. */
-        const h = typeof m.k === 'string' ? held.get(m.k) : null, back = !!h && h.until > Date.now();
-        /* A staged room (tests only) never reports, so never hears it. */
-        if (!back && !answered && !phone.fake && !opts.stage) { await Promise.race([firstHeard, new Promise(r => setTimeout(r, 1000))]); answered = true; }
-        if (!phones.has(ws)) return;
-        if (phone.resting || (!back && joinLevel(phone) >= REST_AT)) { rest(ws, phone, false); return; }
         me = seat(phone, m);
         if (!me) {
           ws.send(JSON.stringify({ t: 'full' }));

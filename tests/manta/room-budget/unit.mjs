@@ -10,6 +10,8 @@
      nothing: the room carries on as if the guard could not be reached
    - a fresh room's first hello waits for the day's level, a second at most,
      and with the guard down nobody else waits
+   - watchers too: a new one at 80 percent is not let in; one already in
+     goes at 95 percent, and a room of watchers alone stops ticking
    - at 95 percent, in the staged room (its seat swims into the crossing
      train every 2.5 s), the player's crash reaches the phone first and
      {t:'rest', c:1} after it; the room closes the socket itself if the page
@@ -115,6 +117,28 @@ const input = (ocean, s) => { const q = (seqs.get(s) || 0) + 1; seqs.set(s, q); 
   const r = sock(); o2.join(r, true); const t2 = Date.now(), said = hello(o2, r); setTimeout(() => o2.noBudget(), 100); await said; const w2 = Date.now() - t2;
   ok('and a report answered with no level ends the wait at once', seated(r) && w2 < 400, 'waited ' + w2 + ' ms');
   o2.leave(r);
+}
+
+/* 3d: watchers (a first visit's name panel, the lab watching). A new one at
+   80 percent is told rooms are resting and is not let in, so it starts
+   nothing ticking; one already in, pinging as a page on screen does, goes
+   at 95 percent, and the room stops ticking once it has gone. */
+{
+  const ocean = createOcean(env, new URL('http://127.0.0.1/lab/manta/rooms/ocean/watch'), {});
+  ocean.setBudget({ r: 0.85, d: 0.1, left: 60000 });
+  const w = sock(); ocean.join(w, true); await ocean.message(w, JSON.stringify({ t: 'hi', b: digits }));
+  ok('at 80 percent a new watcher is told rooms are resting, is not let in and starts nothing ticking', !!w.of('rest')[0] && w.of('rest')[0].c === 0 && !w.of('init').length && !ocean.stepping, JSON.stringify(w.of('rest')[0]) + ', inits ' + w.of('init').length + ', stepping ' + ocean.stepping);
+  ocean.leave(w);
+  ocean.setBudget({ r: 0.1, d: 0.1, left: 60000 });
+  const v = sock(); ocean.join(v, true); await ocean.message(v, JSON.stringify({ t: 'hi', b: digits }));
+  const ping = setInterval(() => ocean.message(v, JSON.stringify({ t: 'ping', c: 1 })), 500);
+  await wait(300);
+  const inBefore = v.of('init').length === 1 && ocean.stepping;
+  ocean.setBudget({ r: 0.96, d: 0.1, left: 60000 }); await wait(300);
+  const r = v.of('rest')[0];
+  await wait(1500); clearInterval(ping);
+  ok('a watcher already in, pinging, goes at 95 percent: told rooms are resting, closed by the room, and the room stops ticking', inBefore && !!r && r.c === 0 && v.closed === 4004 && !ocean.stepping, 'in ' + inBefore + ', ' + JSON.stringify(r) + ', closed ' + v.closed + ', stepping ' + ocean.stepping);
+  ocean.leave(v);
 }
 
 /* 4-5: the staged room, where the seat crashes every 2.5 s. */
