@@ -38,7 +38,7 @@ const P = c.params;
 const timer = setInterval(() => {
   const now = performance.now(), you = c.you;
   if (!c.play.live || you.dead > 0) { inContact = false; hits.expire(now, (rtts5.length ? Math.max(...rtts5) : 300) + 150, false); return; }
-  const trains = []; for (let id = 1; id <= 10; id++) { if (id === c.play.id) continue; const t = c.shown(id); if (t && !t.dead) { t.id = id; trains.push(t); } }
+  const trains = []; for (let id = 1; id <= 20; id++) { if (id === c.play.id) continue; const t = c.shown(id); if (t && !t.dead) { t.id = id; trains.push(t); } }
   /* Contact on screen, by the test's own reckoning. */
   const k = P.trainScale || 1; let touch = false;
   for (const r of trains) { if (Math.hypot(r.x - you.x, r.z - you.z) <= 2 * P.leaderR * k) touch = true; for (const f of r.followers) if (Math.hypot(f.x - you.x, f.z - you.z) <= (P.leaderR + P.followerR) * k) touch = true; }

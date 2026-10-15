@@ -10,12 +10,18 @@
  * once the Room class is deployed, a revert cannot remove it.
  */
 import { DurableObject } from 'cloudflare:workers';
-import { createOcean, bench } from './ocean.js';
+import { createOcean, bench, MAX_PLAYERS, REST_AT } from './ocean.js';
 
-/* THE OFF SWITCH. false refuses every rooms request, the room paths and the
-   echo alike, with a 503 "rooms are off", and the lab falls back to solo.
-   One line, never a revert. */
+/* THE OFF SWITCH, in two places. Here in the code: false refuses every
+   rooms request, the room paths and the echo alike, with a 503 "rooms are
+   off", and players go solo with a note. One line, never a revert. And, from
+   4B, as a Worker variable Nathan sets in Cloudflare's dashboard, from his
+   phone and without a push: ROOMS_OPEN set to false (or off, no, 0) turns
+   rooms off; unset or anything else leaves them on. wrangler.jsonc has
+   keep_vars, so no deploy overwrites what he set. */
 const ROOMS_OPEN = true;
+const OFF = /^\s*(false|off|no|0)\s*$/i;
+const roomsOpen = env => ROOMS_OPEN && !OFF.test(String((env && env.ROOMS_OPEN) ?? ''));
 
 const ROOMS = '/lab/manta/rooms/';
 
@@ -27,19 +33,43 @@ const LOBBY = 'lobby';
 /* OVERFLOW ROOMS (3O): the public game is "lobby", then "lobby-2" up to
    "lobby-20" as each fills. Every one of those names is the server's own. */
 const PUBLIC = /^lobby(-([2-9]|1[0-9]|20))?$/;
-const SEATS = 10;                 // players in one room: ocean.js MAX_PLAYERS
+const SEATS = MAX_PLAYERS;        // players in one room (20 from 4B), from ocean.js so the two cannot differ
 const SENT_FOR_MS = 10000;        // a player sent to a public room counts this long until it reports
 const REGISTRY = '#registry';
 const REG = 'https://registry.internal/';
 const ALPHABET = '23456789abcdefghjkmnpqrstuvwxyz';   // no 0/o, 1/l/i
 const CODE = /^[2-9a-hjkmnp-z]{8}$/;
-const LIVE_CAP = 20;              // live rooms, lobby included; lobby is never refused
+/* THE LIVE ROOM CAP: live rooms, lobby included (lobby is never refused).
+   3 unless the Worker variable LIVE_CAP, set in Cloudflare's dashboard and
+   kept through deploys (keep_vars), names another from 1 to 20 (lobby-20 is
+   the last public room's name). Until 4B: 20, in code. */
+const LIVE_CAP = 3;
+const capOf = env => { const n = Math.floor(Number(env && env.LIVE_CAP)); return n >= 1 ? Math.min(20, n) : LIVE_CAP; };
 const NEW_EVERY_MS = 10000;       // one new room per connection address per 10 s
 const CODE_TTL_MS = 24 * 3600e3;  // a code with no players for this long is gone
 const LIVE_FOR_MS = 150000;       // a live room reports every minute; silence ends it
 const MSG_MAX = 64;               // bytes in one incoming message
 const MSG_RATE = 30;              // incoming messages a second; over it, closed
 const NAME_MSG_MAX = 256;         // bytes, for a typed name's own message only (3J)
+/* THE DAILY BUDGET GUARD (4B, design doc 10.6 Cost). Cloudflare's free
+   plan allows 100,000 Durable Object requests a day (every 20 incoming
+   messages count as one) and 13,000 GB-s of run time (a ticking room is
+   billed 128 MB whatever its players: 0.128 GB-s a second, by Cloudflare's
+   own worked example), and past either every room fails until 00:00 UTC.
+   The registry counts what all rooms use each UTC day from what each room
+   adds to the reports it already sends (every join, leave and seat, and
+   once a minute while anyone is there), so the guard makes no request of
+   its own: one storage row written per registry request. Counted: every
+   incoming message (a twentieth), every request into a room (each
+   connection), every registry request (and 10 ms of run time each), every
+   second a room ticks. Not counted: what the Worker refuses before any
+   object (bad names, other sites, rooms off) and the unlinked probe page's
+   echo rooms, a few at most. Rooms act on it (ocean.js REST_AT, LEAVE_AT);
+   the public game refuses new players here at REST_AT. */
+const DAY_REQUESTS = 100000, DAY_GBS = 13000, GBS_A_SECOND = 0.128, REGISTRY_SECONDS = 0.01;
+const dayOf = t => new Date(t).toISOString().slice(0, 10);
+const midnightAfter = t => { const d = new Date(t); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1); };
+const count = (v, max) => { const n = Math.floor(Number(v)); return n > 0 ? Math.min(n, max) : 0; };
 const newCode = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), b => ALPHABET[b % ALPHABET.length]).join('');
 const SITE = 'https://snap-hit.online';
 const LOCAL = /^(localhost|127\.0\.0\.1)$/;
@@ -61,6 +91,10 @@ export class Room extends DurableObject {
       if (!this.ctx.id.equals(this.env.ROOMS.idFromName(REGISTRY))) return text('no such room', 404);
       return this.registry(url);
     }
+    /* Every request into a room is a billed request (4B): counted here and
+       carried to the registry by the next report. */
+    this.unsent = this.unsent || { m: 0, q: 0 };
+    this.unsent.q++;
     const [client, server] = Object.values(new WebSocketPair());
     /* An ocean room runs the simulation (ocean.js); any other room echoes.
        Hibernatable either way: an idle room costs nothing while it waits.
@@ -68,13 +102,13 @@ export class Room extends DurableObject {
        under wrangler dev: checked here as well as in the Worker. */
     const staged = LOCAL.test(url.hostname) && url.pathname.startsWith(ROOMS + 'stage/');
     if (url.pathname.startsWith(ROOMS + 'ocean/') || staged) {
-      if (!this.ocean) this.ocean = createOcean(this.env, url, { stage: staged ? 'cut' : null });
-      /* At most 10 players and 4 watchers (ocean.js); a socket beyond
+      if (!this.ocean) this.ocean = createOcean(this.env, url, { stage: staged ? 'cut' : null, onChange: gone => this.report(gone) });
+      /* At most 20 players and 4 watchers (ocean.js); a socket beyond
          everything a room could seat is refused before it is accepted. */
       if (this.ocean.crowded) return text('room full', 503);
       if (!staged) this.name = url.pathname.slice((ROOMS + 'ocean/').length);
       this.ctx.acceptWebSocket(server, ['ocean']);
-      this.ocean.join(server, LOCAL.test(url.hostname));
+      this.ocean.join(server, LOCAL.test(url.hostname), url.searchParams.get('fake'));
       this.report();
     } else {
       this.ctx.acceptWebSocket(server);
@@ -85,6 +119,9 @@ export class Room extends DurableObject {
   async webSocketMessage (ws, message) {
     /* Every socket, echo and ocean alike: at most 64 bytes a message and
        30 messages a second. Too big or too many and the socket is closed. */
+    /* Every incoming message is a twentieth of a billed request (4B). */
+    this.unsent = this.unsent || { m: 0, q: 0 };
+    this.unsent.m++;
     const now = Date.now(), ocean = this.ocean && this.ctx.getTags(ws).includes('ocean');
     const limit = ocean && typeof message === 'string' && message.startsWith('{"t":"nm"') ? NAME_MSG_MAX : MSG_MAX;
     const bytes = typeof message === 'string' ? (message.length > limit ? limit + 1 : new TextEncoder().encode(message).length) : message.byteLength;
@@ -131,23 +168,71 @@ export class Room extends DurableObject {
   }
 
   /* An ocean tells the registry whether anyone is in it: on every join and
-     leave, and once a minute while it is live. Staged rooms never count. */
+     leave, and once a minute while it is live. Staged rooms never count.
+     From 4B each report also carries what this room has used since the
+     last (messages, requests, milliseconds ticked), and the registry answers
+     with the day's use, which the room acts on and shows the lab panel. A
+     report that fails keeps its counts for the next. */
   report (gone) {
     if (!this.name) return;
     const n = this.ctx.getWebSockets('ocean').filter(s => s !== gone).length;
     this.reportedAt = Date.now();
     this.seated = this.ocean ? this.ocean.players : 0;
+    const u = this.unsent || { m: 0, q: 0 }, ms = this.ocean ? this.ocean.takeRunMs() : 0;
+    this.unsent = { m: 0, q: 0 };
     const reg = this.env.ROOMS.get(this.env.ROOMS.idFromName(REGISTRY));
-    reg.fetch(REG + 'live?name=' + this.name + '&n=' + n + '&p=' + this.seated).then(r => r.text()).catch(() => { /* next report */ });
+    reg.fetch(REG + 'live?name=' + this.name + '&n=' + n + '&p=' + this.seated + '&um=' + u.m + '&uq=' + u.q + '&us=' + Math.round(ms))
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('registry ' + r.status)))
+      .then(j => { if (this.ocean && j && j.left !== undefined) this.ocean.setBudget(j); })
+      .catch(() => { this.unsent.m += u.m; this.unsent.q += u.q; if (this.ocean) { this.ocean.giveRunMs(ms); this.ocean.noBudget(); } });
+  }
+
+  /* The day's use (4B): kept in memory, stored under its UTC day on every
+     change, read back after a restart. Yesterday's is kept for comparison;
+     older days go. Null if anything about it fails: the guard then steps
+     aside and the rooms carry on. */
+  async useToday (now) {
+    try {
+      if (this.test && this.test.fail) throw new Error('test: the guard fails');
+      const day = dayOf(now), s = this.ctx.storage;
+      if (!this.use || this.use.day !== day) {
+        this.use = (await s.get('use:' + day)) || { day, m: 0, q: 0, w: 0, reg: 0, ms: 0 };
+        const keep = 'use:' + dayOf(now - 864e5);
+        for (const [k] of await s.list({ prefix: 'use:' })) if (k < keep) await s.delete(k);
+      }
+      return this.use;
+    } catch (_) { return null; }
+  }
+  /* The day's use as fractions of the allowances, and the milliseconds left
+     until 00:00 UTC. Requests: messages / 20, room requests and registry
+     requests (the Durable Object allowance), or Worker requests if ever
+     more (the Workers allowance: room requests and the public game, new
+     room and status asks). */
+  levelOf (use, now) {
+    const extra = this.test && this.test.day === use.day ? this.test.extra : 0;
+    const requests = Math.max(use.m / 20 + use.q + use.reg, use.q + use.w);
+    const seconds = use.ms / 1000 + REGISTRY_SECONDS * use.reg;
+    return { r: requests / DAY_REQUESTS + extra, d: seconds * GBS_A_SECOND / DAY_GBS + extra, left: midnightAfter(now) - now, day: use.day };
   }
 
   /* THE REGISTRY: only ever the object named REGISTRY, reached only from
      this file. Codes as 'code:<code>' -> last time it had players (or was
      made); live rooms as 'live:<name>' -> until when it counts as live. */
   async registry (url) {
-    const s = this.ctx.storage, now = Date.now(), op = url.pathname.slice(1);
+    const s = this.ctx.storage, op = url.pathname.slice(1);
+    /* TESTS ONLY (wrangler dev with TEST_NAMES, through /rooms/budget, which
+       only a local request reaches): use added for today (extra, a fraction
+       of both allowances, gone at 00:00 UTC), the guard's clock moved (clock,
+       ms) so a test can cross midnight, and the guard made to fail (fail). */
+    if (op === 'budget' && this.env.TEST_NAMES === '1') {
+      const q = url.searchParams, t = this.test = this.test || { extra: 0, clock: 0, fail: false, day: '' };
+      if (q.has('clock')) t.clock = +q.get('clock') || 0;
+      if (q.has('fail')) t.fail = q.get('fail') === '1';
+      if (q.has('extra')) { t.extra = Math.max(0, +q.get('extra') || 0); t.day = dayOf(Date.now() + t.clock); }
+    }
+    const now = Date.now() + (this.test ? this.test.clock : 0);
     const name = url.searchParams.get('name') || '';
-    const ttl = +this.env.CODE_TTL_MS || CODE_TTL_MS, cap = +this.env.LIVE_CAP || LIVE_CAP;
+    const ttl = +this.env.CODE_TTL_MS || CODE_TTL_MS, cap = capOf(this.env);
     const live = [];
     for (const [k, until] of await s.list({ prefix: 'live:' })) if (until > now) live.push(k.slice(5)); else await s.delete(k);
     /* Players sent to a public room and not yet seated there (3O):
@@ -155,6 +240,15 @@ export class Room extends DurableObject {
        player, or after SENT_FOR_MS. */
     const sent = this.sent = this.sent || new Map();
     for (const [k, a] of sent) { const b = a.filter(t => now - t < SENT_FOR_MS); if (b.length) sent.set(k, b); else sent.delete(k); }
+    /* THE DAY'S USE (4B): this request, and what a report carries. */
+    const use = await this.useToday(now);
+    if (use) {
+      use.reg++;
+      if (op === 'public' || op === 'new') use.w++;
+      if (op !== 'live') try { await s.put('use:' + use.day, use); } catch (_) { /* counted in memory; stored with the next */ }
+    }
+    let level = use ? this.levelOf(use, now) : null;
+    if (op === 'budget') return Response.json({ use, level }, { headers: { 'cache-control': 'no-store' } });
     if (op === 'live') {
       const n = +url.searchParams.get('n') || 0, p = +url.searchParams.get('p') || 0;
       if (n > 0) await s.put('live:' + name, now + LIVE_FOR_MS); else await s.delete('live:' + name);
@@ -164,13 +258,27 @@ export class Room extends DurableObject {
         if (p > was && sent.has(name)) sent.get(name).splice(0, p - was);
         if (n > 0) await s.put('seats:' + name, p); else await s.delete('seats:' + name);
       }
-      return text('ok', 200);
+      /* What the report carries, counted only now that everything above
+         has been written: a report that fails is resent with its counts,
+         and must not have counted them already. */
+      if (use) {
+        use.m += count(url.searchParams.get('um'), 1e7); use.q += count(url.searchParams.get('uq'), 1e5); use.ms += count(url.searchParams.get('us'), 864e5);
+        try { await s.put('use:' + use.day, use); } catch (_) { /* counted in memory; stored with the next */ }
+        level = this.levelOf(use, now);
+      }
+      return level ? Response.json(level, { headers: { 'cache-control': 'no-store' } }) : text('ok', 200);
     }
     /* THE PUBLIC GAME (3O): the public room with the most players that still
        has a free seat, lobby first on a tie. A new one opens only when every
        open one is full, and only while fewer than the cap are live, private
        rooms included. A room a phone found full is taken as full here. */
     if (op === 'public') {
+      /* 80 PERCENT (4B): the public game takes no new players, and says when
+         rooms return (the room's own clock: Date.now(), not the test's). A
+         ?fake=80 (lab only) does the same for that one ask; ?fake=95 lets
+         the player in, and the room sends it solo after its next crash. */
+      const fake = url.searchParams.get('fake') === '80' ? 0.8 : 0;
+      if (Math.max(level ? Math.max(level.r, level.d) : 0, fake) >= REST_AT) return text('rooms are resting: ' + (Date.now() + (level ? level.left : midnightAfter(Date.now()) - Date.now())), 503);
       const full = url.searchParams.get('full') || '';
       if (PUBLIC.test(full)) await s.put('seats:' + full, SEATS);
       const open = [LOBBY];
@@ -233,8 +341,14 @@ export default {
     /* The safety net: nothing outside the rooms path should ever arrive
        here, and if it does it gets the static site, unchanged. */
     if (!path.startsWith(ROOMS)) return env.ASSETS.fetch(request);
-    if (!ROOMS_OPEN) return text('rooms are off', 503);
+    /* ?fake= (4B, lab only): this one request answered as if rooms were off,
+       or every room full, so the plain notes can be seen without switching
+       anything off or filling anything. It touches no one else. */
+    const fake = url.searchParams.get('fake') || '';
+    if (!roomsOpen(env) || fake === 'off') return text('rooms are off', 503);
 
+    /* Under wrangler dev only: the day's use as the registry has it (4B tests). */
+    if (path === ROOMS + 'budget' && LOCAL.test(url.hostname)) return registry(env).fetch(REG + 'budget' + url.search);
     /* Under wrangler dev only: time the simulation inside workerd. */
     if (path === ROOMS + 'bench' && LOCAL.test(url.hostname)) {
       const count = Math.min(40000, Math.max(1, +url.searchParams.get('n') || 0));
@@ -247,11 +361,27 @@ export default {
       const ip = (LOCAL.test(url.hostname) && request.headers.get('X-Test-Address')) || request.headers.get('CF-Connecting-IP') || '';
       return registry(env).fetch(REG + 'new?ip=' + encodeURIComponent(ip));
     }
+    /* Why a room cannot be reached (4B): asked once by a page whose socket
+       would not open. Rooms off is answered above. For a private room or an
+       overflow room (?room=), whether the registry would refuse it for the
+       live-room cap ("every room is busy", 503); anything else is "rooms
+       are open", so a page never sees an error from asking. */
+    if (path === ROOMS + 'status') {
+      if (request.method !== 'POST') return text('expected a POST', 405);
+      if (!originAllowed(request, url)) return text('not from this site', 403);
+      const name = url.searchParams.get('room') || '';
+      if (name !== LOBBY && (PUBLIC.test(name) || CODE.test(name))) {
+        const r = await registry(env).fetch(REG + 'enter?name=' + name);
+        if (r.status === 503) return text(await r.text(), 503);
+      }
+      return text('rooms are open', 200);
+    }
     /* The public game (3O): which public room a joining player swims in. */
     if (path === ROOMS + 'public') {
       if (request.method !== 'POST') return text('expected a POST', 405);
       if (!originAllowed(request, url)) return text('not from this site', 403);
-      return registry(env).fetch(REG + 'public?full=' + encodeURIComponent(url.searchParams.get('full') || ''));
+      if (fake === 'full') return text('every room is full: try again soon', 503);
+      return registry(env).fetch(REG + 'public?full=' + encodeURIComponent(url.searchParams.get('full') || '') + (/^(80|95)$/.test(fake) ? '&fake=' + fake : ''));
     }
     /* The probe page's room echo is the room "probe" and no other. */
     const room = /^\/lab\/manta\/rooms\/room\/(probe)$/.exec(path);
@@ -274,7 +404,7 @@ export default {
     if (room) return env.ROOMS.get(env.ROOMS.idFromName(room[1])).fetch(request);
     if (ocean) {
       /* Lobby always; a code only while the registry knows it, and only
-         while fewer than 20 rooms are live (or it is one of them). */
+         while fewer than the cap are live (or it is one of them). */
       if (ocean[1] !== LOBBY && !testName) {
         const r = await registry(env).fetch(REG + 'enter?name=' + ocean[1]);
         if (r.status !== 200) return text(await r.text(), r.status);

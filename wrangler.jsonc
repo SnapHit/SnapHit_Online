@@ -16,6 +16,13 @@
   "name": "snaphit-online",
   "compatibility_date": "2025-01-01",
 
+  // THE DASHBOARD SWITCHES (4B): ROOMS_OPEN (false turns rooms off) and
+  // LIVE_CAP (live rooms, 1 to 20, default 3) are Worker variables Nathan sets
+  // in Cloudflare's dashboard. keep_vars stops a deploy deleting them; they
+  // are deliberately not declared here, so nothing in this file can override
+  // what he set. Secrets survive deploys anyway.
+  "keep_vars": true,
+
   // Both default to ON when absent, so the dashboard toggles do not survive
   // the next deploy. Named here, the site has exactly one public address.
   "workers_dev": false,
@@ -46,8 +53,9 @@
 
   // One Durable Object per room, named by the room. PERMANENT once deployed:
   // a deploy that removes the class fails, and the dashboard cannot roll back
-  // past the version that added it. Switch rooms off with ROOMS_OPEN in
-  // rooms/worker.js instead. Migration tags: append, never edit or remove.
+  // past the version that added it. Switch rooms off with the ROOMS_OPEN
+  // variable in the dashboard, or ROOMS_OPEN in rooms/worker.js, instead.
+  // Migration tags: append, never edit or remove.
   "durable_objects": { "bindings": [ { "name": "ROOMS", "class_name": "Room" } ] },
   "migrations": [ { "tag": "v1", "new_sqlite_classes": ["Room"] } ]
 }

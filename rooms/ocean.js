@@ -54,11 +54,41 @@ const simParams = P => ({
   sharkOn: P.sharkOn, sharkEvery: P.sharkEvery, sharkStay: P.sharkStay, sharkSpeed: P.sharkSpeed, sharkLen: P.sharkLen, sharkWide: P.sharkWide,
 });
 
-const MAX_PLAYERS = 10;           // at most 12 (3G); the ocean has ten trains to drive
+/* THE ROOM'S OCEAN (4B, design doc 10.6): up to 20 people in an ocean
+   scaled for 21 mantas, so each train has the same share of ocean, wild
+   mantas and blooms as in solo (11 mantas: radius 2000, 300 wild, 4
+   blooms). 20 trains swim, every one a seat, with bots in the seats nobody
+   has; the 21st manta is the simulation's own solo one, parked out of the
+   water, as the 11th always was. Radius 2000 x sqrt(21/11), wild 300 x
+   21/11 and blooms 4 x (2760/2000)^2, each rounded. Solo keeps params.js, so
+   nothing here can change it. Measured before it was set, in plain Node
+   with the room's own code (tests/manta/room-size/cost.mjs): a step at 21
+   mantas with 20 phones' snapshots, the brain driving every train, 3.0 to
+   3.6 ms mean and 7.1 to 7.7 ms at the 99th percentile over three seeds,
+   against a bar of 4 and 10. */
+export const ROOM_TRAINS = 20, ROOM_ARENA = 2760, ROOM_WILD = 570, ROOM_BLOOMS = 8;
+const roomParams = P => ({ ...simParams(P), bots: ROOM_TRAINS, arenaR: ROOM_ARENA, arenaRWanted: ROOM_ARENA, wildCount: ROOM_WILD, blooms: ROOM_BLOOMS });
+
+export const MAX_PLAYERS = ROOM_TRAINS;   // every train a seat (3G allowed 12 of 10)
 const MAX_WATCHERS = 4;
 const MAX_SOCKETS = MAX_PLAYERS + MAX_WATCHERS + 2;   // the rest are still saying hello
+/* THE DAILY BUDGET (4B, design doc 10.6 Cost): the registry's answer to
+   each report this room sends (worker.js) says what all rooms have used
+   today. At REST_AT of either allowance a new player goes solo with a note
+   saying when rooms return; at LEAVE_AT each player still here goes solo
+   after their next crash. A level older than BUDGET_STALE_MS (the registry
+   could not be reached) counts as nothing, so rooms keep running. */
+export const REST_AT = 0.8, LEAVE_AT = 0.95, BUDGET_STALE_MS = 180000;
+const nextMidnight = t => { const d = new Date(t); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1); };
 const HOLD_MS = 15000;            // a dropped player's train waits this long for its token
 const AWAY_MS = 2000;             // no inputs this long and a player is away (3G): benched as for a drop
+/* SILENT FOR A MINUTE, GONE (4B). A page on screen sends something every
+   second at least (a player its inputs, a watcher its ping); a hidden tab
+   sends nothing, yet kept its room ticking, and a room ticking all day is 85
+   percent of the free plan's run time (worker.js, THE DAILY BUDGET GUARD).
+   So a socket silent this long is closed; the page reconnects when it is
+   shown again (roomview.js, HIDDEN, PARKED). */
+const SILENT_MS = 60000;
 const REWIND_MAX = 15;            // steps (250 ms); the simulation keeps no more
 const AHEAD_MAX = 120;            // an input stamped further ahead than this is applied at that
 const QUEUE_MAX = 64;             // inputs a player may have waiting
@@ -76,7 +106,8 @@ const opt = (v, ok) => v === undefined || ok(v);
 const watchOk = v => Number.isInteger(v) && v >= -1 && v < 1e4;
 const inOk = (m, steps) => Number.isSafeInteger(m.seq) && m.seq > 0 &&
   opt(m.k, k => Number.isSafeInteger(k) && Math.abs(k - steps) <= 36000) &&
-  opt(m.w, w => w === null || num(w, -7, 7)) && opt(m.b, b => b === 0 || b === 1) && opt(m.d, d => num(d, 0, 600));
+  opt(m.w, w => w === null || num(w, -7, 7)) && opt(m.b, b => b === 0 || b === 1) && opt(m.d, d => num(d, 0, 600)) &&
+  opt(m.c, c => num(c, 0, 1e12));
 const viewOk = m => num(m.x, -1e6, 1e6) && num(m.z, -1e6, 1e6) && num(m.w, 0, 1e5) && num(m.h, 0, 1e5) && opt(m.a, watchOk);
 const hiOk = m => typeof m.b === 'string' && m.b.length <= 24 && opt(m.k, k => typeof k === 'string' && /^[0-9a-f]{12}$/.test(k)) &&
   opt(m.p, p => p === 0 || p === 1) && opt(m.a, watchOk) && opt(m.l, l => l === 0) && opt(m.g, g => g === 1);
@@ -85,6 +116,38 @@ const viewOf = m => ({ x: clamp(m && m.x, -1e5, 1e5), z: clamp(m && m.z, -1e5, 1
 
 export function createOcean (env, url, opts = {}) {
   const phones = new Map();           // socket -> what this phone has been sent
+  /* The day's use, as the registry last said: { r, d } fractions of the
+     request and run-time allowances, when it was heard, and when the day
+     ends on this room's clock. A phone's ?fake= (lab only) is for that
+     phone alone: 80, the day was at 80 percent when it came (it goes solo
+     at once); 95, the day reaches 95 percent while it plays (it plays,
+     and goes solo after its next crash). */
+  let budget = null, heard = null, answered = false;
+  /* The room hears the day's level from its first report's answer, a
+     moment after the first phone arrives: a new player waits for it (a
+     second at most, then rooms carry on), so no one slips in before it.
+     Once (answered), whatever came: a report answered with no level (the
+     guard down) or no answer within the second, and nobody waits again. */
+  const firstHeard = new Promise(r => { heard = r; });
+  const levelNow = () => { const t = Date.now(); return budget && t - budget.at < BUDGET_STALE_MS && t < budget.resetAt ? Math.max(budget.r, budget.d) : 0; };
+  const joinLevel = phone => Math.max(levelNow(), phone.fake === 80 ? 0.8 : 0);
+  const stayLevel = phone => Math.max(levelNow(), phone.fake === 95 ? 0.95 : 0);
+  const restUntil = () => budget && Date.now() < budget.resetAt ? budget.resetAt : nextMidnight(Date.now());
+  const budgetMsg = phone => JSON.stringify({ t: 'budget', r: budget ? Math.round(budget.r * 1000) / 1000 : null, d: budget ? Math.round(budget.d * 1000) / 1000 : null, f: phone.fake || 0 });
+  /* Rooms resting (4B): this phone goes solo, with the time rooms return.
+     A player is unseated at once (a bot holds the train); the page leaves by
+     itself, and the room closes the socket after closeAt if it has not. */
+  function rest (ws, phone, crash) {
+    try { ws.send(JSON.stringify({ t: 'rest', until: restUntil(), c: crash ? 1 : 0 })); } catch (_) { /* gone */ }
+    /* Unseated, and its hold dropped: a resting player cannot take the
+       manta back by saying hello again. */
+    if (phone.player) { const tok = phone.player.token; unseat(phone); held.delete(tok); }
+    phone.resting = true; phone.closeAt = Date.now() + (crash ? 5000 : 1000);
+    if (opts.onChange) opts.onChange();
+  }
+  /* How long this room has ticked, for the budget: a ticking room is billed
+     for run time whatever its players (Cloudflare bills 128 MB a second). */
+  let runMs = 0, runFrom = 0;
   const staged = opts.stage === 'cut';
   /* The crossing train's length, 20 unless a test asks (?len=, 2 to 40). */
   const crossLen = Math.round(clamp(url.searchParams.get('len') || 20, 2, 40));
@@ -103,7 +166,7 @@ export function createOcean (env, url, opts = {}) {
   const ready = loadDefaults(env, url).then(d => {
     build = d.build;
     seed = crypto.getRandomValues(new Uint32Array(1))[0];
-    sim = createSim({ seed, params: simParams(d.P) });
+    sim = createSim({ seed, params: roomParams(d.P) });
     sim.params.history = true;          // the ring lag compensation reads (sim.js)
     /* Under wrangler dev only (--var PINK_WAIT:4 PINK_STAY:40): the pink
        manta in seconds rather than a minute, for the room tests. A deploy
@@ -253,14 +316,32 @@ export function createOcean (env, url, opts = {}) {
     if (owed > STEP * 12) owed = 0;               // a stall is not caught up
     const events = sim.events.splice(0);
     n++;
+    /* 95 PERCENT (4B): a player whose train has just crashed goes solo
+       after this tick's snapshot has shown them the crash. */
+    const leaving = [];
+    for (const e of events) if (e.kind === 'crash') for (const [ws, phone] of phones) if (phone.player && phone.player.id === e.id && stayLevel(phone) >= LEAVE_AT) leaving.push([ws, phone]);
+    /* And every phone here without a manta (a watcher, or a player benched
+       while its page was hidden) goes at once: it has no crash to wait for,
+       and a room left ticking for watchers alone would spend the last 5
+       percent and break every room. */
+    for (const [ws, phone] of phones) if (phone.ready && !phone.player && !phone.resting && stayLevel(phone) >= LEAVE_AT) rest(ws, phone, false);
+    for (const [ws, phone] of phones) if (now - phone.heard > SILENT_MS) { try { ws.close(4003, 'silent'); } catch (_) { /* gone */ } leave(ws); if (opts.onChange) opts.onChange(ws); }
+    for (const [ws, phone] of phones) if (phone.closeAt && now >= phone.closeAt) { try { ws.close(4004, 'rooms are resting'); } catch (_) { /* gone */ } leave(ws); if (opts.onChange) opts.onChange(ws); }
     if (held.size) forgetHeld(now);
     /* AWAY (3G): a player whose inputs have stopped for AWAY_MS (the phone
-       sends one at least every 200 ms) is benched whatever the phone is
+       sends one at least every 500 ms, 4B) is benched whatever the phone is
        doing: a bot takes the manta, labelled as a bot, and holds it as for
        a drop. The phone is told, and rejoins with its token once shown. */
     for (const [ws, phone] of phones) if (phone.player && now - phone.player.lastIn > AWAY_MS) bench(ws, phone);
     for (const [ws, phone] of phones) {
       if (!phone.ready) continue;
+      /* A PLAYER'S VIEW IS ON ITS OWN LEADER (4B): the phone's camera sits
+         on its leader, so the room centres the view there itself (on the
+         wreck through the death beat) and the phone sends only the view's
+         size, when it changes: five view messages a second fewer from
+         every player, on a plan where messages are what runs out first. */
+      const mt = phone.player && trainOf(phone.player.id);
+      if (mt) { phone.view.x = clamp(mt.dead > 0 ? mt.crashX : mt.x, -1e5, 1e5); phone.view.z = clamp(mt.dead > 0 ? mt.crashZ : mt.z, -1e5, 1e5); }
       /* Binary (roomcore.js has the layout, a player's own fields
          included); who drives what, as JSON when it changed; the truth
          after it only for a debug phone, which only wrangler dev allows. */
@@ -276,6 +357,7 @@ export function createOcean (env, url, opts = {}) {
         }
       } catch (_) { /* gone */ }
     }
+    for (const [ws, phone] of leaving) rest(ws, phone, true);
   }
 
   /* THE STAGED CUT (tests only, see the top). Bot 2 swims east across the
@@ -343,8 +425,8 @@ export function createOcean (env, url, opts = {}) {
     lay(cross, -60, 0, -Math.PI / 2, crossLen);     // heading +x, across the seat's path
     if (cross) cross.human = { want: -Math.PI / 2, burst: false, rewind: 0 };
   }
-  const start = () => { if (timer) return; last = Date.now(); owed = 0; timer = setInterval(tick, 1000 / SNAP_HZ); };
-  const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+  const start = () => { if (timer) return; last = Date.now(); owed = 0; runFrom = last; timer = setInterval(tick, 1000 / SNAP_HZ); };
+  const stop = () => { if (timer) { clearInterval(timer); timer = null; runMs += Date.now() - runFrom; } };
   function leave (ws) {
     const phone = phones.get(ws);
     if (phone) unseat(phone);
@@ -354,15 +436,17 @@ export function createOcean (env, url, opts = {}) {
   }
 
   return {
-    join (ws, local) { phones.set(ws, { view: viewOf(null), watch: -1, sent: new Map(), debug: false, local, ready: false }); },
+    join (ws, local, fake) { phones.set(ws, { view: viewOf(null), watch: -1, sent: new Map(), debug: false, local, ready: false, fake: fake === '95' ? 95 : fake === '80' ? 80 : 0, heard: Date.now() }); },
     get crowded () { return phones.size >= MAX_SOCKETS; },
     leave,
     async message (ws, raw) {
       const phone = phones.get(ws);
       if (!phone) return;
+      phone.heard = Date.now();
       let m; try { m = JSON.parse(raw); } catch (_) { return; }
       if (!m || typeof m !== 'object' || Array.isArray(m)) return;
-      if (m.t === 'in') { if (inOk(m, steps)) input(phone, m); return; }
+      /* A ping may ride on an input (4B): answered as a ping is. */
+      if (m.t === 'in') { if (inOk(m, steps)) { input(phone, m); if (m.c !== undefined) ws.send(JSON.stringify({ t: 'pong', c: m.c })); } return; }
       if (m.t === 'away') { if (phone.player) bench(ws, phone); return; }
       if (m.t === 'nm') { if (typeof m.n === 'string') nameIt(phone, m.n); return; }
       if (m.t === 'ping') { if (num(m.c, 0, 1e12)) ws.send(JSON.stringify({ t: 'pong', c: m.c })); return; }
@@ -381,6 +465,16 @@ export function createOcean (env, url, opts = {}) {
       /* A second hello on the same socket gives its train back first. */
       if (phone.player) unseat(phone);
       let me = null;
+      /* RESTING (4B): at 80 percent of the day's allowance a new player
+         goes solo, and so does a new watcher (a first visit's name panel,
+         or the lab watching), which would otherwise start or keep a room
+         ticking with nobody playing. One taking back its own held manta is
+         not new. */
+      const h = m.p === 1 && typeof m.k === 'string' ? held.get(m.k) : null, back = !!h && h.until > Date.now();
+      /* A staged room (tests only) never reports, so never hears it. */
+      if (!back && !answered && !phone.fake && !opts.stage) { await Promise.race([firstHeard, new Promise(r => setTimeout(r, 1000))]); answered = true; }
+      if (!phones.has(ws)) return;
+      if (phone.resting || (!back && joinLevel(phone) >= REST_AT)) { rest(ws, phone, false); return; }
       if (m.p !== 1) {
         let watching = 0;
         for (const p of phones.values()) if (p !== phone && p.ready && !p.player) watching++;
@@ -413,8 +507,22 @@ export function createOcean (env, url, opts = {}) {
         return [t.id, t.runs, pts];
       });
       ws.send(JSON.stringify(init));
+      if (budget || phone.fake) ws.send(budgetMsg(phone));   // the lab panel's "rooms today" (4B)
       start();
     },
+    /* The day's use from the registry (worker.js report), passed on to every
+       phone for the lab panel. */
+    setBudget (j) {
+      budget = { r: +j.r || 0, d: +j.d || 0, at: Date.now(), resetAt: Date.now() + Math.max(0, +j.left || 0) };
+      answered = true; heard();
+      for (const [ws, phone] of phones) if (phone.ready) { try { ws.send(budgetMsg(phone)); } catch (_) { /* gone */ } }
+    },
+    /* Milliseconds ticked since the last ask, for the next report; given
+       back if that report did not arrive. */
+    takeRunMs () { const t = Date.now(); let v = runMs; if (timer) { v += t - runFrom; runFrom = t; } runMs = 0; return v; },
+    giveRunMs (v) { runMs += v; },
+    /* A report came back with no level (the guard down, or unreachable). */
+    noBudget () { answered = true; heard(); },
     get stepping () { return timer !== null; },
     get build () { return build; },
     get players () { return players().length; },
@@ -423,12 +531,13 @@ export function createOcean (env, url, opts = {}) {
   };
 }
 
-/* Under wrangler dev only: n steps of a fresh ocean at the defaults, so a
+/* Under wrangler dev only: n steps of a fresh room's ocean (its own solo
+   manta swims here, so 21 trains), so a
    test can time the simulation inside workerd from outside (its clocks do
    not move during a request). */
 export async function bench (env, url, count) {
   const d = await loadDefaults(env, url);
-  const s = createSim({ seed: 7, params: simParams(d.P) });
+  const s = createSim({ seed: 7, params: roomParams(d.P) });
   for (let i = 0; i < count; i++) { s.input.want = Math.sin(i / 90) * 2; s.step(); s.events.length = 0; }
   return { steps: count, wild: s.wild.filter(w => w && w.alive).length, followers: s.rivals.reduce((a, t) => a + t.followers.length, 0) };
 }

@@ -83,18 +83,21 @@ const until = async (f, ms = 5000) => { const t0 = Date.now(); while (Date.now()
     e1.end();
   }
 }
-/* 5. Seats: at most 10 players (12 allowed; the ocean has 10 trains) and 4 watchers. */
+/* 5. Seats: at most 20 players (4B: the room's 20 trains) and 4 watchers. */
 { const { code } = await mint(); const ps = [], ws = [];
-  for (let i = 0; i < 11; i++) { ps.push(player(R + 'ocean/' + code)); await wait(60); }
+  for (let i = 0; i < 21; i++) { ps.push(player(R + 'ocean/' + code)); await wait(60); }
   for (let i = 0; i < 5; i++) { ws.push(watch(R + 'ocean/' + code)); await wait(60); }
   await until(() => ps.every(c => c.init() || c.closed) && ws.every(c => c.init() || c.closed), 8000);
   const seated = ps.filter(c => c.init() && c.init().me).length, pfull = ps.filter(c => c.msgs.some(m => m.t === 'full')).length;
   const watching = ws.filter(c => c.init() && !c.closed).length, wfull = ws.filter(c => c.msgs.some(m => m.t === 'full')).length;
-  ok('players: 10 seated, the 11th told the room is full', seated === 10 && pfull === 1, seated + ' seated, ' + pfull + ' full');
+  ok('players: 20 seated, the 21st told the room is full', seated === 20 && pfull === 1, seated + ' seated, ' + pfull + ' full');
+  const P = (ps.find(c => c.init()) || { init: () => ({}) }).init().params || {};
+  ok('the room\'s ocean (4B): 20 trains, radius 2760, 570 wild mantas, 8 blooms, the pink manta on and the whale shark off', P.bots === 20 && P.arenaR === 2760 && P.wildCount === 570 && P.blooms === 8 && P.pinkOn === 1 && P.sharkOn === 0,
+     JSON.stringify({ bots: P.bots, arenaR: P.arenaR, wildCount: P.wildCount, blooms: P.blooms, pinkOn: P.pinkOn, sharkOn: P.sharkOn }));
   ok('watchers: 4 watch, the 5th told the room is full', watching === 4 && wfull === 1, watching + ' watching, ' + wfull + ' full');
   const extra = []; for (let i = 0; i < 4; i++) extra.push(sock(R + 'ocean/' + code));
   await Promise.all(extra.map(c => c.opened)); await wait(300);
-  ok('with 14 seated, two more sockets are let in to say hello and the next are refused before opening', extra.filter(c => c.open).length === 2 && extra.filter(c => !c.open).length === 2, extra.map(c => c.open ? 'open' : 'refused').join(','));
+  ok('with 24 seated, two more sockets are let in to say hello and the next are refused before opening', extra.filter(c => c.open).length === 2 && extra.filter(c => !c.open).length === 2, extra.map(c => c.open ? 'open' : 'refused').join(','));
   for (const c of [...ps, ...ws, ...extra]) c.end();
   await wait(1500);
 }
@@ -106,15 +109,16 @@ const until = async (f, ms = 5000) => { const t0 = Date.now(); while (Date.now()
   ok('codes expire after the time with no players (unused 404, emptied 404) while a room with players stays (101)', s.unused === 404 && s.used === 404 && s.kept === 101, JSON.stringify(s));
   k.end(); await wait(1000);
 }
-/* 7. The cap: 20 live rooms, lobby included. */
-{ const codes = []; for (let i = 0; i < 20; i++) codes.push((await mint()).code);
-  const socks = [watch(R + 'ocean/lobby')]; for (let i = 0; i < 19; i++) socks.push(watch(R + 'ocean/' + codes[i]));
+/* 7. The cap: 3 live rooms, lobby included (4B: the default, until the
+   LIVE_CAP variable in Cloudflare's dashboard says otherwise; 20 before). */
+{ const codes = []; for (let i = 0; i < 3; i++) codes.push((await mint()).code);
+  const socks = [watch(R + 'ocean/lobby')]; for (let i = 0; i < 2; i++) socks.push(watch(R + 'ocean/' + codes[i]));
   await until(() => socks.every(c => c.init()), 15000); await wait(1000);
-  const full = await mint(), twentieth = await status(R + 'ocean/' + codes[19]), again = watch(R + 'ocean/' + codes[3]), lobby2 = watch(R + 'ocean/lobby');
+  const full = await mint(), third = await status(R + 'ocean/' + codes[2]), again = watch(R + 'ocean/' + codes[1]), lobby2 = watch(R + 'ocean/lobby');
   await until(() => again.init() && lobby2.init(), 5000);
-  ok('with 20 live rooms a new private room is refused with a clear message', full.status === 503 && /busy/.test(full.text), full.status + ' ' + JSON.stringify(full.text) + ', ' + socks.filter(c => c.init()).length + ' live');
-  ok('and an idle code cannot start a 21st room, but a live room and lobby still take phones', twentieth === 503 && !!again.init() && !!lobby2.init(), 'idle code ' + twentieth + ', live room ' + !!again.init() + ', lobby ' + !!lobby2.init());
-  socks[5].end(); again.end(); await wait(1500);
+  ok('with 3 live rooms a new private room is refused with a clear message', full.status === 503 && /busy/.test(full.text), full.status + ' ' + JSON.stringify(full.text) + ', ' + socks.filter(c => c.init()).length + ' live');
+  ok('and an idle code cannot start a 4th room, but a live room and lobby still take phones', third === 503 && !!again.init() && !!lobby2.init(), 'idle code ' + third + ', live room ' + !!again.init() + ', lobby ' + !!lobby2.init());
+  socks[2].end(); again.end(); await wait(1500);
   const after = await mint();
   ok('when one room empties, a new private room can be made again', after.status === 200 && !!after.code, after.status + ' ' + after.code);
   for (const c of [...socks, lobby2]) c.end();

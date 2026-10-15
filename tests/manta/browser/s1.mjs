@@ -72,7 +72,7 @@ for (const [label,vp] of [['portrait 412x915',{width:412,height:915}],['landscap
   await p.click('#chip'); await p.waitForTimeout(350);
   s=await state(p);
   ok('tap expands to the full panel', !s.panelHidden&&!s.barHidden&&s.expanded==='true');
-  ok('all 31 rows present (3E: preload added)', Object.keys(s.rows).length=== 31 && 'preload' in s.rows, String(Object.keys(s.rows).length));
+  ok('all 32 rows present (3E: preload added; 4B: rooms today)', Object.keys(s.rows).length=== 32 && 'preload' in s.rows && s.rows['rooms today'] === 'solo: no room', Object.keys(s.rows).length + ' rows; rooms today "' + s.rows['rooms today'] + '"');
   /* 3A: the row reads what is drawn and the pool's capacity now. */
   { const m=/^(\d+) drawn  \u00b7  capacity (\d+)  \u00b7  1 instanced mesh$/.exec(s.rows['mantas']||'');
     ok('mantas row says what is drawn, the capacity and one mesh', !!m && +m[1]>=1071 && +m[2]>=+m[1], s.rows['mantas']); }

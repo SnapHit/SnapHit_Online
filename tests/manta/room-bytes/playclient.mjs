@@ -46,7 +46,7 @@ export function player (port, room, opts = {}) {
     if (m.t === 'names') { c.names = m.names; c.namesLog.push([performance.now(), m.names]); return; }
     if (m.t === 'benched') { c.benched++; if (!(performance.now() < c.holdUntil) && !opts.noRejoin) c.rejoin(); return; }
     if (m.t === 'full') { c.full = true; return; }
-    if (m.t === 'pong') { c.rtt = performance.now() - m.c; return; }
+    if (m.t === 'pong') { c.rtt = ((performance.now() - m.c) % 1e6 + 1e6) % 1e6; return; }
     if (m.t === 'init') { c.inits.push(m); Object.assign(params, m.params || {}); core.trains.clear(); snaps.length = 0; offsets.length = 0; gaps.length = 0;
       offset = null; lastArrive = null; delay = 0.1; c.init = m; c.names = m.names || c.names; play.onInit(m); c.connected = true; return; }
     if (m.t !== 'snap') return;

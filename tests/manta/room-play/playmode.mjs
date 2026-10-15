@@ -47,6 +47,10 @@ const r = await p.evaluate(async () => {
   ev('pointerup', 11, 206, 200);
   out.corr = R.corrections.slice(c0).sort((a, c) => a - c); out.late = R.late - late0; out.lead = R.lead; out.seq = R.seq; out.rtt = R.rtt;
   out.board = (document.getElementById('board') || {}).textContent || '';
+  /* 4B: the board is the top ten of a room's 20 trains, so a new train is
+     usually not on it; your own row is marked whenever it is. */
+  out.onBoard = !!(window.__sim && window.__sim.trains && window.__sim.trains.includes(window.__sim.you));
+  out.players = (window.__lab.room && window.__lab.room.players) || [];
   out.mark = ([...document.querySelectorAll('div')].find(d => /^● /.test(d.textContent || '')) || {}).textContent || '';
   out.overflow = document.documentElement.scrollWidth - innerWidth;
   return out;
@@ -96,7 +100,8 @@ if (r.error) ok('ran', false, r.error); else {
   ok('your train is drawn with no gap, including after a restart: leader to first follower within spacing ± 5', !!r.gaps && r.restarts >= 1 && r.gaps[0] >= r.spacing - 5 && r.gaps[1] <= r.spacing + 5, r.gaps ? r.gaps.map(v => v.toFixed(1)).join('..') + ' (spacing ' + r.spacing + ', length up to ' + r.len + ', ' + r.frames + ' frames across ' + r.restarts + ' restarts)' : 'no followers to measure');
   ok("the page's own prediction: p95 correction under 2 units while steering, no snaps", c.length > 80 && p95 < 2 && snaps === 0,
      c.length + ' corrections over 20 s: median ' + (c[c.length >> 1] || 0).toFixed(3) + ', p95 ' + (p95 || 0).toFixed(3) + ', worst ' + (c[c.length - 1] || 0).toFixed(2) + '; ' + snaps + ' snaps; late inputs ' + r.late + ' of ' + r.seq + '; lead ' + r.lead + '; rtt ' + (r.rtt && r.rtt.toFixed(0)));
-  ok('the board marks your row as you, and the signal mark shows your name', /\byou\b/.test(r.board) && r.mark.includes(r.name), 'mark "' + r.mark + '"; board ' + r.board.replace(/\s+/g, ' ').slice(0, 200));
+  ok('the signal mark shows your name, the room names you as a player, and the board marks your row as you when you are in its top ten', r.mark.includes(r.name) && r.players.includes(r.name) && (!r.onBoard || /\byou\b/.test(r.board)),
+     'mark "' + r.mark + '"; players ' + JSON.stringify(r.players) + '; on the board ' + r.onBoard + ': ' + r.board.replace(/\s+/g, ' ').slice(0, 160));
   ok('no horizontal overflow', r.overflow <= 0, String(r.overflow));
 }
 ok('no console errors', errs.length === 0, JSON.stringify(errs.slice(0, 3)));

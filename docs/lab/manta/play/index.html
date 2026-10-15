@@ -569,7 +569,8 @@ window.MANTA_LAB = window.MANTA_ROOT + 'lab/manta/';
   if (portal) { p.delete('play'); p.delete('stage'); }
   if (solo) p.delete('room'); else { p.set('room', code || 'lobby'); if (!naming) p.set('play', '1'); }
   window.MANTA_QUERY = p.toString();
-  window.__play = { room: solo ? null : (code || 'lobby'), code: solo ? null : code, note: portal ? '' : (q.get('note') || ''), naming: naming, portal: portal };
+  window.__play = { room: solo ? null : (code || 'lobby'), code: solo ? null : code, note: portal ? '' : (q.get('note') || ''), naming: naming, portal: portal,
+                   until: /^\d{10,14}$/.test(q.get('until') || '') ? +q.get('until') : 0 };
   /* main.js, by the same relative root (a module script: deferred, as ever). */
   /* main.js, by the same relative root, written in where the tag always was:
      parser-inserted, so deferred and in order exactly as a static tag (an
@@ -585,12 +586,19 @@ window.MANTA_LAB = window.MANTA_ROOT + 'lab/manta/';
   var P = window.__play, $ = function (id) { return document.getElementById(id); };
   var ROOMS = '/lab/manta/rooms/';
   var NOTES = { slow: 'The room could not be reached within 5 seconds, so this is solo.',
-                full: 'Every room is full just now, so this is solo.' };
+                full: 'Every room is full just now, so this is solo.',
+                off: 'Rooms are off for now, so this is solo.' };
   /* Test switches ride along; nothing else does. */
   function keep (u) { var q = new URLSearchParams(location.search); ['backend', 'tier'].forEach(function (k) { if (q.get(k)) u.searchParams.set(k, q.get(k)); }); return u; }
   function go (params) { var u = new URL(location.pathname, location.href); for (var k in params) u.searchParams.set(k, params[k]); location.replace(keep(u).href); }
   function say (text) { $('note').textContent = text; $('noteRow').hidden = !text; }
-  function goSolo (why) { if (P.room) go(why ? { solo: '1', note: why } : { solo: '1' }); }
+  function goSolo (why, until) { if (P.room) go(!why ? { solo: '1' } : until ? { solo: '1', note: why, until: String(until) } : { solo: '1', note: why }); }
+  /* Rooms resting (4B): when they return, on this phone's clock and in its
+     own way of writing a time (00:00 UTC is 11am in Sydney in daylight saving). */
+  function restNote (until) {
+    var t = ''; try { if (until) t = new Date(until).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }); } catch (e) { t = ''; }
+    return t ? 'Rooms are resting until ' + t + ', so this is solo.' : 'Rooms are resting for today, so this is solo.';
+  }
 
   if (FEEDBACK_URL && !P.portal) { $('feedback').href = FEEDBACK_URL; $('feedback').hidden = false; }
   /* THE PORTAL PACKAGE (3O): solo against bots and nothing else. No rooms,
@@ -628,6 +636,7 @@ window.MANTA_LAB = window.MANTA_ROOT + 'lab/manta/';
     box.addEventListener('keydown', function (e) { if (e.key === 'Enter') startPlay(); });
   }
   if (NOTES[P.note]) say(NOTES[P.note]);
+  else if (P.note === 'rest') say(restNote(P.until));
   $('solo').hidden = !P.room; $('online').hidden = !!P.room;
   $('solo').onclick = function () { goSolo(''); };
   $('online').onclick = function () { go({}); };
@@ -671,9 +680,27 @@ window.MANTA_LAB = window.MANTA_ROOT + 'lab/manta/';
       if (t0 === null) t0 = performance.now();
       if (R.connected && (R.me || !R.play)) { clearInterval(wait); return; }   // playing, or watching (a full room, or the name panel)
       if (R.allFull) { clearInterval(wait); goSolo('full'); return; }        // every room full (3O)
+      if (R.roomsOff) { clearInterval(wait); goSolo('off'); return; }        // rooms switched off (4B)
+      if (R.rest && !R.rest.crash) { clearInterval(wait); goSolo('rest', R.rest.until); return; }   // rooms resting (4B)
       if (performance.now() - t0 > 5000) { clearInterval(wait); goSolo('slow'); }
     }, 100);
   }
+
+  /* Rooms switched off while playing (4B): the switch redeploys, every
+     socket drops, the reconnect is refused and asks why; solo, with the note. */
+  /* Rooms resting (4B): a new player at once; at 95 percent, a player after
+     their crash, once its beat has played. */
+  var leaving = false;
+  if (P.room) setInterval(function () {
+    var R = window.__lab && window.__lab.room;
+    if (!R || leaving) return;
+    if (R.roomsOff) { leaving = true; goSolo('off'); return; }
+    /* Every room full after this page had already joined (4B): a seat
+       taken while it was away, Play pressed on a first visit's name panel
+       with every room full, or a private room shut out by the live-room cap. */
+    if (R.allFull) { leaving = true; goSolo('full'); return; }
+    if (R.rest) { leaving = true; setTimeout(function () { goSolo('rest', R.rest.until); }, R.rest.crash ? 1800 : 0); }
+  }, 250);
 
   /* Runs, best peak and cuts landed. Every cut names the leader that made
      it, solo and in a room alike (3H), and only your own are counted. */

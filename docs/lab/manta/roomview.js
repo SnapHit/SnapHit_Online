@@ -64,13 +64,25 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   const names = new Map();                 // train id -> player's name, for trains a player drives
   const input = { want: null, burst: false };   // written by the touch controls in play mode
   const snaps = [], pending = [], gaps = [], offsets = [];
-  let ws = null, retry = 0, backoff = 0.5, stopped = false, connected = false, everOpen = false;
+  let ws = null, retry = 0, backoff = 0.5, stopped = false, connected = false, everOpen = false, parked = false;
   /* OVERFLOW ROOMS (3O): a player in the public game asks the rooms which
      public room to swim in ("lobby", "lobby-2", ...) and keeps it for every
      reconnect; refused there as full, it asks again. allFull: every room
      is full, and the page goes solo. Watching stays on "lobby". */
   const publicGame = room === 'lobby' && new URLSearchParams(location.search).get('stage') !== 'cut';   // never the staged test room
   let seatRoom = null, foundFull = '', allFull = false, asking = false;
+  /* ROOMS OFF (4B): the public game, or a socket that would not open and
+     then asked why, was told rooms are off; the page goes solo with a
+     note (play/index.html) and this stops trying. statusAt: when it last
+     asked. ?fake=off|full rides on every rooms request (lab only). */
+  let roomsOff = false, statusAt = -1e9;
+  /* ROOMS RESTING (4B): the day's budget is near its end. rest: { until
+     (ms, when rooms return), crash (sent after your crash, at 95 percent) },
+     and the page goes solo with a note. budget: the day's use, { r, d, f },
+     for the lab panel's "rooms today". */
+  let rest = null, budget = null;
+  const fakeQ = (() => { const f = new URLSearchParams(location.search).get('fake') || ''; return /^(off|full|80|95)$/.test(f) ? f : ''; })();
+  const withFake = path => fakeQ ? path + (path.includes('?') ? '&' : '?') + 'fake=' + fakeQ : path;
   let rtt = null, delay = 0.1, offset = null, lastArrive = null, lastSnap = null, snapCount = 0;
   let wildNow = null;
   /* Predicted pickups (3I): play mode only. The limit is your round trip
@@ -93,11 +105,14 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   document.body.appendChild(mark);
   /* Your name as the room has it (a typed one once the room took it). */
   const myName = () => play ? (names.get(play.id) || play.name || null) : null;
+  /* When rooms return, on this phone's own clock and in its own way of
+     writing a time (00:00 UTC is 11am in Sydney in daylight saving). */
+  const restTime = t => { try { return new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }); } catch (_) { return 'tomorrow'; } };
   function showSignal () {
     if (pencil) pencil.hidden = !(connected && play && play.id >= 0);
     if (!connected) {
       mark.style.color = '#ff8a80';
-      sig.textContent = '● ' + (navigator.onLine === false ? 'offline' : everOpen ? 'reconnecting…' : 'connecting…');
+      sig.textContent = '● ' + (rest ? 'rooms resting until ' + restTime(rest.until) : roomsOff ? 'rooms are off' : allFull ? 'every room is full' : navigator.onLine === false ? 'offline' : everOpen ? 'reconnecting…' : 'connecting…');
       return;
     }
     mark.style.color = rtt === null ? '#8fa6bb' : rtt < 150 ? '#7fe3d0' : rtt < 400 ? '#ffc46b' : '#ff8a80';
@@ -173,7 +188,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   /* The step the other trains are drawn at, on the room's count: what an
      input tells the room this phone was looking at, for lag compensation. */
   const viewStep = () => offset === null || !snaps.length ? null : (performance.now() / 1000 - offset - delay) * 60;
-  if (playing) play = createPlay({ room, params, core, you, input, send, rtt: () => rtt, view: viewStep });
+  if (playing) play = createPlay({ room, params, core, you, input, send, rtt: () => rtt, view: viewStep, viewNow });
   /* For tests against a local room only (the room ignores both elsewhere):
      ?lagcomp=0 turns lag compensation off, ?truth=1 asks for the true state. */
   const q = new URLSearchParams(location.search);
@@ -195,14 +210,18 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   }
 
   function connect () {
-    if (stopped || asking) return;
+    if (stopped || asking || rest) return;
+    /* Hidden, parked (below): a retry timer armed while the page was on
+       screen, or the public game's answer, can come after it was hidden. */
+    if (document.hidden && everOpen) { parked = true; return; }
     if (publicGame && play && !seatRoom) {
       asking = true;
-      fetch('/lab/manta/rooms/public' + (foundFull ? '?full=' + foundFull : ''), { method: 'POST', cache: 'no-store' })
+      fetch(withFake('/lab/manta/rooms/public' + (foundFull ? '?full=' + foundFull : '')), { method: 'POST', cache: 'no-store' })
         .then(r => r.ok ? r.json().then(j => { if (/^lobby(-\d+)?$/.test(j.room)) seatRoom = j.room; })
-                        : r.status === 503 ? r.text().then(t => { if (/full/.test(t)) allFull = true; }) : null)
+                        : r.status === 503 ? r.text().then(t => { if (/full/.test(t)) allFull = true; if (/off/.test(t)) roomsOff = true;
+                            const rs = /resting: (\d+)/.exec(t); if (rs) rest = { until: +rs[1], crash: false }; }) : null)
         .catch(() => { /* the page's own five seconds decide */ })
-        .then(() => { asking = false; foundFull = ''; if (allFull) { showSignal(); return; } if (seatRoom) connect(); else later(); });
+        .then(() => { asking = false; foundFull = ''; if (allFull || roomsOff || rest) { showSignal(); return; } if (seatRoom) connect(); else later(); });
       return;
     }
     const target = publicGame && play ? seatRoom : room;
@@ -213,7 +232,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     const kind = q.get('stage') === 'cut' ? 'stage/' : 'ocean/';
     /* ?xb=1 with the staged room (3H, tests only): bot 2 cuts your train. */
     const extra = kind === 'stage/' && q.get('xb') === '1' ? '?xb=1' : '';
-    try { s = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/lab/manta/rooms/' + kind + target + extra); }
+    try { s = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + withFake('/lab/manta/rooms/' + kind + target + extra)); }
     catch (e) { later(); return; }
     ws = s;
     s.binaryType = 'arraybuffer';
@@ -222,13 +241,49 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
       let m; try { m = typeof e.data === 'string' ? JSON.parse(e.data) : decodeSnap(e.data); } catch (_) { return; }
       if (m && ws === s) receive(m);
     };
-    s.onclose = () => { if (ws !== s) return; ws = null; connected = false; showSignal(); later(); };
+    let opened = false;
+    s.addEventListener('open', () => { opened = true; });
+    s.onclose = () => { if (ws !== s) return; ws = null; connected = false; showSignal(); if (!opened) askWhy(target); later(); };
+  }
+  /* A socket that would not open says nothing of why, so ask once (at most
+     every 10 s): rooms off stops the trying, and the page goes solo with
+     its note. For a private room or an overflow room, the room is named, and
+     the live-room cap may be why (a room that emptied while its phones were
+     away, and others took its place): an overflow room is dropped, so the
+     next try asks the public game again (a room with a seat, or every room
+     full); a private room's page goes solo with the full note (allFull). A
+     room that cannot be reached for any other reason is tried as before. */
+  function askWhy (target) {
+    const t = performance.now();
+    if (t - statusAt < 10000 || roomsOff) return;
+    statusAt = t;
+    const named = target && target !== 'lobby' && q.get('stage') !== 'cut' ? '?room=' + encodeURIComponent(target) : '';
+    fetch(withFake('/lab/manta/rooms/status' + named), { method: 'POST', cache: 'no-store' })
+      .then(r => r.status === 503 ? r.text().then(x => {
+        if (/off/.test(x)) { roomsOff = true; stopped = true; clearTimeout(retry); showSignal(); return; }
+        if (!/busy/.test(x)) return;
+        if (publicGame && play) { if (seatRoom === target) seatRoom = null; return; }
+        allFull = true; stopped = true; clearTimeout(retry); showSignal();
+      }) : null)
+      .catch(() => { /* unreachable: keep trying */ });
   }
   /* Half a second, doubling to eight, reset by a good init: a room that is
      restarting for a deploy is back in seconds, one that is down is not
      hammered. */
+  /* HIDDEN, PARKED (4B): the room closes a socket silent for a minute (a
+     hidden page sends nothing), and a hidden page does not reconnect on a
+     timer, or it would start the room ticking again for nobody: it waits
+     to be shown, then reconnects at once. Only once it has been in a room
+     (everOpen): a page hidden before its first join keeps trying, or the
+     feedback page's five seconds would send it solo with the "could not be
+     reached" note for a room a retry would have reached. */
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden || !parked) return;
+    parked = false; backoff = 0.5; if (!ws) connect();
+  });
   function later () {
-    if (stopped) return;
+    if (stopped || rest) return;
+    if (document.hidden && everOpen) { parked = true; return; }
     clearTimeout(retry);
     retry = setTimeout(connect, backoff * 1000);
     backoff = Math.min(backoff * 2, 8);
@@ -246,7 +301,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
 
   function receive (m) {
     if (m.t === 'reload') { stopped = true; clearTimeout(retry); try { ws.close(); } catch (_) {} ws = null; connected = false; showSignal(); showReload(); return; }
-    /* A room with ten players already: watch it instead of playing. */
+    /* A room with every seat taken (20, 4B): watch it instead of playing. */
     if (m.t === 'full' && publicGame && play) { foundFull = seatRoom || room; seatRoom = null; return; }   // the close that follows asks again
     if (m.t === 'full') { if (!play) return; play.stop(); play = null;
       mirror.watching = true; watched = -1; you.watched = -1; you.followers.length = 0; you.dead = 0; showSignal(); return; }
@@ -255,8 +310,17 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
       /* Every bot's kind, once on joining, so the board says timid, greedy or
          bully for bots that have never been near you (3D). */
       for (const [id, k] of m.kinds || []) kinds.set(id, k); connected = true; backoff = 0.5; viewDirty = true; showSignal(); return; }
-    if (m.t === 'pong') { rtt = performance.now() - m.c; rtts5.push(rtt); if (rtts5.length > 5) rtts5.shift(); showSignal(); return; }
+    /* The stamp is milliseconds modulo a million (4B: a ping rides on a
+       steering message, and has to be short). */
+    if (m.t === 'pong') { rtt = ((performance.now() - m.c) % 1e6 + 1e6) % 1e6; rtts5.push(rtt); if (rtts5.length > 5) rtts5.shift(); showSignal(); return; }
     if (m.t === 'names') { setNames(m.names); return; }
+    if (m.t === 'budget') { budget = { r: m.r, d: m.d, f: m.f || 0 }; return; }
+    /* The room says rooms are resting: stop, and let the page go solo (after
+       the crash's beat, when it came at your crash). */
+    if (m.t === 'rest') { rest = { until: +m.until || 0, crash: m.c === 1 }; clearTimeout(retry);
+      /* After a crash the room carries on drawing through the death card;
+         nothing reconnects (connect and later check rest). */
+      const s = ws; setTimeout(() => { stopped = true; try { if (s) s.close(1000, 'resting'); } catch (_) { /* closed */ } }, rest.crash ? 2500 : 0); showSignal(); return; }
     /* The room benched this player (no inputs for 2 s, or the page said it
        was hidden): rejoin at once if the page is showing, with the token,
        which takes the manta back while the bot still holds it. */
@@ -345,9 +409,13 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   });
 
   /* The view, at most five times a second and only when it moved; a ping a
-     second, which is also what keeps the signal mark honest. */
+     second, which is also what keeps the signal mark honest. In play, the
+     phone's own play mode sends both, and far fewer (4B, roomplay.js tick):
+     the room centres a player's view on its leader, and the ping rides on
+     a steering message. */
   function tick (now) {
     if (!connected) return;
+    if (play) { play.tick(); return; }
     const v = viewNow();
     const moved = !sentView || Math.abs(v.x - sentView.x) + Math.abs(v.z - sentView.z) > 10 ||
                   Math.abs(v.w - sentView.w) > 1 || Math.abs(v.h - sentView.h) > 1;
@@ -355,7 +423,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
       send(viewMsg(v));
       sentView = v; viewAt = now; viewDirty = false;
     }
-    if (now - pingAt >= 1) { send({ t: 'ping', c: Math.round(performance.now()) }); pingAt = now; }
+    if (now - pingAt >= 1) { send({ t: 'ping', c: Math.floor(performance.now()) % 1e6 }); pingAt = now; }
   }
 
   /* -------------------------------------------------------- one frame */
@@ -517,12 +585,19 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
       get play () { return !!play; }, get me () { return play ? play.me : null; },
       /* The public room this player swims in, and whether every room was full (3O). */
       get seatRoom () { return seatRoom; }, get allFull () { return allFull; },
+      /* Rooms switched off (4B): the page goes solo with its note. */
+      get roomsOff () { return roomsOff; },
+      /* The day's budget (4B): rooms resting, and the day's use for the panel. */
+      get rest () { return rest; }, get budget () { return budget; },
       get corrections () { return play ? play.corrections : []; }, get seq () { return play ? play.seq : 0; },
       get ack () { return play ? play.ack : 0; }, get name () { return play ? play.name : null; },
       /* Play mode's clock (3E): steps ahead of the room, inputs the room
          said came too late for their step, and earliness reports received. */
       get lead () { return play ? play.lead : null; }, get late () { return play ? play.late : 0; },
       get reported () { return play ? play.reported : 0; }, get id () { return play ? play.id : -1; },
+      /* For the tests: the names of every player in the room (4B: with 20
+         trains the top-ten board no longer shows everyone). */
+      get players () { return [...names.values()]; },
     },
   };
   addEventListener('online', showSignal); addEventListener('offline', showSignal);
@@ -540,7 +615,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     if (play || stopped) return false;
     playing = true;
     if (publicGame && !seatRoom) seatRoom = room;   // seated in place on the lobby connection; full there, it asks
-    play = createPlay({ room, params, core, you, input, send, rtt: () => rtt, view: viewStep });
+    play = createPlay({ room, params, core, you, input, send, rtt: () => rtt, view: viewStep, viewNow });
     pickups = createPickups(); hits = createHits();
     if (!pencil) makePencil();
     mirror.watching = false; watched = -1; you.watched = -1; you.followers.length = 0; you.dead = 0;

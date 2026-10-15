@@ -87,10 +87,15 @@ const close = c => { try { c.ws.close(1000, 'bye'); } catch (_) {} };
      'first snapshot after reconnect: ' + (first ? first.trains + ' trains, worst ' + first.worst.toFixed(3) : 'none') + '; worst over ' + b2.match.length + ' snapshots ' + worst.toFixed(3));
   close(b2); }
 
-/* 6. A step's time inside workerd after five simulated minutes. */
+/* 6. A step's time inside workerd after five simulated minutes. From 4B
+   the bench is the room's own ocean (20 bots, the solo manta swimming too,
+   radius 2760, 570 wild, 8 blooms; 0.44 ms at the old defaults and ten
+   bots), and the bar is 3 ms: Brief 4B's bar for a room step is 4 ms with
+   20 phones' snapshots included, which room-size/cost.mjs measured at
+   about 1 ms of it. */
 { const time = async n => { const t0 = performance.now(); const r = await (await fetch(B + '/lab/manta/rooms/bench?n=' + n)).json(); return { ms: performance.now() - t0, r }; };
   const a = await time(18000), b = await time(21600);
   const per = (b.ms - a.ms) / 3600;
-  ok('a step inside workerd after five minutes (defaults, ten bots)', per > 0 && per < 2, per.toFixed(4) + ' ms a step (' + (per / 16.67 * 100).toFixed(1) + '% of a 60 Hz frame); 18000 steps took ' + a.ms.toFixed(0) + ' ms, 21600 took ' + b.ms.toFixed(0) + ' ms; at 5 min ' + JSON.stringify(a.r)); }
+  ok('a step inside workerd after five minutes (the room\'s ocean: 21 trains, radius 2760, 570 wild): under 3 ms', per > 0 && per < 3, per.toFixed(4) + ' ms a step (' + (per / 16.67 * 100).toFixed(1) + '% of a 60 Hz frame); 18000 steps took ' + a.ms.toFixed(0) + ' ms, 21600 took ' + b.ms.toFixed(0) + ' ms; at 5 min ' + JSON.stringify(a.r)); }
 
 console.log('roomtest failures: ' + bad); clearTimeout(die); setTimeout(() => process.exit(bad ? 1 : 0), 300);
