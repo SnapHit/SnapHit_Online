@@ -64,7 +64,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   const names = new Map();                 // train id -> player's name, for trains a player drives
   const input = { want: null, burst: false };   // written by the touch controls in play mode
   const snaps = [], pending = [], gaps = [], offsets = [];
-  let ws = null, retry = 0, backoff = 0.5, stopped = false, connected = false, everOpen = false;
+  let ws = null, retry = 0, backoff = 0.5, stopped = false, connected = false, everOpen = false, parked = false;
   /* OVERFLOW ROOMS (3O): a player in the public game asks the rooms which
      public room to swim in ("lobby", "lobby-2", ...) and keeps it for every
      reconnect; refused there as full, it asks again. allFull: every room
@@ -211,6 +211,9 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
 
   function connect () {
     if (stopped || asking || rest) return;
+    /* Hidden, parked (below): a retry timer armed while the page was on
+       screen, or the public game's answer, can come after it was hidden. */
+    if (document.hidden && everOpen) { parked = true; return; }
     if (publicGame && play && !seatRoom) {
       asking = true;
       fetch(withFake('/lab/manta/rooms/public' + (foundFull ? '?full=' + foundFull : '')), { method: 'POST', cache: 'no-store' })
@@ -270,15 +273,17 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   /* HIDDEN, PARKED (4B): the room closes a socket silent for a minute (a
      hidden page sends nothing), and a hidden page does not reconnect on a
      timer, or it would start the room ticking again for nobody: it waits
-     to be shown, then reconnects at once. */
-  let parked = false;
+     to be shown, then reconnects at once. Only once it has been in a room
+     (everOpen): a page hidden before its first join keeps trying, or the
+     feedback page's five seconds would send it solo with the "could not be
+     reached" note for a room a retry would have reached. */
   document.addEventListener('visibilitychange', () => {
     if (document.hidden || !parked) return;
     parked = false; backoff = 0.5; if (!ws) connect();
   });
   function later () {
     if (stopped || rest) return;
-    if (document.hidden) { parked = true; return; }
+    if (document.hidden && everOpen) { parked = true; return; }
     clearTimeout(retry);
     retry = setTimeout(connect, backoff * 1000);
     backoff = Math.min(backoff * 2, 8);
