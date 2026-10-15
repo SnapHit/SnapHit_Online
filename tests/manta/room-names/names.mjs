@@ -91,11 +91,14 @@ if (PART === 'clean') {
   for (const [, n] of INPUTS) { const c = player(+process.env.PORT, code, {}); cs.push(c); await c.opened; c.sendRaw({ t: 'nm', n }); await wait(150); }
   await wait(2500);
   const seen = await p.evaluate(() => { const S = window.__sim, board = document.getElementById('board');
-    return { names: [...Array(12).keys()].map(i => S.nameOf(i)), board: board.textContent, boardEls: [...board.querySelectorAll('*')].map(e => e.tagName),
+    /* 4B: the board is the top ten of a room's 20 trains, so a name is
+       looked for there only when its train is on it. */
+    return { names: [...Array(21).keys()].map(i => S.nameOf(i)), onBoard: (S.trains || []).map(t => t.id), board: board.textContent, boardEls: [...board.querySelectorAll('*')].map(e => e.tagName),
       labelEls: [...document.querySelectorAll('#labels *')].filter(e => e.children.length).length, imgs: document.querySelectorAll('img').length, x: window.__x || 0 }; });
   for (let i = 0; i < INPUTS.length; i++) {
     const [what, n] = INPUTS[i], want = cleanName(n), id = cs[i].play.id, got = seen.names[id];
-    ok(what + ': ' + JSON.stringify(n).slice(0, 44) + ' arrives as ' + JSON.stringify(want), got === want && seen.board.includes(want), 'room says ' + JSON.stringify(got) + ' for #' + id + (seen.board.includes(want) ? ', on the board as text' : ', NOT on the board'));
+    const listed = seen.onBoard.includes(id);
+    ok(what + ': ' + JSON.stringify(n).slice(0, 44) + ' arrives as ' + JSON.stringify(want) + ', and on the board as text when its train is in the top ten', got === want && (!listed || seen.board.includes(want)), 'room says ' + JSON.stringify(got) + ' for #' + id + (!listed ? ', not in the top ten' : seen.board.includes(want) ? ', on the board as text' : ', NOT on the board'));
   }
   ok('shown as plain text: no element made from a name, no image, no script run, no dialog', seen.boardEls.every(t => t === 'B' || t === 'SPAN' || t === 'BR') && seen.labelEls === 0 && seen.imgs === 0 && dialogs.length === 0,
      'board elements ' + JSON.stringify([...new Set(seen.boardEls)]) + ', label elements with children ' + seen.labelEls + ', <img> ' + seen.imgs + ', dialogs ' + dialogs.length);
@@ -126,8 +129,9 @@ if (PART === 'change') {
   await a.waitForFunction(() => window.__seenAt !== null, null, { timeout: 10000 }).catch(() => {});
   const seenAt = await a.evaluate(() => window.__seenAt), sentAt = await q.evaluate(() => window.__sentAt || null);
   const dt = seenAt && sentAt ? seenAt - sentAt : null;
-  const boardA = await a.evaluate(() => document.getElementById('board').textContent);
-  ok('a name changed with the pencil shows on the other player\'s board within one snapshot (50 ms) of leaving the phone', dt !== null && dt <= 60 && boardA.includes('bobby 🐟'), 'seen ' + (dt === null ? 'never' : dt + ' ms') + ' after the phone sent it (from "' + before + '"); board ' + (boardA.includes('bobby 🐟') ? 'has it' : 'lacks it'));
+  /* 4B: on the board only when bob's train is in the top ten of 20. */
+  const [boardA, listedB] = await a.evaluate(id => [document.getElementById('board').textContent, (window.__sim.trains || []).some(t => t.id === id)], idB);
+  ok('a name changed with the pencil reaches the other player within one snapshot (50 ms) of leaving the phone, on the board when bob is in the top ten', dt !== null && dt <= 60 && (!listedB || boardA.includes('bobby 🐟')), 'seen ' + (dt === null ? 'never' : dt + ' ms') + ' after the phone sent it (from "' + before + '"); bob ' + (listedB ? 'in' : 'not in') + ' the top ten, board ' + (boardA.includes('bobby 🐟') ? 'has it' : 'lacks it'));
   /* The phone's own limit: past 5 s one change goes, and one straight after is refused. */
   await wait(5200);
   const rs = await q.evaluate(() => [window.__sim.setName('bob two'), window.__sim.setName('bob three')]);
