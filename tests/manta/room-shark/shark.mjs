@@ -16,7 +16,7 @@ let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  P
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const towards = (a, b) => Math.atan2(-(b.x - a.x), -(b.z - a.z));
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
-let sk = null, seen = 0, gone = 0, last = null, moves = [], turns = [], cuts = [], crashes = [], lenLog = [], mode = 'wait', aim = null, held = null;
+let sk = null, seen = 0, gone = 0, last = null, lastAt = 0, spans = [], moves = [], turns = [], cuts = [], crashes = [], lenLog = [], mode = 'wait', aim = null, held = null;
 const c = player(PORT, 'sk-' + Math.random().toString(36).slice(2, 7) + '?mine=40&shark=cross', { stage: true, script: c => {
   if (!c.play.live) { c.input.want = null; c.input.burst = false; return; }
   c.input.burst = false;
@@ -26,7 +26,7 @@ const c = player(PORT, 'sk-' + Math.random().toString(36).slice(2, 7) + '?mine=4
   else c.input.want = r > 1200 ? towards(you, { x: 0, z: 0 }) : you.head + 0.12 * Math.sin(Date.now() / 1000);
 } });
 c.onSnap = m => {
-  if (m.sk) { if (!sk) seen++; if (last) { const mv = Math.hypot(m.sk.x - last.x, m.sk.z - last.z); moves.push(mv); if (mv < 60) turns.push(wrap(m.sk.h - last.h)); } last = m.sk; sk = m.sk; }   // a set-across (tests only) is a teleport, left out of the course
+  if (m.sk) { if (!sk) seen++; if (last) { const mv = Math.hypot(m.sk.x - last.x, m.sk.z - last.z); moves.push(mv); if (mv < 60) { turns.push(wrap(m.sk.h - last.h)); spans.push([mv, m.time - lastAt]); } } last = m.sk; lastAt = m.time; sk = m.sk; }   // a set-across (tests only) is a teleport, left out of the course
   else { if (sk) gone++; sk = null; last = null; }
   for (const e of m.ev || []) { if (e.k === 'cut') cuts.push({ by: e.by, at: m.time, wall: Date.now() }); if (e.k === 'crash') crashes.push({ by: e.by, at: m.time }); }
   if (c.play.me) lenLog.push([m.time, c.play.me.len, c.play.me.dead || 0]);
@@ -37,10 +37,15 @@ for (let k = 0; k < 60 && !sk; k++) await wait(250);
 ok('the snapshot carries the whale shark from its appearance (flag 64): seen ' + seen + ' appearance(s) within ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s', seen >= 1);
 await wait(4000);
 const mv = moves.filter(m => m < 60);   // the set-across is a teleport, not a move
-const spd = mv.length ? mv.reduce((a, b) => a + b, 0) / mv.length * 20 : 0;
+/* 4C: the speed over the room's own clock (each snapshot's time), not
+   per snapshot times 20: on a 2-core container the room's ticks ran about
+   57 ms apart rather than 50, each covering more of the shark's swim, and
+   the per-snapshot figure read 136 to 137 at all three delays once in
+   4C's third full suite pass. */
+const spanT = spans.reduce((a, q) => a + q[1], 0), spd = spanT > 0 ? spans.reduce((a, q) => a + q[0], 0) / spanT : 0;
 /* The heading on the wire is a byte (2 pi / 256, 0.0245 rad), so the change between two snapshots jitters by up to two steps around its true, constant rate. */
 const tr = turns.filter(t => Math.abs(t) < 0.5), trSpread = tr.length > 5 ? Math.max(...tr) - Math.min(...tr) : 9;
-ok('it moves at its speed on one gently curving course: ' + spd.toFixed(0) + ' units a second at 20 snapshots a second, heading changes per snapshot within ' + trSpread.toFixed(4) + ' rad of each other over ' + tr.length + ' samples (the wire\'s heading step is 0.0245)', Math.abs(spd - 120) < 15 && trSpread <= 2 * Math.PI / 256 * 2 + 1e-6);
+ok('it moves at its speed on one gently curving course: ' + spd.toFixed(0) + ' units a second by the room\'s clock (' + (spans.length ? (spanT / spans.length * 1000).toFixed(0) : '?') + ' ms a snapshot), heading changes per snapshot within ' + trSpread.toFixed(4) + ' rad of each other over ' + tr.length + ' samples (the wire\'s heading step is 0.0245)', Math.abs(spd - 120) < 15 && trSpread <= 2 * Math.PI / 256 * 2 + 1e-6);
 /* Set across the train at its appearance: the cut, the room's event with no cutter, the length down from 40. */
 const len0 = 40, tc = Date.now();
 for (let k = 0; k < 120 && cuts.length === 0; k++) await wait(250);
