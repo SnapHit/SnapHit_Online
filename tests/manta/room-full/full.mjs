@@ -112,7 +112,14 @@ if (MODE === 'back') {
   await q.waitForURL(/note=(full|slow)/, { timeout: 20000 }).catch(() => {});
   const tq = Date.now() - t1; await wait(1200);
   const s2 = await noteOf(q);
-  ok('a first load of X\'s link with the cap full goes solo with the full note, inside the 5 s', /note=full/.test(s2.url) && FULL_NOTE.test(s2.note) && tq - tLoad < 5000,
+  /* "Inside the 5 s" is the page's own: it starts its 5 s when the room
+     starts trying (play/index.html) and goes solo with note=slow when they
+     run out, so note=full is the proof. Until 4C this also asked for under
+     5 s by the test's clock from the load event, which counts the page's
+     modules and first frames too: 5.8 s once in 4C's first full suite
+     pass on a 2-core container. The wall time is still printed, with a
+     loose 15 s bar. */
+  ok('a first load of X\'s link with the cap full goes solo with the full note, inside the page\'s 5 s (not "could not be reached")', /note=full/.test(s2.url) && FULL_NOTE.test(s2.note) && tq - tLoad < 15000,
      s2.url + ' | "' + s2.note + '" ' + ((tq - tLoad) / 1000).toFixed(1) + ' s after load');
   await q.ctx.close();
 }

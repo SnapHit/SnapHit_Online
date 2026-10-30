@@ -152,6 +152,7 @@ times that, so on such a machine:
 - Screenshots of big pages take longer than Playwright's 30 s default: a
   2560x1440 desktop screenshot took 20.7 to 33.0 s, the 300-long train of
   `pictures.mjs` 42 s; those harnesses allow 150 s.
+- `room-full/full.mjs` (`MODE=back`) judges a first load by the page's own 5 s (note=full rather than note=slow; the page starts its 5 s when the room starts trying), not by the test's clock from the load event, which also counts the page's modules and first frames: 5.8 s once in 4C's first full pass.
 - `browser/def.mjs`'s zero-second step allows the renderer's rounding: under SwiftShader two draws of the same frame differed at 1, 2, 1 and 0 pixels by one level in four runs; the bar is 0.01% of the ocean and two levels, where a shader on the wall clock moves the whole ocean.
 - `browser/s1.mjs`'s "animating" check waits for two drawn frames as well as 700 ms between its two shots: at 1 to 2 frames a second two shots could catch the same frame (landscape, once, in 4C's first full pass).
 
