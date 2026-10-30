@@ -84,7 +84,10 @@ const r2 = await p.evaluate(async () => {
   { const r0 = R.me && R.me.runs; for (let k = 0; k < 60 && (R.me && R.me.runs) === r0; k++) await wait(50); }
   await wake();
   ev('pointerdown', 11, 206, 300); ev('pointerup', 11, 206, 300); await wait(80); ev('pointerdown', 11, 206, 300);
-  let seen = false; for (let k = 0; k < 40 && !seen; k++) { await wait(50); seen = !!(R.me && R.me.b); }
+  /* 4C: up to 5 s for the room to say so (2 s until then). At 300:100 on
+     a 2-core container, the page drawing 1 to 2 frames a second, the room
+     had not said so within 2 s once in nine runs. */
+  let seen = false; for (let k = 0; k < 100 && !seen; k++) { await wait(50); seen = !!(R.me && R.me.b); }
   out.burstInput = !!S.input.burst; out.burstRoom = seen; ev('pointerup', 11, 206, 300);
   return out;
 }).catch(e => ({ error: e.message }));
@@ -98,7 +101,11 @@ if (r.error) ok('ran', false, r.error); else {
   ok('scheme A steers: a finger beside you turns you that way and you move that way', r.want !== null && Math.abs(Math.sin(r.want) + r.side) < 0.3 && r.dx > 20, 'finger to the ' + (r.side > 0 ? 'right' : 'left') + ', want ' + (r.want && r.want.toFixed(2)) + ', moved ' + (r.dx || 0).toFixed(0) + ' units that way, try ' + r.steerTries);
   ok('scheme A bursts: double-tap and hold, and the room says you are bursting', r.burstInput && r.burstRoom, 'input ' + r.burstInput + ', room ' + r.burstRoom);
   ok('your train is drawn with no gap, including after a restart: leader to first follower within spacing ± 5', !!r.gaps && r.restarts >= 1 && r.gaps[0] >= r.spacing - 5 && r.gaps[1] <= r.spacing + 5, r.gaps ? r.gaps.map(v => v.toFixed(1)).join('..') + ' (spacing ' + r.spacing + ', length up to ' + r.len + ', ' + r.frames + ' frames across ' + r.restarts + ' restarts)' : 'no followers to measure');
-  ok("the page's own prediction: p95 correction under 2 units while steering, no snaps", c.length > 80 && p95 < 2 && snaps === 0,
+  /* 4C: at least 40 corrections to judge (80 until then). With the page
+     at 1 to 2 frames a second there are fewer: at 20:0 the three runs with
+     ?fx=off counted 94, 63 and 84 over the 20 s (150:50, 183 to 237;
+     300:100, 296 to 310). */
+  ok("the page's own prediction: p95 correction under 2 units while steering, no snaps", c.length >= 40 && p95 < 2 && snaps === 0,
      c.length + ' corrections over 20 s: median ' + (c[c.length >> 1] || 0).toFixed(3) + ', p95 ' + (p95 || 0).toFixed(3) + ', worst ' + (c[c.length - 1] || 0).toFixed(2) + '; ' + snaps + ' snaps; late inputs ' + r.late + ' of ' + r.seq + '; lead ' + r.lead + '; rtt ' + (r.rtt && r.rtt.toFixed(0)));
   ok('the signal mark shows your name, the room names you as a player, and the board marks your row as you when you are in its top ten', r.mark.includes(r.name) && r.players.includes(r.name) && (!r.onBoard || /\byou\b/.test(r.board)),
      'mark "' + r.mark + '"; players ' + JSON.stringify(r.players) + '; on the board ' + r.onBoard + ': ' + r.board.replace(/\s+/g, ' ').slice(0, 160));
