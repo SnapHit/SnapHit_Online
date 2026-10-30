@@ -99,12 +99,12 @@ async function frame (tag) {
   await p.screenshot({path});
   return PNG.sync.read(fs.readFileSync(path));
 }
-function diff (a,c){const A=a.data,C=c.data,W=a.width,H=a.height;let n=0,tot=0;
+function diff (a,c){const A=a.data,C=c.data,W=a.width,H=a.height;let n=0,tot=0,most=0;
   const y0=Math.round(H*0.14),y1=Math.round(H*0.55);
   for(let y=y0;y<y1;y++)for(let x=0;x<W;x++){const i=(y*W+x)*4;
     const d=Math.abs(A[i]-C[i])+Math.abs(A[i+1]-C[i+1])+Math.abs(A[i+2]-C[i+2]);
-    if(d){n++;tot+=d;}}
-  return {pct:100*n/(W*(y1-y0)), mean:tot/(W*(y1-y0))};}
+    if(d){n++;tot+=d;most=Math.max(most,Math.abs(A[i]-C[i]),Math.abs(A[i+1]-C[i+1]),Math.abs(A[i+2]-C[i+2]));}}
+  return {pct:100*n/(W*(y1-y0)), mean:tot/(W*(y1-y0)), n, most};}
 
 const t0=await p.evaluate(()=>window.__lab.step(0));
 const a=await frame('a');
@@ -113,8 +113,14 @@ const c=await frame('b');
 const still=diff(a,c);
 console.log('  stepping by zero seconds twice: '+still.pct.toFixed(3)+'% of ocean pixels differ, mean '+still.mean.toFixed(4)+
   '   (scene time '+t0.toFixed(4)+' then '+t0b.toFixed(4)+')');
-ok('one scene clock: a zero-second step renders the identical frame',
-   still.pct===0, still.pct.toFixed(4)+'% differ — a shader is still on the wall clock');
+/* 4C: identical to within the renderer's rounding. Under SwiftShader two
+   draws of the same frame can differ by one level in one channel at one or
+   two pixels (four runs on a 2-core container in 4C: 1, 2, 1 and 0
+   pixels, never more than one level); a shader on the wall clock
+   moves the whole ocean. So: at most 0.01% of the ocean's pixels, none
+   by more than two levels. */
+ok('one scene clock: a zero-second step renders the identical frame (to within one or two levels of rounding)',
+   still.pct<=0.01 && still.most<=2, still.n+' pixels ('+still.pct.toFixed(4)+'%) differ, by at most '+still.most+' levels; more would mean a shader still on the wall clock');
 const t1=await p.evaluate(()=>window.__lab.step(0.5));
 const d2=diff(a,await frame('c'));
 console.log('  stepping half a second: '+d2.pct.toFixed(1)+'% of ocean pixels differ, mean '+d2.mean.toFixed(2)+
