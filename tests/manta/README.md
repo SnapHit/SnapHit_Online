@@ -29,6 +29,7 @@ npm install --prefix "$MANTA_TOOLS" --no-save --no-package-lock \
 | puppeteer | 25.11.0 | downloads Chrome 153.0.8010.36; `browser/wgpu.mjs` drives it directly |
 | Chromium | 141.0.7390.37 (Playwright build 1194) | the browser every WebGL2 harness was measured on |
 | Chrome | 153.0.8010.36 (puppeteer's) | the WebGPU harnesses: `watch`, `wgpu`, `wgpupix`, `gpu` |
+| ffmpeg | 6.1.1-3ubuntu5, with libx264 0.164.3108 (Ubuntu's `ffmpeg` and `libx264-164` packages) | encodes the portal preview videos (`tools/manta/media.mjs`, 4C) |
 
 Two browsers, set by path:
 
@@ -259,6 +260,30 @@ re-running every test that imports one.
 - `lib/rooms.sh`: wrangler dev, delay proxies and clients, as above.
 - `lib/delayproxy.mjs`: the delay proxy. `LISTEN`, `UPSTREAM`, `RTT`, `JITTER` env.
 - `lib/tools.mjs`: resolves Playwright and pngjs from `MANTA_TOOLS`.
+
+## Portal media (4C)
+
+`tools/manta/media.mjs` renders the portal covers and preview videos from
+the game itself (design doc 10.7); it is a tool, not a harness, and its
+output goes to the directory it is given, never the repo:
+
+```sh
+node tools/manta/media.mjs covers  "$OUT"   # raywake-cover-1920x1080.png, -800x1200.png, -800x800.png (about 3 min)
+node tools/manta/media.mjs video16 "$OUT"   # raywake-preview-1920x1080.mp4
+node tools/manta/media.mjs video23 "$OUT"   # raywake-preview-1080x1620.mp4
+node tools/manta/media.mjs plan    "$OUT"   # the video's steering run without frames: lengths, deaths, crashes and cuts
+```
+
+It needs `MANTA_TOOLS` and `CHROME` (Chromium 141, as above) and, for the
+videos, ffmpeg. The videos are drawn frame by frame on a fixed clock (the
+lab page with `?paused=1`, stepped a thirtieth of a second per frame) and
+each frame read back from the canvas as PNG; ffmpeg then encodes the PNGs
+at 30 frames a second. The encoder used for 4C's videos: ffmpeg
+6.1.1-3ubuntu5 (Ubuntu 24.04) with libx264 0.164.3108, `-c:v libx264
+-preset slow -crf 20 -pix_fmt yuv420p -profile:v high -movflags +faststart
+-an` (silent, H.264 High, yuv420p, the index at the front). The game's own
+slow motion at a crash or a cut (`cut.update` in main.js) is in the video
+as a player sees it: nothing is sped up or slowed down by the tool.
 
 ## The deploy dry run
 
