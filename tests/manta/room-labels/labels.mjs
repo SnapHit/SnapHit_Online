@@ -2,7 +2,7 @@
    Chromium, WebGL2, against wrangler dev (PORT). */
 import { chromium } from '../lib/tools.mjs';
 const O = 'http://127.0.0.1:' + process.env.PORT, PART = process.env.PART, SHOTS = (process.env.SHOTS || process.env.MANTA_OUT || '/tmp') || '/tmp';
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 88000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 88000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + '[' + PART + '] ' + n + (x ? '  [' + x + ']' : '')); };
 const launch = () => chromium.launch({ executablePath: process.env.CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
 const off = [], non200 = [], errs = []; let revalidated = 0;
@@ -43,7 +43,7 @@ const SAMPLE = () => {
 const wait = ms => new Promise(r => setTimeout(r, ms));
 if (PART === 'solo') {
   const b = await launch(), p = await page(b, 412, 915);
-  await p.goto(O + '/lab/manta/?backend=webgl2&tier=low', { waitUntil: 'load' });
+  await p.goto(O + '/lab/manta/?backend=webgl2&tier=low&fx=off', { waitUntil: 'load' });
   await p.waitForFunction(() => window.__sim && window.__sim.you && window.__labLabels && window.__labLabels.frames > 3, null, { timeout: 30000 }).catch(() => {});
   const res = [];
   for (const zf of [1.5, 0.4]) {   // both ends of the camera's range (3L): pinned flat, then the ease settles
@@ -69,7 +69,7 @@ if (PART === 'solo') {
 }
 if (PART === 'cost') {
   const b = await launch(), p = await page(b, 412, 915);
-  await p.goto(O + '/lab/manta/?backend=webgl2&tier=low', { waitUntil: 'load' });
+  await p.goto(O + '/lab/manta/?backend=webgl2&tier=low&fx=off', { waitUntil: 'load' });
   await p.waitForFunction(() => window.__sim && window.__sim.you && window.__labLabels && window.__labLabels.frames > 3, null, { timeout: 30000 }).catch(() => {});
   /* The cost, with all eleven leaders on screen. */
   await p.evaluate(() => { const P = window.__lab.params.P; P.zoomNear = 0.25; P.zoomFar = 0.25; });
@@ -85,9 +85,9 @@ if (PART === 'room') {
   const code = (await (await fetch(O + '/lab/manta/rooms/new', { method: 'POST', headers: { Origin: O, 'X-Test-Address': 'lb' + Math.random() } })).json()).code;
   const b1 = await launch(), b2 = await launch();
   const a = await page(b1, 412, 915), q = await page(b2, 915, 412);
-  await a.goto(O + '/lab/manta/play/?room=' + code + '&backend=webgl2&tier=low', { waitUntil: 'load' });
+  await a.goto(O + '/lab/manta/play/?room=' + code + '&backend=webgl2&tier=low&fx=off', { waitUntil: 'load' });
   await a.waitForFunction(() => window.__lab && window.__lab.room && window.__lab.room.me && window.__lab.room.name, null, { timeout: 30000 }).catch(() => {});
-  await q.goto(O + '/lab/manta/play/?room=' + code + '&backend=webgl2&tier=low', { waitUntil: 'load' });
+  await q.goto(O + '/lab/manta/play/?room=' + code + '&backend=webgl2&tier=low&fx=off', { waitUntil: 'load' });
   await q.waitForFunction(() => window.__lab && window.__lab.room && window.__lab.room.me && window.__lab.room.name, null, { timeout: 30000 }).catch(() => {});
   const nameA = await a.evaluate(() => window.__sim.youName()), nameB = await q.evaluate(() => window.__sim.youName());
   /* Bring B's leader onto A's screen: steer both to the middle of the room is slow; instead read A's labels whenever B is in view, for 12 s. */
@@ -125,7 +125,7 @@ if (PART === 'crash') {
   /* The staged room: straight on, your leader runs into bot 2's body, crashes, and is put back. */
   const b = await launch(), p = await page(b, 412, 915);
   const name = Array.from({ length: 8 }, () => 'abcdefghjkmnpqrstuvwxyz23456789'[Math.floor(Math.random() * 31)]).join('');
-  await p.goto(O + '/lab/manta/play/?room=' + name + '&stage=cut&backend=webgl2&tier=low', { waitUntil: 'load' });
+  await p.goto(O + '/lab/manta/play/?room=' + name + '&stage=cut&backend=webgl2&tier=low&fx=off', { waitUntil: 'load' });
   await p.waitForFunction(() => window.__lab && window.__lab.room && window.__lab.room.me && window.__lab.room.name, null, { timeout: 30000 }).catch(() => {});
   const r = await p.evaluate(async sample => { const f = eval(sample), R = window.__lab.room, out = [];
     const t0 = performance.now(); while (performance.now() - t0 < 12000) { await new Promise(res => requestAnimationFrame(res)); const s = f(); out.push([s.youDead > 0, s.texts.some(t => t[0] === window.__sim.youName())]); }

@@ -5,7 +5,7 @@ const TREE = process.env.TREE || decodeURIComponent(new URL('../../..', import.m
 const { createMirror, decodeSnap, createWildStore } = await import(LIB + '/docs/lab/manta/roomcore.js');
 const BUILD = readFileSync(TREE + '/docs/lab/manta/panel.js', 'utf8').match(/export const BUILD = '([^']+)'/)[1];
 const B = 'http://127.0.0.1:' + PORT, SECS = +(process.env.SECS || 30);
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 300000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 300000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + '[' + LABEL + '] ' + n + (x ? '  [' + x + ']' : '')); };
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const q = (a, p) => { a = a.slice().sort((x, y) => x - y); return a.length ? a[Math.min(a.length - 1, Math.ceil(p * a.length) - 1)] : NaN; };

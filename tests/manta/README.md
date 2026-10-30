@@ -33,10 +33,14 @@ npm install --prefix "$MANTA_TOOLS" --no-save --no-package-lock \
 Two browsers, set by path:
 
 ```sh
-# Chromium 141: preinstalled in Claude's cloud containers at
+# Chromium 141: preinstalled in some of Claude's cloud containers at
 export CHROME=/opt/pw-browsers/chromium-1194/chrome-linux/chrome
-# elsewhere: PLAYWRIGHT_BROWSERS_PATH="$MANTA_TOOLS/pw" npx --prefix "$MANTA_TOOLS" playwright install chromium
-# and point CHROME at the chrome binary it reports.
+# elsewhere (4C: the 2-core container had build 1243, Chrome 153, there
+# instead), Playwright 1.56.0 downloads build 1194, Chromium 141.0.7390.37:
+#   PLAYWRIGHT_BROWSERS_PATH="$MANTA_TOOLS/pw" npx -y --prefix "$MANTA_TOOLS/pw156" playwright@1.56.0 install chromium
+#   export CHROME="$MANTA_TOOLS/pw/chromium-1194/chrome-linux/chrome"
+# (Playwright 1.62.1's own install fetches Chromium 151, not the build the
+# WebGL2 harnesses were measured on.)
 
 # Chrome 153, downloaded by the puppeteer install above:
 export CHROME153="$PUPPETEER_CACHE_DIR/chrome/linux-153.0.8010.36/chrome-linux64/chrome"
@@ -93,7 +97,71 @@ DIRECT=1 PART=a tests/manta/lib/rooms.sh room-feedback/feedback.mjs
 (one delay at a time), `DIRECT=1` (no proxy), `NAMES=1` (`--var
 TEST_NAMES:1`, which lets tests name and stage rooms), `VARS` (more wrangler
 args), `WRANGLER` (default under `MANTA_TOOLS`). Every other variable passes
-through to the client. It removes `.wrangler/` from the repo when it exits.
+through to the client. It removes `.wrangler/` from the repo when it exits,
+and (4C) prints `[label] client rc=N` for each client it ran. A room the
+registry did not make (a test's own name, like `w1` or `c-...`) exists only
+with `NAMES=1`: without it the page or client gets a 404 and, for a test
+that only counts, can pass having checked nothing.
+
+**The whole suite** (4C), one harness at a time, each under its own
+timeout of at most 10 minutes, with a summary line each (name, verdict,
+seconds) in `MANTA_OUT/suite/summary.txt`:
+
+```sh
+WATCHDOG_X=3 STEP_MS=6 tests/manta/lib/suite.sh             # everything, about 2 hours on 2 cores
+WATCHDOG_X=3 tests/manta/lib/suite.sh 'desktop|^gpu$'        # entries whose names match
+```
+
+A `serve.sh` or Node entry passes on exit code 0; a `rooms.sh` entry when
+every client exited 0 and no watchdog fired. The table at the top of
+`lib/suite.sh` is the suite: every harness below with the variables it
+needs, the room playtest in parts one delay at a time, the jittery-link
+check and the pink manta one delay at a time, desktop one size (or page) a
+run, h2 one tier a run, and the art pass one block a run. The portal entry
+builds the package first. Measurements without a verdict
+(`room-size/cost.mjs`, `browser/pictures.mjs`) are run on their own.
+
+### Slow containers (4C)
+
+Measured on a 2-core Intel Xeon container (2.8 GHz) under SwiftShader: the
+lab and feedback pages draw about 1 frame a second at 412x915 at the low
+tier (1.1 solo, 1.0 in a room; 1.3 on Chrome 153's WebGPU), 2.9 at 206x458,
+and 4.6 with `?fx=off`. The harnesses were written where a page drew several
+times that, so on such a machine:
+
+- `WATCHDOG_X` multiplies every harness's own watchdog and `serve.sh`'s
+  limit (default 1). Six browser harnesses took 96 to 128 s there against
+  watchdogs of 80 to 89 s (s1 126, schemes 96, def 116, rows 104, newocean
+  128, zoom 98); the suite ran with `WATCHDOG_X=3`.
+- The page-based room tests load the page with `?fx=off` (names, play mode,
+  bhits, fbcuts, feedback, labels, budget, switch, watch mode), as do
+  `hint.mjs` and `room-radar/radar.mjs`: they test the network, the game and
+  the interface, not the look, and at a frame a second a page handles its
+  room's messages only between second-long frames, so their real-time
+  windows measured the drawing instead (play mode counted 15 corrections in
+  20 s, bhits saw no contact frame, the hint's fade had not drawn a frame).
+  The look is measured by h2, pictures, artpass and the covers, which keep
+  it on.
+- `STEP_MS` sets `roomtest.mjs`'s bar for a room step (default 3): the same
+  code measured 4.16, 2.45 and 4.43 ms there, so 6.
+- `room-six/six.mjs` part 4 (the jittery link) runs alone, one delay at a
+  time (`PARTS=4 ALONE=1`): with the other delays alongside it it reached 3
+  units; alone, 1.18 to 1.29 at 150:50 and 300:100. Its bar is now 1.5
+  (`JITTER_UNITS`), see the file.
+- Screenshots of big pages take longer than Playwright's 30 s default: a
+  2560x1440 desktop screenshot took 20.7 to 33.0 s, the 300-long train of
+  `pictures.mjs` 42 s; those harnesses allow 150 s.
+
+**`__lab.step` and the post pipeline** (4C). Three renders the post
+pipeline's scene pass and bloom once per animation frame (its node frame),
+and `__lab.step` does not start one, so several steps in one `evaluate`
+redraw only the final quad over the scene pass of whichever animation frame
+came last; the shadow pass is drawn only by the loop. A harness that reads
+pixels after a burst of steps should yield an animation frame
+(`requestAnimationFrame`) before the last step, as `classic.mjs` and
+`pictures.mjs` (its `settle`) do, and read the canvas back in the same task
+as that step (`toDataURL`), not with a screenshot, which waits for the
+compositor.
 
 ## The harnesses
 
@@ -123,17 +191,17 @@ One line each: what it checks, how to run it, roughly how long.
 - `keys.mjs`: desktop controls (4A): from four headings, every arrow or WASD key and every pair turns the manta towards the matching screen direction at its normal rate; the mouse steers towards the pointer at the near and the far zoom; space and a held button burst; right-click opens no menu. Real key and mouse events, the loop paused and the simulation stepped by hand. About 40 s.
 - `hint.mjs`: the controls hint (4A): the mouse-and-keys line on a desktop, the hold-and-double-tap line on a phone, on the lab and feedback pages; visible, fading after five seconds on a real clock, gone at once on the first burst; `?hint=0` keeps it off. About 60 s.
 - `bzoom.mjs`: the burst zoom (4A): a burst widens the view 12% with a smoothstep ease out over 0.3 s and back over 0.6 s, the close-up camera untouched, the view the room is told widening with it, reduced motion halving it, the slider at 0 turning it off. About 30 s.
-- `desktop.mjs`: the desktop layout (4A) at 1366x768, 1920x1080 and 2560x1440 with a mouse: the feedback page (solo, and the first visit's name panel) and the lab page, nothing overlapping, text at least 13 px, the radar growing with the screen, no overflow; screenshots `desk-<w>x<h>[-name|-lab].png` in `MANTA_OUT`, to be looked at. `SIZE=1920x1080` picks one size and `PART=feed|name|lab` one page; 2560x1440 needs the parts, each about 40 s.
+- `desktop.mjs`: the desktop layout (4A) at 1366x768, 1920x1080 and 2560x1440 with a mouse: the feedback page (solo, and the first visit's name panel) and the lab page, nothing overlapping, text at least 13 px, the radar growing with the screen, no overflow; screenshots `desk-<w>x<h>[-name|-lab].png` in `MANTA_OUT`, to be looked at. `SIZE=1920x1080` picks one size and `PART=feed|name|lab` one page; 2560x1440 needs the parts, each about 40 s. (4C: it steps past the first swim's reveal, which hides the board for 1.2 s, before measuring, and sets aside python's 501 to the first visit's POST to the rooms, which the static server cannot answer.)
 - `pink.mjs`: the pink manta on screen (4A): drawn in its own slot where the simulation has it, dark from above and pink while it rolls, a pink dot on the radar, a pink light burst where it is caught, ten followers at once. About 40 s.
 - `shark.mjs`: the whale shark on screen (4A): off by default with its mesh hidden; turned on through params and set across your bow on a held page, its mesh sits at its body's centre at its heading, it stamps the plankton's light along its body, the radar outlines it in grey, and swimming across its path cuts your train with your leader swimming on. About 40 s.
-- `classic.mjs`: pixel-for-pixel comparisons at a fixed seed and step (4A): `?paused=1` holds the page at its first frame and `__lab.step` drives it. `MODE=self` loads one recipe twice and expects identical canvases; `MODE=ref REF=<png>` saves a reference; `MODE=cmp REF=<png> Q=<query>` compares. `STEPS` (45) sixtieths. About 40 s. (4C: built against `?look=classic`, which 4C removed; used then to show the look unchanged. Across browser launches the frame at seed 7 and 45 steps comes out in one of two states, on the old code and the new alike, so compare like with like: `self` is within one launch.)
+- `classic.mjs`: pixel-for-pixel comparisons at a fixed seed and step (4A): `?paused=1` holds the page at its first frame and `__lab.step` drives it. `MODE=self` loads one recipe twice and expects identical canvases; `MODE=ref REF=<png>` saves a reference; `MODE=cmp REF=<png> Q=<query>` compares. `STEPS` (45) sixtieths, the last after an animation frame and read back in the same task (4C, see "`__lab.step` and the post pipeline"). About 40 s. (4C: built against `?look=classic`, which 4C removed; used then to show the look unchanged. Across browser launches the frame at seed 7 and 45 steps comes out in one of two states, on the old code and the new alike, so compare like with like: `self` is within one launch.)
 - `pictures.mjs`: the pictures (4A stage 6): each scene a seed and a staged moment at 412x915 on WebGL2 at the high tier (first, firstswim, cut, crash, giant, radar, pinkflash, catch, sharkcut), one picture each (until 4C the first six were pairs against `?look=classic`, removed in 4C). Pictures, not checks: only that every page drew without console errors. `SCENES=` picks; output in `MANTA_OUT/pics`. On a 2-core container `giant`'s screenshot alone takes about 42 s (its limit is 150 s), so run the scenes in two or three goes under `HARNESS_TIMEOUT=500`. About 25 s a scene.
 - `artpass.mjs` (4A stage 3): the art pass's five changes against reduced flash and motion (until 4C also against `?look=classic`): the cut's kick and slash, the crash's vignette and count-up, the recruit's pop and deposit boost, the burst's hotter wake (from 4C against a cruise at the burst's speed) and the first swim's reveal. `CHANGE=1` to `5`, one block a run. About 40 s a block.
 - `spill.mjs` (4B): debris past the wild block is drawn as the block draws it: two identical loose mantas laid in the paused solo lab, one in a block slot and one past the block, sinking half way, glowing half way and plain, and the page's own drawing code dresses both; their size and tint must match. A room's 570 wild mantas leave the block room for 110 scattered at once, so a long crash in a room spills. About 20 s.
 - `camera.mjs`: the close-up camera's restart and cut, with no rival trains and a train swimming straight so nothing can crash it: a restart's first frame at the curve for its length, read on that frame; after a cut that halves the train, the view eases back in. About 30 s.
 - `raywake.mjs` (4C): the name is Raywake: both pages' `<title>` as served and once up, the first visit's name panel with "Raywake" over the box in portrait, landscape and a very short landscape (screenshots `raywake-name-<w>x<h>.png`), the privacy note, a private room's Share button only where there is a share sheet ("Swim with me in Raywake" and the link), and the name still kept under `manta:name`. About 40 s.
 - `watch.mjs`: the WebGPU error watch: the page's errors and error-watch rows. Run with `CHROME=$CHROME153`; `BACK=gl` for the WebGL2 side. About 30 s.
-- `gpu.mjs`: the WebGPU sweep 0 to 650 and a cut to 150, zero page errors. `TIER` env; run with `CHROME=$CHROME153`. About 60 s.
+- `gpu.mjs`: the WebGPU sweep 0 to 650 and a cut to 150, zero page errors. `TIER` env; run with `CHROME=$CHROME153`. About 60 s. (4C: the known headless artefact "Instance dropped in popErrorScope" is counted apart when it comes as a page error too, as it already was as a console line.)
 - `wgpu.mjs`: does headless WebGPU draw at all; puppeteer, so `CHROME` is optional. About 30 s.
 - `wgpupix.mjs`: can WebGPU pixels be read back headless. `CHROME=$CHROME153`. About 30 s.
 
@@ -141,28 +209,28 @@ One line each: what it checks, how to run it, roughly how long.
 
 - `room-base/roomtest.mjs`: an ocean room with Node clients, and a step's time inside workerd on the room's own ocean (from 4B: 21 trains, radius 2760, 570 wild; under 3 ms). `NAMES=1 DIRECT=1` (its rooms are test names: without `NAMES` four of its checks see no room at all, as they have since 3G's room limits). About 3 min.
 - `room-base/devcheck3b.mjs`: the static site and the rooms through wrangler dev: 404s, the origin rule, the edge echo and the "probe" room's echo (pings paced at one every 40 ms, under the rooms' 30 a second) and "who". `DIRECT=1`. About 40 s.
-- `room-base/watchmode.mjs`: watch mode in the page. `DIRECT=1`. About 60 s.
+- `room-base/watchmode.mjs`: watch mode in the page. `NAMES=1 DIRECT=1` (its room `w1` is a test name; until 4C the README said `DIRECT=1` alone, which gets a 404 since 3G). Pause holds what is drawn and Step moves it on, after a pause of any length up to a minute (4C fixed the Step: roomview.js now keeps the snapshots the held moment needs). About 60 s.
 - `room-play/playtest.mjs`: the play-mode bars (corrections, cuts, bytes, drops, restart) with the phone's own code. `NAMES=1`, `PARTS=corr,cut,bytes,drop,restart`, ideally `ALONE=1`. About 4 min per delay.
 - `room-play/playmode.mjs`: play mode in the page through a proxy. `NAMES=1`. About 90 s per delay.
-- `room-compact/compact.mjs`: compact snapshots through a proxy. About 90 s.
-- `room-six/six.mjs`: the review's six findings, each a test. `NAMES=1`. About 3 min.
+- `room-compact/compact.mjs`: compact snapshots through a proxy. `NAMES=1` (a test-named room; without it every check but the bytes one sees nothing). About 90 s.
+- `room-six/six.mjs`: the review's six findings, each a test. `NAMES=1`; `PARTS=1,2,3,5,6` and, alone, `PARTS=4 ALONE=1 DELAYS=...` for the jittery link (4C). About 3 min.
 - `room-limits/limits.mjs`: room limits, with test names OFF. `DIRECT=1 VARS="--var CODE_TTL_MS:4000"`. About 60 s.
 - `room-feedback/feedback.mjs`: the feedback page `/lab/manta/play/`. `DIRECT=1`, once with `PART=a` and once with `PART=b`; `OFF=1 DIRECT=1 VARS="--var ROOMS_OPEN:false"` for rooms switched off (4B: the plain off note). About 60 s each.
-- `room-feedback/fbcuts.mjs`: the feedback page's "cuts landed" in the staged room. `DIRECT=1`. About 60 s.
+- `room-feedback/fbcuts.mjs`: the feedback page's "cuts landed" in the staged room. `DIRECT=1`. About 60 s. (4C: it keeps a name on the phone, as since 3J a first visit watches under the name panel and is never seated.)
 - `room-pick/pick.mjs`: pickups through the proxy with the phone's own code. `NAMES=1`. About 90 s.
 - `room-labels/labels.mjs`: labels over leaders. `DIRECT=1`, `PART=solo|room|crash`. About 60 s each.
-- `room-names/names.mjs`: typed names. `DIRECT=1`, `PART=first|clean|change`. About 60 s each.
+- `room-names/names.mjs`: typed names. `DIRECT=1`, `PART=first|clean|change`. About 60 s each. (4C: `PART=change` times the pencil's name socket to socket, from B's WebSocket frame leaving to A's arriving, by the browsers' own frame timestamps; the page's own lag is reported beside it.)
 - `room-names/inplace.mjs`: the first visit plays in place. `DELAYS=20:0`. About 60 s.
 - `room-hits/lag.mjs`: the hit lag broken into its parts. `NAMES=1`. About 90 s.
 - `room-hits/hits.mjs`: your own hits at once. `NAMES=1`. About 90 s.
 - `room-hits/bhits.mjs`: the feedback page in the staged cut room. `DIRECT=1`, `MODE=crash|cut`. About 60 s each.
-- `room-bytes/bytes.mjs`: bytes per phone at the far zoom with a 500-long train. `NAMES=1`. About 90 s. With the burst zoom (4A) the widest view a phone reports is 12% wider: `VIEW_W=1077 VIEW_H=2395 NAMES=1 ...` checks the limits there.
-- `room-pink/pink.mjs`: the pink manta through a room (4A): the snapshot carries it from its appearance, cruising at it catches nothing, bursting at it catches it with the length up by exactly 10 once and the room's event naming the phone, one at a time, bytes within the bar. `NAMES=1 VARS="--var PINK_WAIT:4 --var PINK_STAY:40"`. About 60 s per delay.
+- `room-bytes/bytes.mjs`: bytes per phone at the far zoom with a 500-long train. `NAMES=1`. About 90 s. (Until 4C this line also asked for a run with `VIEW_W=1077 VIEW_H=2395`, the view widened by the burst zoom. No phone reports that view: since 4A the room is told the base view through a burst (follow.js `baseView`; `bzoom.mjs` checks it), because reporting the wider one measured over the 10 KB/s bar, which is what that run still shows, 12 to 13 KB/s before 4C and after. So it is not run.)
+- `room-pink/pink.mjs` (one delay at a time on 2 cores, `ALONE=1`): the pink manta through a room (4A): the snapshot carries it from its appearance, cruising at it catches nothing, bursting at it catches it with the length up by exactly 10 once and the room's event naming the phone, one at a time, bytes within the bar. `NAMES=1 VARS="--var PINK_WAIT:4 --var PINK_STAY:40"`. About 60 s per delay.
 - `room-shark/shark.mjs`: the whale shark through a room (4A): the snapshot carries it from its appearance (flag 64), it moves at its speed on one course whose heading changes between snapshots stay within the wire's one-byte step, the staged room's `?shark=cross` sets it across the seated 40-long train at its appearance and the train is cut there (this phone's length down, the room's cut event with no cutter), a leader driven into its body crashes with the room's crash event naming the phone, its own share of the wire (five bytes a snapshot) and the room's 95th percentile within the bar, the room's median reported. `NAMES=1 VARS="--var SHARK_ON:1 --var SHARK_EVERY:5"`. About 60 s per delay.
 - `room-radar/room.mjs`: the radar in a room through the proxy. `NAMES=1`. About 90 s.
 - `room-radar/page.mjs`: the radar on the feedback page, and (4B) that it maps the room's whole arena, radius 2760, onto its disc with every train inside it. `DIRECT=1`. About 60 s.
 - `room-overflow/overflow.mjs`: overflow rooms: 45 joiners land 20, 20 and 5 (4B: 20 seats a room); a leaver's seat goes to the next joiner; the feedback page and a first visit's Play swim in the fullest room with a seat; the cap holds; every room full, the feedback page goes solo with its note. `DIRECT=1 VARS="--var LIVE_CAP:4"` (the cap lowered so a few dozen phones reach it). About 60 s.
-- `portal/portal.mjs`: the portal package (`node tools/manta/package.mjs`), unzipped and served gzipped from another origin under `/game/`, directly and in a cross-origin iframe: first frame and play within 20 s on a 300 ms, 1.5 Mbit/s link; zero requests outside the package and no room connection; WebGPU, WebGL2, and the WebGL2 fallback in an iframe without WebGPU; portal mode (no room buttons, chip, corner press or name box; label "you"; the privacy note); nothing stored; no console errors or horizontal overflow, both orientations; three touch schemes. `ZIP=<the zip> CHROME=$CHROME153 node tests/manta/portal/portal.mjs`, no server needed; `NOGZIP=1` measures the load served uncompressed. About 70 s.
+- `portal/portal.mjs`: the portal package (`node tools/manta/package.mjs`), unzipped and served gzipped from another origin under `/game/`, directly and in a cross-origin iframe: first frame and play within 20 s on a 300 ms, 1.5 Mbit/s link; zero requests outside the package and no room connection; WebGPU, WebGL2, and the WebGL2 fallback in an iframe without WebGPU; portal mode (no room buttons, chip, corner press or name box; label "you"; the privacy note); nothing stored; no console errors or horizontal overflow, both orientations; three touch schemes. `ZIP=<the zip> CHROME=$CHROME153 node tests/manta/portal/portal.mjs`, no server needed; `NOGZIP=1` measures the load served uncompressed. About 70 s. (4C: a WebGPU device lost in the first frames now rebuilds on WebGL2, as a first draw that throws does; the direct load accepts that only with the page's note saying so.)
 - `room-rank/rank.mjs` (4C): your rank under the board. In Node with roomcore.js: a player's snapshot carries its rank (flag 128, one byte) first and whenever it changes, in the board's order, and a watcher gets none. Solo with 21 trains (`?bots=20`) outside the top ten: the line under the ten, set apart, with rank, name and length; on the board, no line. In the public room: in every snapshot that carries every train's length (the radar's five a second) the rank the room last told matches (a benched player's snapshots, which carry no record of its own, are not judged), and at every redraw of the board the line says that rank. `NAMES=1 DIRECT=1`; `PART=wire|solo|room`. Screenshots `rank-solo.png`, `rank-room.png`. About 70 s.
 - `room-radar/radar.mjs`: the radar in the solo lab: a static-server harness, so run it with `lib/serve.sh`. About 60 s.
 - `room-switch/switch.mjs` (4B): the switches Nathan changes in Cloudflare's dashboard. `MODE=off DIRECT=1 VARS="--var ROOMS_OPEN:false"`: every rooms request refused, the feedback page solo with the plain off note well inside 5 s (a returning player, a first visit, a private room's link), the lab page saying so and no longer trying. `MODE=on DIRECT=1`: `?fake=off` and `?fake=full` give the off and full notes while a phone going straight to lobby still plays, the live cap defaults to 3, wrangler.jsonc keeps dashboard variables and declares neither switch. `MODE=cap2 DIRECT=1 VARS="--var LIVE_CAP:2"`: the variable is read. Needs `CHROME`. About 60 s a mode.

@@ -1,7 +1,7 @@
 /* Brief 3B stage 4: the static site and the rooms through wrangler dev. */
 import { readFileSync } from 'node:fs'; import { createHash } from 'node:crypto'; import { request } from 'node:http';
 const PORT = +process.env.PORT, B = 'http://127.0.0.1:' + PORT, D = decodeURIComponent(new URL('../../../docs', import.meta.url).pathname), WSB = 'ws://127.0.0.1:' + PORT;
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 80000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 80000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x ? '  [' + x + ']' : '')); };
 const md5 = b => createHash('md5').update(b).digest('hex');
 const get = async (p, h = {}) => { const r = await fetch(B + p, { headers: h, redirect: 'manual' });

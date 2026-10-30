@@ -19,7 +19,7 @@ import { chromium } from '../lib/tools.mjs';
 import { snapFor, decodeSnap } from '../../../docs/lab/manta/roomcore.js';
 const PORT = +process.env.PORT, O = 'http://127.0.0.1:' + PORT, OUT = process.env.MANTA_OUT || '/tmp';
 const PART = process.env.PART || 'all', want = x => PART === 'all' || PART.split(',').includes(x);
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 200000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 200000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x ? '  [' + x + ']' : '')); };
 const wait = ms => new Promise(r => setTimeout(r, ms));
 

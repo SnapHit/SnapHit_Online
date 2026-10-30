@@ -9,7 +9,7 @@ const TREE = process.env.TREE || decodeURIComponent(new URL('../../..', import.m
 const core = await import(TREE + '/docs/lab/manta/roomcore.js');
 import { player } from './playclient.mjs';
 const PORT = +process.env.PORT, LABEL = process.env.LABEL || 'proxy ' + PORT, SECS = +(process.env.SECS || 40);
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 88000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 88000 * (+process.env.WATCHDOG_X || 1));
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const pct = (a, q) => { if (!a.length) return NaN; const s = a.slice().sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(q * s.length))]; };
 const room = process.env.ROOM || ('pk-' + Math.random().toString(36).slice(2, 7));

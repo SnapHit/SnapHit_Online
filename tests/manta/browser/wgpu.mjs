@@ -5,7 +5,7 @@ import { createRequire } from 'module';
 const require = createRequire((process.env.MANTA_TOOLS || '').replace(/\/?$/, '/'));
 const puppeteer = require('puppeteer');
 const O=('http://127.0.0.1:' + process.env.PORT);
-const die=setTimeout(()=>{console.log('WATCHDOG');process.exit(3);},80000);
+const die=setTimeout(()=>{console.log('WATCHDOG');process.exit(3);},80000 * (+process.env.WATCHDOG_X || 1));
 const exe=process.env.CHROME || await puppeteer.executablePath();
 console.log('  chrome: '+exe);
 const b=await puppeteer.launch({executablePath:exe, headless:true,

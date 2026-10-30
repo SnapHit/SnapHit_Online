@@ -30,7 +30,7 @@ const PORT = +process.env.PORT, O = 'http://127.0.0.1:' + PORT, R = '/lab/manta/
 const TREE = decodeURIComponent(new URL('../../..', import.meta.url).pathname).replace(/\/$/, '');
 const BUILD = readFileSync(TREE + '/docs/lab/manta/panel.js', 'utf8').match(/export const BUILD = '([^']+)'/)[1];
 const digits = String(BUILD).replace(/\D/g, '').slice(2);
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 240000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 240000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x ? '  [' + x + ']' : '')); };
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const budget = async (q = '') => (await fetch(O + R + 'budget' + q)).json();
@@ -99,13 +99,13 @@ async function page (named) {
 const signalOf = () => ([...document.querySelectorAll('div')].map(d => d.textContent).find(t => /^● /.test(t || '')) || '');
 {
   const p = await page(false);
-  await p.goto(O + '/lab/manta/?backend=webgl2&tier=low&room=lobby', { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));
+  await p.goto(O + '/lab/manta/?backend=webgl2&tier=low&fx=off&room=lobby', { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));
   await p.waitForFunction('/resting/.test((' + signalOf.toString() + ')())', null, { timeout: 15000 }).catch(() => {});
   const sig = await p.evaluate(signalOf).catch(() => ''), inits = await p.evaluate(() => !!(window.__lab && window.__lab.room && window.__lab.room.snaps)).catch(() => null);
   ok('at 80 percent the lab page watching is turned away and says rooms are resting', /rooms resting until/.test(sig) && inits === false, '"' + sig + '", snapshots ' + inits);
   await p.ctx.close();
   const q = await page(false);
-  await q.goto(O + '/lab/manta/play/?backend=webgl2&tier=low', { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));
+  await q.goto(O + '/lab/manta/play/?backend=webgl2&tier=low&fx=off', { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));
   await q.waitForURL(/note=rest/, { timeout: 20000 }).catch(() => {}); await wait(1200);
   const s = await q.evaluate(() => ({ url: location.search, note: (document.getElementById('note') || {}).textContent || '' })).catch(e => ({ url: 'ERR ' + e.message, note: '' }));
   ok('at 80 percent a first visit (the name panel watches) goes solo with the resting note', /solo=1/.test(s.url) && /note=rest/.test(s.url) && /^Rooms are resting until /.test(s.note), s.url + ' | "' + s.note + '"');
@@ -114,7 +114,7 @@ const signalOf = () => ([...document.querySelectorAll('div')].map(d => d.textCon
 await budget('?extra=0.5');
 {
   const p = await page(false);
-  await p.goto(O + '/lab/manta/?backend=webgl2&tier=low&room=lobby', { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));
+  await p.goto(O + '/lab/manta/?backend=webgl2&tier=low&fx=off&room=lobby', { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));
   const lineOf = () => { const dt = [...document.querySelectorAll('dt')].find(e => e.textContent === 'rooms today'); return dt ? dt.textContent + ': ' + dt.nextElementSibling.textContent : ''; };
   await p.waitForFunction('/requests \\d+%, time \\d+%/.test((' + lineOf.toString() + ')())', null, { timeout: 15000 }).catch(() => {});
   const line = await p.evaluate(lineOf).catch(() => '');
@@ -126,14 +126,14 @@ seatedA.end(); await wait(500);
 const noteOf = p => p.evaluate(() => ({ url: location.search, note: (document.getElementById('note') || {}).textContent || '', shown: !document.getElementById('noteRow').hidden })).catch(e => ({ url: 'ERR ' + e.message }));
 {
   const p = await page(true);
-  await p.goto(O + '/lab/manta/play/?backend=webgl2&tier=low&fake=80', { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));
+  await p.goto(O + '/lab/manta/play/?backend=webgl2&tier=low&fx=off&fake=80', { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));
   await p.waitForURL(/note=rest/, { timeout: 20000 }).catch(() => {}); await wait(1200);
   const s = await noteOf(p); await p.ctx.close();
   ok('?fake=80: the feedback page goes solo saying rooms rest until 11:00 am in Sydney (00:00 UTC)', /solo=1/.test(s.url) && /note=rest/.test(s.url) && s.shown && /^Rooms are resting until 11:00\s?am, so this is solo\.$/i.test(s.note), s.url + ' | "' + s.note + '"');
 }
 {
   const p = await page(true); let sawCard = false;
-  await p.goto(O + '/lab/manta/play/?backend=webgl2&tier=low&stage=cut&fake=95', { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));
+  await p.goto(O + '/lab/manta/play/?backend=webgl2&tier=low&fx=off&stage=cut&fake=95', { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));
   await p.waitForFunction(() => window.__lab && window.__lab.room && window.__lab.room.me, null, { timeout: 20000 }).catch(() => {});
   for (let i = 0; i < 80 && !/note=rest/.test(await p.evaluate(() => location.search).catch(() => 'note=rest')); i++) {
     if (await p.evaluate(() => { const e = document.getElementById('beat'); return !!e && !e.hidden && getComputedStyle(e).display !== 'none'; }).catch(() => false)) sawCard = true;

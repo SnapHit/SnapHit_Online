@@ -19,7 +19,8 @@ trap 'kill "$SRV" 2>/dev/null; wait "$SRV" 2>/dev/null; rm -rf -- "${W:?}"' EXIT
 up=0; for i in $(seq 1 20); do curl -sf -o /dev/null "http://127.0.0.1:$PORT/lab/manta/index.html" && { up=1; break; }; sleep 0.5; done
 [ $up = 1 ] || { echo "serve.sh: nothing serving on $PORT"; exit 8; }
 echo "serve.sh: $(basename "$SCRIPT") on port $PORT (server pid $SRV), output $MANTA_OUT"
-(cd "$W" && timeout ${HARNESS_TIMEOUT:-90} node "$SCRIPT" "$@")
+# WATCHDOG_X (4C) scales the harness's own watchdog and this limit together (README.md, "Slow containers").
+(cd "$W" && timeout $(( ${HARNESS_TIMEOUT:-90} * ${WATCHDOG_X:-1} )) node "$SCRIPT" "$@")
 RC=$?
 echo "rc=$RC"
 exit $RC

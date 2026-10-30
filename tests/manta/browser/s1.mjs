@@ -2,7 +2,7 @@ import { chromium } from '../lib/tools.mjs';
 const O=('http://127.0.0.1:' + process.env.PORT);
 const KNOWN=/Instance dropped in popErrorScope/;
 const isKnown=t=>KNOWN.test(String(t));
-const die=setTimeout(()=>{console.log('WATCHDOG');process.exit(3);},80000);
+const die=setTimeout(()=>{console.log('WATCHDOG');process.exit(3);},80000 * (+process.env.WATCHDOG_X || 1));
 let bad=0; const ok=(n,c,x='')=>{if(!c)bad++;console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  ['+x+']':''));};
 const AREA=329160;
 const b=await chromium.launch({executablePath:process.env.CHROME,
@@ -81,8 +81,10 @@ for (const [label,vp] of [['portrait 412x915',{width:412,height:915}],['landscap
     const a=m.geometry.attributes.position;
     return {count:m.count, verts:a.count, tris:a.count/3, inst:m.isInstancedMesh===true};});
   console.log('  mesh:',JSON.stringify(inst));
-  /* 1 leader + 300 follower slots + 9 rivals + 300 wild, all in one mesh. */
-  ok('one thousand and seventy-one instances of one geometry', inst.count === 1071&&inst.inst===true, JSON.stringify(inst));
+  /* 1 leader + 300 follower slots + 9 rivals + 300 wild, all in one mesh,
+     and from 4A stage 4 one more: the pink manta's own slot (mantas.js
+     PINK_SLOT, COUNT = PINK_SLOT + 1). This line said 1071 until 4C. */
+  ok('one thousand and seventy-two instances of one geometry (the pink manta\'s slot included)', inst.count === 1072&&inst.inst===true, JSON.stringify(inst));
   if (vp.width < vp.height) {
     /* Drive the whole cycle and measure the four gaps in the train. Nathan saw
        the tail stretch through every turn; the test is that gap 4 never runs

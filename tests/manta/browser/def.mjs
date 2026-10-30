@@ -4,7 +4,7 @@ import fs from 'fs'; import { PNG } from '../lib/tools.mjs';
 const O=('http://127.0.0.1:' + process.env.PORT);
 const KNOWN=/Instance dropped in popErrorScope/;
 const isKnown=t=>KNOWN.test(String(t));
-const die=setTimeout(()=>{console.log('WATCHDOG');process.exit(3);},85000);
+const die=setTimeout(()=>{console.log('WATCHDOG');process.exit(3);},85000 * (+process.env.WATCHDOG_X || 1));
 let bad=0; const ok=(n,c,x='')=>{if(!c)bad++;console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  ['+x+']':''));};
 const b=await chromium.launch({executablePath:process.env.CHROME,
   args:['--enable-unsafe-webgpu','--use-gl=angle','--use-angle=swiftshader','--ignore-gpu-blocklist']});

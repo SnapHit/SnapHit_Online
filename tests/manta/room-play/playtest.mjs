@@ -4,7 +4,7 @@
 import { player, perSecond, q } from './playclient.mjs';
 const PORT = +process.env.PORT, LABEL = process.env.LABEL || '', PARTS = (process.env.PARTS || 'corr,cut,bytes,drop,restart').split(',');
 const CUT_S = +(process.env.CUT_S || 150);
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 560000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 560000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + '[' + LABEL + '] ' + n + (x ? '  [' + x + ']' : '')); };
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const room = p => p + '-' + Math.random().toString(36).slice(2, 7);

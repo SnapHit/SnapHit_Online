@@ -3,7 +3,7 @@
    meets the correction bar while steering for 20 s. WebGL2, phone size. */
 import { chromium } from '../lib/tools.mjs';
 const O = 'http://127.0.0.1:' + process.env.PORT, LABEL = process.env.LABEL || 'proxy ' + process.env.PORT;
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 89000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 89000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + '[' + LABEL + '] ' + n + (x ? '  [' + x + ']' : '')); };
 const b = await chromium.launch({ executablePath: process.env.CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
 const p = await (await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true })).newPage();
@@ -17,7 +17,7 @@ p.on('response', r => { if (r.status() !== 200 && r.status() !== 101) non200.pus
 const roomName = process.env.USECODE ? (await (await fetch(O + '/lab/manta/rooms/new', { method: 'POST', headers: { Origin: O, 'X-Test-Address': 'pm' + Math.random() } })).json()).code : 'pm-' + Math.random().toString(36).slice(2, 7);
 console.log('room ' + roomName);
 const open = async extra => {
-  await p.goto(O + '/lab/manta/?room=' + roomName + extra + '&play=1&backend=webgl2&tier=low', { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));
+  await p.goto(O + '/lab/manta/?room=' + roomName + extra + '&play=1&backend=webgl2&tier=low&fx=off', { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));
   await p.waitForFunction(() => window.__labReady === true, null, { timeout: 25000 }).catch(() => console.log('(no ready)'));
   await p.waitForFunction(() => { const r = window.__lab && window.__lab.room; return r && r.connected && r.me && r.snaps > 30 && window.__sim.you.followers; }, null, { timeout: 25000 }).catch(() => console.log('(no room)'));
 };

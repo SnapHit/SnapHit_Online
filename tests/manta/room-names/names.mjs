@@ -3,7 +3,7 @@ import { chromium } from '../lib/tools.mjs';
 const TREE = process.env.TREE || decodeURIComponent(new URL('../../..', import.meta.url).pathname).replace(/\/$/, '');
 const { cleanName } = await import(TREE + '/docs/lab/manta/roomcore.js');
 const O = 'http://127.0.0.1:' + process.env.PORT, PART = process.env.PART, SHOTS = (process.env.SHOTS || process.env.MANTA_OUT || '/tmp') || '/tmp';
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 88000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 88000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + '[' + PART + '] ' + n + (x ? '  [' + x + ']' : '')); };
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const launch = () => chromium.launch({ executablePath: process.env.CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
@@ -18,7 +18,7 @@ async function page (b, w, h, init) {
   p.on('request', r => { const u = r.url(); if (!u.startsWith(O) && !u.startsWith(O.replace('http', 'ws')) && !/^(data|about|blob):/.test(u)) off.push(u); });
   return { p, ctx };
 }
-const Q = 'backend=webgl2&tier=low';
+const Q = 'backend=webgl2&tier=low&fx=off';
 const playing = p => p.waitForFunction(() => window.__lab && window.__lab.room && window.__lab.room.me && window.__lab.room.id >= 0, null, { timeout: 30000 }).then(() => true).catch(() => false);
 const inBox = (r, W, H) => r && r.x >= 0 && r.y >= 0 && r.x + r.width <= W && r.y + r.height <= H;
 if (PART === 'first') {
@@ -125,13 +125,27 @@ if (PART === 'change') {
   await q.fill('#signal ~ div input, body > div input[aria-label="Your name"]', 'bobby 🐟');
   await q.evaluate(() => { document.addEventListener('click', e => { if (e.target && e.target.textContent === 'Done') window.__sentAt = Date.now(); }, true); });
   await a.evaluate(id => { window.__seenAt = null; const iv = setInterval(() => { if (window.__sim.nameOf(id) === 'bobby 🐟') { window.__seenAt = Date.now(); clearInterval(iv); } }, 2); setTimeout(() => clearInterval(iv), 15000); }, idB);
+  /* 4C: timed socket to socket. The bar is the room's: the name leaves B's
+     socket and reaches A's within one snapshot. Until 4C it was timed on
+     A's main thread, which also counts however long A's frame of drawing
+     was holding the message (on a 2-core container under SwiftShader, 0.1
+     to 0.7 s a frame), so it measured the page's drawing, not the room.
+     Both browsers stamp their WebSocket frames with Chrome's monotonic
+     clock (CLOCK_MONOTONIC on Linux, one clock for the machine). The time
+     A's page took to show it is still reported. */
+  const ca = await a.context().newCDPSession(a), cq = await q.context().newCDPSession(q);
+  await ca.send('Network.enable'); await cq.send('Network.enable');
+  let wireSent = null, wireSeen = null;
+  cq.on('Network.webSocketFrameSent', e => { const d = e.response && e.response.payloadData || ''; if (wireSent === null && /"t":"nm"/.test(d) && d.includes('bobby')) wireSent = e.timestamp; });
+  ca.on('Network.webSocketFrameReceived', e => { const d = e.response && e.response.payloadData || ''; if (wireSeen === null && /"t":"names"/.test(d) && d.includes('bobby')) wireSeen = e.timestamp; });
   await q.click('text=Done');
   await a.waitForFunction(() => window.__seenAt !== null, null, { timeout: 10000 }).catch(() => {});
   const seenAt = await a.evaluate(() => window.__seenAt), sentAt = await q.evaluate(() => window.__sentAt || null);
-  const dt = seenAt && sentAt ? seenAt - sentAt : null;
+  const shown = seenAt && sentAt ? seenAt - sentAt : null;
+  const dt = wireSent !== null && wireSeen !== null ? Math.round((wireSeen - wireSent) * 1000) : null;
   /* 4B: on the board only when bob's train is in the top ten of 20. */
   const [boardA, listedB] = await a.evaluate(id => [document.getElementById('board').textContent, (window.__sim.trains || []).some(t => t.id === id)], idB);
-  ok('a name changed with the pencil reaches the other player within one snapshot (50 ms) of leaving the phone, on the board when bob is in the top ten', dt !== null && dt <= 60 && (!listedB || boardA.includes('bobby 🐟')), 'seen ' + (dt === null ? 'never' : dt + ' ms') + ' after the phone sent it (from "' + before + '"); bob ' + (listedB ? 'in' : 'not in') + ' the top ten, board ' + (boardA.includes('bobby 🐟') ? 'has it' : 'lacks it'));
+  ok('a name changed with the pencil reaches the other player within one snapshot (50 ms) of leaving the phone, on the board when bob is in the top ten', dt !== null && dt <= 60 && (!listedB || boardA.includes('bobby 🐟')), 'reached A\'s socket ' + (dt === null ? 'never' : dt + ' ms') + ' after it left B\'s; A\'s page showed it ' + (shown === null ? 'never' : shown + ' ms') + ' after the tap (from "' + before + '"); bob ' + (listedB ? 'in' : 'not in') + ' the top ten, board ' + (boardA.includes('bobby 🐟') ? 'has it' : 'lacks it'));
   /* The phone's own limit: past 5 s one change goes, and one straight after is refused. */
   await wait(5200);
   const rs = await q.evaluate(() => [window.__sim.setName('bob two'), window.__sim.setName('bob three')]);

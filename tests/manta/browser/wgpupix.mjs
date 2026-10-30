@@ -4,7 +4,7 @@
    the compositor last presented. */
 import { chromium } from '../lib/tools.mjs';
 const O=('http://127.0.0.1:' + process.env.PORT);
-const die=setTimeout(()=>{console.log('WATCHDOG');process.exit(3);},80000);
+const die=setTimeout(()=>{console.log('WATCHDOG');process.exit(3);},80000 * (+process.env.WATCHDOG_X || 1));
 const b=await chromium.launch({executablePath:process.env.CHROME,
   args:['--enable-unsafe-webgpu','--use-gl=angle','--use-angle=swiftshader','--ignore-gpu-blocklist']});
 for (const [q,label] of [['?tier=high','WebGPU'],['?tier=high&backend=webgl2','WebGL2']]) {

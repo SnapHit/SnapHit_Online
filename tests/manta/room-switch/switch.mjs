@@ -23,7 +23,7 @@ import { chromium } from '../lib/tools.mjs';
 const PORT = +process.env.PORT, O = 'http://127.0.0.1:' + PORT, MODE = process.env.MODE || 'on';
 const TREE = decodeURIComponent(new URL('../../..', import.meta.url).pathname).replace(/\/$/, '');
 const BUILD = readFileSync(TREE + '/docs/lab/manta/panel.js', 'utf8').match(/export const BUILD = '([^']+)'/)[1];
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 170000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 170000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + '[' + MODE + '] ' + n + (x ? '  [' + x + ']' : '')); };
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const R = '/lab/manta/rooms/';
@@ -57,7 +57,7 @@ async function page (named) {
 const noteOf = p => p.evaluate(() => ({ url: location.search, note: (document.getElementById('note') || {}).textContent || '', shown: !!document.getElementById('noteRow') && !document.getElementById('noteRow').hidden, solo: !!window.__sim && !(window.__lab && window.__lab.room) })).catch(e => ({ url: 'ERR ' + e.message }));
 async function soloNote (query, named, why) {
   const p = await page(named), t0 = Date.now();
-  await p.goto(O + '/lab/manta/play/?backend=webgl2&tier=low' + query, { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));
+  await p.goto(O + '/lab/manta/play/?backend=webgl2&tier=low&fx=off' + query, { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));
   const tLoad = Date.now() - t0;
   await p.waitForURL(new RegExp('note=' + why), { timeout: 20000 }).catch(() => {});
   const tSolo = Date.now() - t0;
@@ -80,7 +80,7 @@ if (MODE === 'off') {
   }
   { const p = await page(true); const asked = [];
     p.on('request', r => { if (r.url().includes(R)) asked.push(r.url().replace(O, '')); });
-    await p.goto(O + '/lab/manta/?backend=webgl2&tier=low&room=lobby&play=1', { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));
+    await p.goto(O + '/lab/manta/?backend=webgl2&tier=low&fx=off&room=lobby&play=1', { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));
     await wait(4000); const sig = await p.evaluate(() => (document.getElementById('signal') || {}).textContent || '').catch(() => '');
     const n4 = asked.length; await wait(8000); const n12 = asked.length;
     ok('the lab page says rooms are off and stops trying', /rooms are off/.test(sig) && n12 === n4 && n4 <= 4, '"' + sig.trim() + '"; rooms requests ' + n4 + ' by 4 s, ' + n12 + ' by 12 s: ' + asked.slice(0, 4).join(' '));

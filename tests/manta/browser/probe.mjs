@@ -1,7 +1,7 @@
 /* Does the page compile its shaders on WebGL2? One page, console errors out. */
 import { chromium } from '../lib/tools.mjs';
 const O=('http://127.0.0.1:' + process.env.PORT);
-const die=setTimeout(()=>{console.log('WATCHDOG');process.exit(3);},80000);
+const die=setTimeout(()=>{console.log('WATCHDOG');process.exit(3);},80000 * (+process.env.WATCHDOG_X || 1));
 const b=await chromium.launch({executablePath:process.env.CHROME,
   args:['--enable-unsafe-webgpu','--use-gl=angle','--use-angle=swiftshader','--ignore-gpu-blocklist']});
 const ctx=await b.newContext({viewport:{width:412,height:915},deviceScaleFactor:1});

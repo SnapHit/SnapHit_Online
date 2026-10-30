@@ -14,7 +14,7 @@ import { chromium, PNG } from '../lib/tools.mjs';
 import fs from 'node:fs';
 const O = 'http://127.0.0.1:' + process.env.PORT, OUT = process.env.MANTA_OUT || '/tmp';
 const MODE = process.env.MODE || 'self', REF = process.env.REF || OUT + '/classic-ref.png', Q = process.env.Q || '', STEPS = +(process.env.STEPS || 45);
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 85000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 85000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x ? '  [' + x + ']' : '')); };
 const b = await chromium.launch({ executablePath: process.env.CHROME,
   args: ['--enable-unsafe-webgpu', '--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
@@ -27,11 +27,23 @@ async function shot (q, name) {
   await p.goto(O + '/lab/manta/?seed=7&paused=1&hint=0&tier=low&backend=webgl2' + (q ? '&' + q : ''), { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));
   await p.waitForFunction(() => window.__labReady === true && window.__labDrew === true, null, { timeout: 25000, polling: 100 }).catch(() => console.log('(no ready)'));
   await p.waitForTimeout(500);
-  const r = await p.evaluate(n => { const L = window.__lab, S = window.__sim; const t0 = S.time; for (let i = 0; i < n; i++) L.step(1 / 60); const P0 = L.post(); return { t0, t: S.time, len: S.you.followers.length, seed: L.mantas && L.mantas.seed, zoom: L.zoom(), post: !!P0, lens: S.trains.map(t => t.followers.length).join(',') }; }, STEPS);
+  /* The last step after an animation frame (4C). Three renders the post
+     pipeline's scene pass and bloom once per animation frame (its node
+     frame), so a burst of steps in one task redraws only the final quad
+     over the scene pass of whichever frame came last: the frame read back
+     was the load's first or the first step's, by timing, and two loads of
+     one recipe differed in one run of two under load. */
+  const t0 = await p.evaluate(n => { const t = window.__sim.time; for (let i = 0; i < n - 1; i++) window.__lab.step(1 / 60); return t; }, STEPS);
+  await p.evaluate(() => new Promise(res => requestAnimationFrame(() => res())));
+  const r = await p.evaluate(t0 => { const L = window.__lab, S = window.__sim; L.step(1 / 60); const P0 = L.post(); return { t0, t: S.time, len: S.you.followers.length, seed: L.mantas && L.mantas.seed, zoom: L.zoom(), post: !!P0, lens: S.trains.map(t => t.followers.length).join(','), png: document.getElementById('gl').toDataURL('image/png') }; }, t0);
+  const png = r.png; delete r.png;
   console.log('  ' + name + ': ' + JSON.stringify(r));
   const path = OUT + '/' + name + '.png';
-  /* The canvas alone: the interface is DOM and is not what the look changes. */
-  const el = await p.$('#gl'); await el.screenshot({ path });
+  /* The canvas alone: the interface is DOM and is not what the look changes.
+     Read back in the same task as the last step's render (4C): a screenshot
+     waits for the compositor, which under load could still be showing the
+     step before, so the same recipe came out in one of two states. */
+  fs.writeFileSync(path, Buffer.from(png.slice(png.indexOf(',') + 1), 'base64'));
   await ctx.close();
   return { r, path };
 }

@@ -17,7 +17,7 @@ import { chromium } from '../lib/tools.mjs';
 const O = 'http://127.0.0.1:' + process.env.PORT, ROOM = 'idle1';
 const TREE = decodeURIComponent(new URL('../../..', import.meta.url).pathname).replace(/\/$/, '');
 const BUILD = readFileSync(TREE + '/docs/lab/manta/panel.js', 'utf8').match(/export const BUILD = '([^']+)'/)[1];
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 260000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 260000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x ? '  [' + x + ']' : '')); };
 const wait = ms => new Promise(r => setTimeout(r, ms));
 

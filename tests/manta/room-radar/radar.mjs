@@ -1,14 +1,14 @@
 /* 3L stage 2: THE RADAR in the solo lab (static server on 8959). */
 import { chromium } from '../lib/tools.mjs';
 const O = ('http://127.0.0.1:' + process.env.PORT), SP = (process.env.MANTA_OUT || '/tmp') || '/tmp';
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 88000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 88000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x ? '  [' + x + ']' : '')); };
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const b = await chromium.launch({ executablePath: process.env.CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
 const p = await (await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true })).newPage();
 p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
 const errs = []; p.on('pageerror', e => errs.push(e.message.slice(0, 160))); p.on('console', c => { if (c.type() === 'error' && !/popErrorScope/.test(c.text())) errs.push(c.text().slice(0, 160)); });
-await p.goto(O + '/lab/manta/?backend=webgl2&tier=low&seed=20261002', { waitUntil: 'load' });
+await p.goto(O + '/lab/manta/?backend=webgl2&tier=low&fx=off&seed=20261002', { waitUntil: 'load' });
 await p.waitForFunction(() => window.__labReady && window.__sim && window.__radar && window.__radar.last, null, { timeout: 30000 }).catch(() => {});
 await wait(7000);
 const r1 = await p.evaluate(() => {

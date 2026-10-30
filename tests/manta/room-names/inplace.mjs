@@ -3,7 +3,7 @@
    landscape with the keyboard up, board and stats apart (screenshot). */
 import { chromium } from '../lib/tools.mjs';
 const O = 'http://127.0.0.1:' + process.env.PORT, SHOTS = (process.env.SHOTS || process.env.MANTA_OUT || '/tmp') || '/tmp';
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 88000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 88000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + '[inplace] ' + n + (x ? '  [' + x + ']' : '')); };
 const b = await chromium.launch({ executablePath: process.env.CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
 const errs = [], times = [], seats = [], fps = [];

@@ -4,7 +4,7 @@
    WebGL2, headless. */
 import { chromium } from '../lib/tools.mjs';
 const O=('http://127.0.0.1:' + process.env.PORT);
-const die=setTimeout(()=>{console.log('WATCHDOG');process.exit(3);},88000);
+const die=setTimeout(()=>{console.log('WATCHDOG');process.exit(3);},88000 * (+process.env.WATCHDOG_X || 1));
 const b=await chromium.launch({executablePath:process.env.CHROME,
   args:['--use-gl=angle','--use-angle=swiftshader','--ignore-gpu-blocklist']});
 const p=await (await b.newContext({viewport:{width:412,height:915},deviceScaleFactor:1})).newPage();

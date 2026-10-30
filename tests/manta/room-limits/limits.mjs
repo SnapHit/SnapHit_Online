@@ -6,7 +6,7 @@ const { decodeSnap } = await import(TREE + '/docs/lab/manta/roomcore.js');
 const PORT = +process.env.PORT, B = 'http://127.0.0.1:' + PORT, WSB = 'ws://127.0.0.1:' + PORT, R = '/lab/manta/rooms/';
 const BUILD = readFileSync(TREE + '/docs/lab/manta/panel.js', 'utf8').match(/export const BUILD = '([^']+)'/)[1];
 const SHORT = BUILD.replace(/\D/g, '').slice(2);
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 85000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 85000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x ? '  [' + x + ']' : '')); };
 const wait = ms => new Promise(r => setTimeout(r, ms));
 let addr = 0;

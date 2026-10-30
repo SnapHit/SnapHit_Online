@@ -3,7 +3,7 @@ import fs from 'fs'; import { PNG } from '../lib/tools.mjs';
 const O=('http://127.0.0.1:' + process.env.PORT);
 const KNOWN=/Instance dropped in popErrorScope/;
 const isKnown=t=>KNOWN.test(String(t));
-const die=setTimeout(()=>{console.log('WATCHDOG');process.exit(3);},88000);
+const die=setTimeout(()=>{console.log('WATCHDOG');process.exit(3);},88000 * (+process.env.WATCHDOG_X || 1));
 const lum=(r,g,b)=>0.2126*r+0.7152*g+0.0722*b;
 let bad=0; const ok=(n,c,x='')=>{if(!c)bad++;console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  ['+x+']':''));};
 /* NON-FINITE VALUES ARE MISSING MEASUREMENTS, NOT DARK ONES. A snap where

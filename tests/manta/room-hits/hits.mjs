@@ -6,7 +6,7 @@ const TREE = process.env.TREE || decodeURIComponent(new URL('../../..', import.m
 const core = await import(TREE + '/docs/lab/manta/roomcore.js');
 import { player } from './playclient.mjs';
 const PORT = +process.env.PORT, MODE = process.env.MODE || 'cut', LABEL = (process.env.LABEL || PORT) + ' ' + MODE;
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 85000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 85000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + '[' + LABEL + '] ' + n + (x ? '  [' + x + ']' : '')); };
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const pct = (a, q) => { if (!a.length) return NaN; const s = a.slice().sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(q * s.length))]; };

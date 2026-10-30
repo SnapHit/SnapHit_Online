@@ -4,7 +4,7 @@
    per hit, not again when the room confirms it. MODE=crash | cut. */
 import { chromium } from '../lib/tools.mjs';
 const O = 'http://127.0.0.1:' + process.env.PORT, MODE = process.env.MODE || 'crash';
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 85000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 85000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + '[page ' + MODE + '] ' + n + (x ? '  [' + x + ']' : '')); };
 const b = await chromium.launch({ executablePath: process.env.CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
 const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true });
@@ -12,7 +12,7 @@ await ctx.addInitScript(() => { try { localStorage.setItem('manta:name', 'hit te
 const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
 const errs = []; p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
 const name = Array.from({ length: 8 }, () => 'abcdefghjkmnpqrstuvwxyz23456789'[Math.floor(Math.random() * 31)]).join('');
-await p.goto(O + '/lab/manta/play/?room=' + name + '&stage=cut&backend=webgl2&tier=low', { waitUntil: 'load' });
+await p.goto(O + '/lab/manta/play/?room=' + name + '&stage=cut&backend=webgl2&tier=low&fx=off', { waitUntil: 'load' });
 await p.waitForFunction(() => window.__lab && window.__lab.room && window.__lab.room.me && window.__lab.cut, null, { timeout: 30000 }).catch(() => {});
 const r = await p.evaluate(async mode => {
   const L = window.__lab, S = window.__sim, R = L.room, P = S.params, k = P.trainScale || 1, trig = [], contacts = [];

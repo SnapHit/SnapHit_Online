@@ -10,7 +10,7 @@
 import { player } from '../room-radar/playclient.mjs';
 import { chromium } from '../lib/tools.mjs';
 const PORT = +process.env.PORT, B = 'http://127.0.0.1:' + PORT;
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 400000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 400000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x ? '  [' + x + ']' : '')); };
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const ask = async (addr) => { const r = await fetch(B + '/lab/manta/rooms/public', { method: 'POST', headers: { Origin: B, 'X-Test-Address': addr || 'a' } }); return r.ok ? (await r.json()).room : 'HTTP ' + r.status + ' ' + (await r.text()); };

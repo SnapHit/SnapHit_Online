@@ -3,15 +3,20 @@
    bursts across bot 2 count, one for each cut that names you. */
 import { chromium } from '../lib/tools.mjs';
 const O = 'http://127.0.0.1:' + process.env.PORT;
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 88000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 88000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x ? '  [' + x + ']' : '')); };
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const b = await chromium.launch({ executablePath: process.env.CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
 async function run (extra, burst) {
-  const p = await (await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true })).newPage();
+  /* A saved name, so the page goes straight in as a player: since 3J a
+     first visit watches under the name panel, and this harness (3H) had no
+     name, so it watched and was never seated (you -1). */
+  const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true });
+  await ctx.addInitScript(() => { try { localStorage.setItem('manta:name', 'cut counter'); } catch (_) {} });
+  const p = await ctx.newPage();
   p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
   const name = Array.from({ length: 8 }, () => 'abcdefghjkmnpqrstuvwxyz23456789'[Math.floor(Math.random() * 31)]).join('');
-  await p.goto(O + '/lab/manta/play/?room=' + name + '&stage=cut' + extra + '&backend=webgl2&tier=low', { waitUntil: 'load' });
+  await p.goto(O + '/lab/manta/play/?room=' + name + '&stage=cut' + extra + '&backend=webgl2&tier=low&fx=off', { waitUntil: 'load' });
   const r = await p.evaluate(async burst => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     for (let k = 0; k < 150 && !(window.__lab && window.__lab.room && window.__lab.room.me && window.__sim.events); k++) await wait(100);

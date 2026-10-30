@@ -3,7 +3,7 @@
    ROOMS_OPEN:false"), which must go solo with the plain note. */
 import { chromium } from '../lib/tools.mjs';
 const O = 'http://127.0.0.1:' + process.env.PORT, SHOTS = (process.env.SHOTS || process.env.MANTA_OUT || '/tmp') || '/tmp';
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 88000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 88000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x ? '  [' + x + ']' : '')); };
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const b = await chromium.launch({ executablePath: process.env.CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
@@ -24,7 +24,7 @@ async function page (w, h, other) {
   p.on('response', r => { if (r.status() === 304) revalidated++; else if (r.status() !== 200 && r.status() !== 101) non200.push(r.status() + ' ' + r.url().replace(O, '')); });
   return p;
 }
-const Q = 'backend=webgl2&tier=low';
+const Q = 'backend=webgl2&tier=low&fx=off';
 const state = p => p.evaluate(() => {
   const R = window.__lab && window.__lab.room, S = window.__sim, vis = id => { const e = document.getElementById(id); if (!e) return null; const cs = getComputedStyle(e); return cs.display !== 'none' && cs.visibility !== 'hidden' && !e.hidden && e.getClientRects().length > 0; };
   return { url: location.search, room: R ? { connected: R.connected, play: R.play, me: !!R.me, id: R.id, name: (window.__sim && window.__sim.youName && window.__sim.youName()) || R.name, snaps: R.snaps, players: R.players || [] } : null, solo: !!S && !R,

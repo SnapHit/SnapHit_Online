@@ -6,7 +6,7 @@
    lib/rooms.sh passes VIEW_W and VIEW_H through to the client. */
 import { player } from './playclient.mjs';
 const PORT = +process.env.PORT, LABEL = process.env.LABEL || PORT;
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 85000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 85000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + '[' + LABEL + '] ' + n + (x ? '  [' + x + ']' : '')); };
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const c = player(PORT, 'bt-' + Math.random().toString(36).slice(2, 7) + '?mine=500', { stage: true, script: c => { const t = performance.now() / 1000; c.input.want = c.play.live ? c.you.head + 0.5 * Math.sin(t * 0.5) : null; c.input.burst = false; } });

@@ -12,7 +12,7 @@
               its render time (now - offset - delay) passes the snapshot. */
 import { player } from './playclient.mjs';
 const PORT = +process.env.PORT, MODE = process.env.MODE || 'cut', LABEL = (process.env.LABEL || PORT) + ' ' + MODE;
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 85000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 85000 * (+process.env.WATCHDOG_X || 1));
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const med = a => { if (!a.length) return NaN; const s = a.slice().sort((x, y) => x - y); return s[s.length >> 1]; };
 const room = 'lg-' + Math.random().toString(36).slice(2, 7);
