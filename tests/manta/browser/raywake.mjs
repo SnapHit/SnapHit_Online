@@ -17,7 +17,11 @@ const errs = [];
 async function open (url, vp, init) {
   const ctx = await b.newContext({ viewport: vp, deviceScaleFactor: 1, hasTouch: true, isMobile: vp.width < vp.height });
   if (init) await ctx.addInitScript(init);
-  const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  /* 4C: page loads allowed 30 s times WATCHDOG_X: with the play page still
+     open beside it, the lab page's load took over 30 s once in 4C's third
+     full suite pass on a 2-core container. */
+  const X = +process.env.WATCHDOG_X || 1;
+  const p = await ctx.newPage(); p.setDefaultTimeout(30000 * X); p.setDefaultNavigationTimeout(30000 * X);
   p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
   p.on('console', c => { if (c.type() === 'error' && !/WebSocket|Failed to load resource|popErrorScope/.test(c.text())) errs.push(c.text().slice(0, 160)); });
   await p.goto(O + url, { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));

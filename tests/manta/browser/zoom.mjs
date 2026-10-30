@@ -11,7 +11,8 @@ let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  P
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const b = await chromium.launch({ executablePath: process.env.CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
 const p = await (await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true })).newPage();
-p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+/* 4C: 30 s times WATCHDOG_X: a screenshot here waited over 30 s for fonts once on a 2-core container. */
+p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
 const errs = []; p.on('pageerror', e => errs.push(e.message.slice(0, 160))); p.on('console', c => { if (c.type() === 'error' && !/popErrorScope/.test(c.text())) errs.push(c.text().slice(0, 160)); });
 await p.goto(O + '/lab/manta/?backend=webgl2&tier=low&seed=20261002', { waitUntil: 'load' });
 await p.waitForFunction(() => window.__labReady && window.__sim && window.__lab.zoom && window.__lab.zoom() !== null, null, { timeout: 30000 }).catch(() => {});
