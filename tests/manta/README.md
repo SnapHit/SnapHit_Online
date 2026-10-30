@@ -285,6 +285,20 @@ at 30 frames a second. The encoder used for 4C's videos: ffmpeg
 slow motion at a crash or a cut (`cut.update` in main.js) is in the video
 as a player sees it: nothing is sped up or slowed down by the tool.
 
+What 4C's videos show, checked frame 0 against the cover's raw frame
+(byte-identical, both shapes) and every twentieth frame as contact
+sheets: you live all 18 s with about 40 behind you, a blue bot's train
+crosses close at 3 to 5 s, and from about 6 s the autopilot keeps to open
+water inside the reef, whose warm glow fills one side of the frame. The
+landscape video meets the orange train again near the end; the portrait
+one is a quieter swim along the reef. The two part ways after about 6 s
+although the seed, steps and keys are the same: the size of the page
+changes what the game does, most likely because its slow motion at a
+crash or a cut plays only when that is on screen (not chased further).
+For the same reason `plan`, which runs at 240x135, foretells the opening
+seconds but not the rest of a video (its run had the orange train
+crashing into your body at about 4.9 s; the videos do not show that).
+
 ## The deploy dry run
 
 Any commit touching `rooms/`, `wrangler.jsonc` or a simulation module the Worker
