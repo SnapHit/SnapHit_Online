@@ -1,7 +1,7 @@
 /* 3C stage 4: watch mode in the page, against wrangler dev. WebGL2, headless. */
 import { chromium } from '../lib/tools.mjs';
 const O = 'http://127.0.0.1:' + process.env.PORT;
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 88000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 88000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x ? '  [' + x + ']' : '')); };
 const b = await chromium.launch({ executablePath: process.env.CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
 const p = await (await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1 })).newPage();
@@ -20,7 +20,7 @@ p.on('response', r => { if (r.status() !== 200 && r.status() !== 101) non200.pus
   await new Promise(res => { ws.onopen = res; ws.onerror = res; });
   try { ws.send(JSON.stringify({ t: 'hi', b: String(build).replace(/\D/g, '').slice(2) })); ws.send(JSON.stringify({ t: 'view', x: 0, z: 0, w: 400, h: 900 })); } catch (_) {}
   await new Promise(res => setTimeout(res, 12000)); try { ws.close(); } catch (_) {} }
-await p.goto(O + '/lab/manta/?room=w1&backend=webgl2&tier=low', { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));
+await p.goto(O + '/lab/manta/?room=w1&backend=webgl2&tier=low&fx=off', { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));
 await p.waitForFunction(() => window.__labReady === true, null, { timeout: 25000 }).catch(() => console.log('(no ready)'));
 await p.waitForFunction(() => { const r = window.__lab && window.__lab.room; return r && r.connected && r.snaps > 60; }, null, { timeout: 25000 }).catch(() => console.log('(no room snapshots)'));
 await p.waitForTimeout(2500);

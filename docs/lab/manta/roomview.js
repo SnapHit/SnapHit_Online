@@ -368,7 +368,12 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     for (const q of m.tr) { const c = core.trains.get(q.id); q.run = c ? c.runs : -1; if (c && c.kind) kinds.set(q.id, c.kind); }
     snaps.push({ time: m.time, tr: new Map(m.tr.map(q => [q.id, q])) });
     wildView.take(m);
-    while (snaps.length > 2 && m.time - snaps[1].time > 1) snaps.shift();
+    /* A second of snapshots is kept, and (4C) while the debug block holds
+       the drawn moment, every one from that moment on, up to a minute's
+       worth: dropping them left a pause of over a second with nothing to
+       step through, so Step moved nothing (watch mode's Step, failing
+       since 3D whenever a pause lasted longer than the buffer). */
+    while (snaps.length > 2 && m.time - snaps[1].time > 1 && (held === null || snaps[1].time <= held || snaps.length > 1200)) snaps.shift();
     /* Events naming your leader are about your train, which is drawn now,
        not in the past: they are not held to the render delay (3K). One that
        confirms a hit already played plays nothing more; any other (the reef,
