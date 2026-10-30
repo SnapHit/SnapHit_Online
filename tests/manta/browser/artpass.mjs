@@ -16,7 +16,7 @@ const b = await chromium.launch({ executablePath: process.env.CHROME,
 const errs = [];
 async function open (q) {
   const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
-  const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  const p = await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   p.on('console', c => { if (c.type() === 'error') errs.push(c.text().slice(0, 140)); });
   p.on('pageerror', e => errs.push('pageerror: ' + e.message.slice(0, 140)));
   await p.goto(O + '/lab/manta/?seed=7&paused=1&hint=0&tier=low&backend=webgl2&train=30' + (q ? '&' + q : ''), { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));
@@ -158,7 +158,7 @@ if (WANT.includes('5')) {
   for (const look of ['new', 'reduced']) {
     /* Reduced motion as the system preference: the reveal reads it on the first frame, before any checkbox could be ticked. */
     const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true, reducedMotion: look === 'reduced' ? 'reduce' : 'no-preference' });
-    const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+    const p = await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
     p.on('pageerror', e => errs.push('pageerror: ' + e.message.slice(0, 140)));
     await p.goto(O + '/lab/manta/?seed=7&paused=1&hint=0&tier=low&backend=webgl2', { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));
     await p.waitForFunction(() => window.__labReady === true && window.__labDrew === true, null, { timeout: 25000, polling: 100 }).catch(() => console.log('(no ready)'));

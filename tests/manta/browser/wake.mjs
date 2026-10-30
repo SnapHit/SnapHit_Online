@@ -9,7 +9,7 @@ let bad=0; const ok=(n,c,x='')=>{if(!c)bad++;console.log((c?'  PASS  ':'  FAIL  
 const b=await chromium.launch({executablePath:process.env.CHROME,
   args:['--enable-unsafe-webgpu','--use-gl=angle','--use-angle=swiftshader','--ignore-gpu-blocklist']});
 const ctx=await b.newContext({viewport:{width:412,height:915},deviceScaleFactor:1});
-const p=await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+const p=await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
 const errs=[]; p.on('pageerror',e=>errs.push('pageerror: '+(e.stack||e.message).slice(0,250)));
 p.on('console',m=>{if(m.type()==='error')errs.push('console: '+m.text().slice(0,200));});
 await p.goto(O+'/lab/manta/?tier=high&backend=webgl2',{waitUntil:'load'}).catch(e=>console.log('  goto '+e.message));

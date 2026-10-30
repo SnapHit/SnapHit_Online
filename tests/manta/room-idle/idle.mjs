@@ -39,7 +39,7 @@ const SOCKS = () => { const W = window.WebSocket; window.__socks = [];
 const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1 });
 await ctx.addInitScript(SOCKS);
 const p = await ctx.newPage();
-p.setDefaultTimeout(30000);
+p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1));
 const errs = [], off = [], socks = [];
 p.on('console', c => { if (c.type() === 'error') errs.push(c.text().slice(0, 200)); });
 p.on('pageerror', e => errs.push('pageerror: ' + e.message.slice(0, 200)));

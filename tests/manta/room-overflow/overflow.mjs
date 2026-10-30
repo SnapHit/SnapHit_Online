@@ -49,7 +49,7 @@ const errs = [];
 async function page (named) {
   const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true });
   if (named) await ctx.addInitScript(() => { try { localStorage.setItem('manta:name', 'tester 99'); } catch (_) {} });
-  const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  const p = await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
   await p.goto(B + '/lab/manta/play/?backend=webgl2&tier=low', { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));
   return { ctx, p };

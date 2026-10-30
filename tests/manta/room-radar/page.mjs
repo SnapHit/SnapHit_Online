@@ -9,7 +9,7 @@ const off = [], errs = [];
 for (const [first, tag] of [[false, 'play'], [true, 'first']]) {
   const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true });
   if (!first) await ctx.addInitScript(() => { try { localStorage.setItem('manta:name', 'radar tester'); } catch (_) {} });
-  const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  const p = await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
   p.on('request', r => { const u = r.url(); if (!u.startsWith(O) && !u.startsWith(O.replace('http', 'ws')) && !/^(data|about|blob):/.test(u)) off.push(u); });
   await p.goto(O + '/lab/manta/play/?backend=webgl2&tier=low', { waitUntil: 'load' });

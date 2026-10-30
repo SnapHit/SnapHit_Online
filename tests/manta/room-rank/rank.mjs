@@ -52,7 +52,7 @@ async function page (url, name) {
   /* Every binary snapshot the room sends, kept for the check (the last 400). */
   await ctx.addInitScript(() => { const W = window.WebSocket; window.__bin = [];
     let sockets = 0; window.WebSocket = class extends W { constructor (...a) { super(...a); const id = ++sockets; this.addEventListener('message', e => { if (typeof e.data !== 'string') { window.__bin.push([id, e.data]); if (window.__bin.length > 400) window.__bin.shift(); } }); } }; });
-  const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  const p = await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
   p.on('console', c => { if (c.type() === 'error' && !/WebSocket connection to|Failed to load resource|popErrorScope/.test(c.text())) errs.push(c.text().slice(0, 160)); });
   await p.goto(O + url, { waitUntil: 'load' }).catch(e => errs.push('goto ' + e.message));

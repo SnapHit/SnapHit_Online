@@ -6,7 +6,7 @@ const die=setTimeout(()=>{console.log('WATCHDOG');process.exit(3);},85000 * (+pr
 const b=await chromium.launch({executablePath:process.env.CHROME,
   args:['--enable-unsafe-webgpu','--use-gl=angle','--use-angle=swiftshader','--ignore-gpu-blocklist']});
 const ctx=await b.newContext({viewport:{width:412,height:915},deviceScaleFactor:1,hasTouch:true,isMobile:true});
-const p=await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+const p=await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
 const errs=[];
 p.on('console',c=>{if(c.type()==='error')errs.push(c.text().slice(0,120));});
 p.on('pageerror',e=>errs.push('pageerror: '+e.message.slice(0,120)));

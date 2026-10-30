@@ -5,7 +5,7 @@ const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 8800
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const b = await chromium.launch({ executablePath: process.env.CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist', '--enable-unsafe-webgpu'] });
 const p = await (await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true })).newPage();
-p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
 /* "Instance dropped in popErrorScope" is Chrome 153's SwiftShader WebGPU
    teardown, a known headless artefact (README.md; s1, desktop and the
    portal test set it aside too): counted apart, as it was already for

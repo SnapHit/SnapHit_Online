@@ -21,7 +21,7 @@ const b = await chromium.launch({ executablePath: process.env.CHROME,
 const errs = [];
 async function shot (q, name) {
   const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
-  const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  const p = await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   p.on('console', c => { if (c.type() === 'error') errs.push(c.text().slice(0, 140)); });
   p.on('pageerror', e => errs.push('pageerror: ' + e.message.slice(0, 140)));
   await p.goto(O + '/lab/manta/?seed=7&paused=1&hint=0&tier=low&backend=webgl2' + (q ? '&' + q : ''), { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));
@@ -52,7 +52,7 @@ async function shot (q, name) {
    it, with the simulation identical, so the measured loads are never the
    first. */
 { const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
-  const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  const p = await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   await p.goto(O + '/lab/manta/?seed=7&paused=1&hint=0&tier=low&backend=webgl2', { waitUntil: 'load' }).catch(() => {});
   await p.waitForFunction(() => window.__labReady === true && window.__labDrew === true, null, { timeout: 25000, polling: 100 }).catch(() => {});
   await p.evaluate(() => { for (let i = 0; i < 5; i++) window.__lab.step(1 / 60); }).catch(() => {});

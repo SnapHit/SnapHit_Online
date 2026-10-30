@@ -31,7 +31,7 @@ for (const [W, H] of SIZES) {
   /* A fresh page for each check: the first visit's page redirects itself
      to solo after 5 s, which would interrupt a later navigation. */
   /* 4C: a 2560x1440 SwiftShader screenshot took 20.7 to 33.0 s over two runs on a 2-core container (the 30 s limit failed there before 4C too). */
-  const page = async () => { const p = await ctx.newPage(); p.setDefaultTimeout(150000); p.setDefaultNavigationTimeout(30000);
+  const page = async () => { const p = await ctx.newPage(); p.setDefaultTimeout(150000); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
     p.on('console', c => { if (c.type() === 'error') errs.push(W + ': ' + c.text().slice(0, 140)); });
     p.on('pageerror', e => errs.push(W + ' pageerror: ' + e.message.slice(0, 140))); return p; };
   let p = await page();

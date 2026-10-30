@@ -48,7 +48,7 @@ async function page (named) {
   await ctx.addInitScript(() => { const W = window.WebSocket; window.__socks = [];
     window.WebSocket = function (...a) { const s = new W(...a); window.__socks.push(s); return s; };
     window.WebSocket.prototype = W.prototype; Object.assign(window.WebSocket, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 }); });
-  const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  const p = await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
   p.on('console', c => { if (c.type() === 'error' && !/WebSocket connection to|Failed to load resource/.test(c.text())) errs.push(c.text().slice(0, 160)); });
   p.on('request', r => { const u = r.url(); if (!u.startsWith(O) && !u.startsWith(O.replace('http', 'ws')) && !/^(data|about|blob):/.test(u)) off.push(u); });

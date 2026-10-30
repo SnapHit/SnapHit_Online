@@ -7,7 +7,7 @@ const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 8900
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + '[' + LABEL + '] ' + n + (x ? '  [' + x + ']' : '')); };
 const b = await chromium.launch({ executablePath: process.env.CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
 const p = await (await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true })).newPage();
-p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
 const errs = [], off = [], non200 = [];
 p.on('console', c => { if (c.type() === 'error') errs.push(c.text().slice(0, 200)); });
 p.on('pageerror', e => errs.push('pageerror: ' + e.message.slice(0, 200)));

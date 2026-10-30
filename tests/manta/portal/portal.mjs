@@ -68,7 +68,7 @@ async function open (url, { vw = 412, vh = 915, throttle = false, noGpu = false 
   const ctx = await b.newContext({ viewport: { width: vw, height: vh }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
   /* WebGPU unavailable, as some portal frames or phones have it: no navigator.gpu in any frame. */
   if (noGpu) await ctx.addInitScript(() => { try { Object.defineProperty(Navigator.prototype, 'gpu', { get: () => undefined, configurable: true }); } catch (_) {} });
-  const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  const p = await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   const reqs = [], errs = [], known = [];
   ctx.on('request', r => reqs.push(r.url()));
   p.on('console', c => { if (c.type() === 'error') (KNOWN.test(c.text()) ? known : errs).push(c.text().slice(0, 160)); });

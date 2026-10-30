@@ -88,7 +88,7 @@ const errs = [];
 async function page (named) {
   const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true, locale: 'en-AU', timezoneId: 'Australia/Sydney' });
   if (named) await ctx.addInitScript(() => { try { localStorage.setItem('manta:name', 'budget tester'); } catch (_) {} });
-  const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  const p = await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
   p.ctx = ctx; return p;
 }

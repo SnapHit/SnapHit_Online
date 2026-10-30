@@ -47,7 +47,7 @@ const errs = [], off = [];
 async function page (named) {
   const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true });
   if (named) await ctx.addInitScript(() => { try { localStorage.setItem('manta:name', 'switch tester'); } catch (_) {} });
-  const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  const p = await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
   /* A refused socket is the browser's own console line, not the page's error. */
   p.on('console', c => { if (c.type() === 'error' && !/WebSocket connection to|Failed to load resource/.test(c.text())) errs.push(c.text().slice(0, 160)); });

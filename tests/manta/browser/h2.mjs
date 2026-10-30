@@ -86,7 +86,7 @@ function analyse(path,view,M,cam={x:0,z:0}){
 
 async function sample(q,label,snaps){
   const ctx=await b.newContext({viewport:{width:412,height:915},deviceScaleFactor:2});
-  const p=await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  const p=await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   const errs=[],off=[],bad4=[];
   p.on('console',c=>{if(c.type()==='error')errs.push(c.text().slice(0,250));});
   p.on('pageerror',e=>errs.push('pageerror: '+(e.stack||e.message).slice(0,350)));

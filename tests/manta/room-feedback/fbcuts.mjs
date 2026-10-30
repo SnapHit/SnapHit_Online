@@ -14,7 +14,7 @@ async function run (extra, burst) {
   const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true });
   await ctx.addInitScript(() => { try { localStorage.setItem('manta:name', 'cut counter'); } catch (_) {} });
   const p = await ctx.newPage();
-  p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   const name = Array.from({ length: 8 }, () => 'abcdefghjkmnpqrstuvwxyz23456789'[Math.floor(Math.random() * 31)]).join('');
   await p.goto(O + '/lab/manta/play/?room=' + name + '&stage=cut' + extra + '&backend=webgl2&tier=low&fx=off', { waitUntil: 'load' });
   const r = await p.evaluate(async burst => {

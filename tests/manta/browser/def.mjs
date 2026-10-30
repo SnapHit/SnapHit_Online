@@ -10,7 +10,7 @@ const b=await chromium.launch({executablePath:process.env.CHROME,
   args:['--enable-unsafe-webgpu','--use-gl=angle','--use-angle=swiftshader','--ignore-gpu-blocklist']});
 const ctx=await b.newContext({viewport:{width:412,height:915},deviceScaleFactor:1,
   permissions:['clipboard-read','clipboard-write']});
-const p=await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+const p=await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
 const errs=[],off=[],bad4=[];
 p.on('console',c=>{if(c.type()==='error')errs.push(c.text().slice(0,200));});
 p.on('pageerror',e=>errs.push('pageerror: '+(e.stack||e.message).slice(0,300)));
@@ -83,7 +83,7 @@ const copied=await p.evaluate(async()=>{try{return await navigator.clipboard.rea
 }
 
 /* --- ?paused=1 (4A): the loop starts paused, so a pixel comparison can step from the first frame --- */
-{ const q=await ctx.newPage(); q.setDefaultTimeout(30000); q.setDefaultNavigationTimeout(30000);
+{ const q=await ctx.newPage(); q.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); q.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   await q.goto(O+'/lab/manta/?tier=low&backend=webgl2&paused=1&hint=0',{waitUntil:'load'}).catch(()=>{});
   await q.waitForFunction(()=>window.__labReady===true,null,{timeout:25000,polling:100}).catch(()=>{});
   await q.waitForTimeout(1500);

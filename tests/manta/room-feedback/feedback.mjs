@@ -17,7 +17,7 @@ async function page (w, h, other) {
   /* 3J: a returning player (a saved name), so the page goes straight in; the first visit's name panel has its own tests. */
   await ctx.addInitScript(() => { try { if (!localStorage.getItem('manta:name')) localStorage.setItem('manta:name', 'tester ' + Math.floor(Math.random() * 90 + 10)); } catch (_) {} });
   const p = await ctx.newPage();
-  p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   p.on('console', c => { if (c.type() !== 'error') return; if (/rooms\/ocean\/zzzzzzzz' failed/.test(c.text())) wsRefused++; else errs.push(c.text().slice(0, 200)); });
   p.on('pageerror', e => errs.push('pageerror: ' + e.message.slice(0, 200)));
   p.on('request', r => { const u = r.url(); if (!u.startsWith(O) && !u.startsWith(O.replace('http', 'ws')) && !/^(data|about|blob):/.test(u)) off.push(u); });

@@ -21,8 +21,15 @@ await wait(500);
 const state = () => p.evaluate(() => { const L = window.__lab, S = window.__sim; return { zoom: L.zoom(), len: S.you.followers.length, ppu: L.view.pxPerUnit, lmHalf: L.lm ? L.lm.uHalf.value : null, lmSize: L.lm ? L.lm.size : null, lmSteps: L.lm ? L.lm.resteps : null, shHalf: L.shadows ? L.shadows.uHalf.value : null, shSize: L.shadows ? L.shadows.size : null, dead: S.you.dead, runs: S.you.runs }; });
 const curve = (len, P) => Math.max(P.zoomFar, P.zoomNear / Math.sqrt(1 + len / P.zoomHalf));
 const P = await p.evaluate(() => ({ zoomNear: window.__lab.params.P.zoomNear, zoomFar: window.__lab.params.P.zoomFar, zoomHalf: window.__lab.params.P.zoomHalf, zoomEase: window.__lab.params.P.zoomEase }));
-/* Per-frame change through everything below: 2% per 1/60 s of frame time. */
-await p.evaluate(() => { window.__zl = []; let last = null, lt = performance.now(); const f = () => { const z = window.__lab.zoom(), t = performance.now(); if (last !== null && z !== null) window.__zl.push([+(z / last).toFixed(5), +(t - lt).toFixed(1), window.__sim.you.followers.length, window.__sim.you.dead > 0 ? 1 : 0, window.__sim.you.runs, +z.toFixed(4)]); last = z; lt = t; requestAnimationFrame(f); }; requestAnimationFrame(f); });
+/* Per-frame change through everything below: 2% per 1/60 s of frame time.
+   4C: only frames with no driven step in them. A driven burst (__drive, the
+   death beat's steps) runs inside one evaluate, between two animation
+   frames, so the real-frame log saw all its steps' change as one frame of
+   however long the burst took: 7.17% per 1/60 s on a 270.9 ms frame, the
+   death beat's 100 steps, three times in 4C on a 2-core container. The driven
+   steps are judged step by step instead (below). */
+await p.evaluate(() => { const L0 = window.__lab, step0 = L0.step; window.__stepsN = 0; L0.step = (...a) => { window.__stepsN++; return step0(...a); };
+  window.__zl = []; let last = null, lt = performance.now(), lastN = 0; const f = () => { const z = window.__lab.zoom(), t = performance.now(), sn = window.__stepsN, quiet = sn === lastN; lastN = sn; if (last !== null && z !== null && quiet) window.__zl.push([+(z / last).toFixed(5), +(t - lt).toFixed(1), window.__sim.you.followers.length, window.__sim.you.dead > 0 ? 1 : 0, window.__sim.you.runs, +z.toFixed(4)]); last = z; lt = t; requestAnimationFrame(f); }; requestAnimationFrame(f); });
 /* The scene clock, driven: quarter-second steps (the ease caps its step at 0.25 s), each checked against 2% per 1/60 s. A step that sits exactly on the cap (lay(0) from 650 does) reads 30.0000000000001% some runs, so the comparison carries 1e-9 (4A). */
 await p.evaluate(() => { window.__drive = secs => { const L = window.__lab, S = window.__sim; let worst = 0; for (let i = 0; i < secs * 4; i++) { S.input.want = S.you.head + 1.0; const z0 = L.zoom(), r0 = S.you.runs; L.step(0.25); const z1 = L.zoom(); if (z0 && z1 && S.you.runs === r0) worst = Math.max(worst, Math.abs(z1 / z0 - 1) / (0.02 * 15)); } window.__driveWorst = Math.max(window.__driveWorst || 0, worst); return L.zoom(); }; });
 const drive = secs => p.evaluate(s => window.__drive(s), secs);
@@ -73,15 +80,17 @@ await drive(4);
 const sCut = await state();
 /* Retired (3O): browser/camera.mjs proves this with a train nothing can crash. */ (() => {})('after a cut from 300 to 150 the view comes back in, eased: nearer than before, towards the curve', sCut.len <= 151 && sCut.zoom > zBefore && sCut.zoom <= curve(150, P) * 1.02, 'length ' + sCut.len + ', zoom ' + zBefore.toFixed(3) + ' -> ' + sCut.zoom.toFixed(3) + ' (curve ' + curve(150, P).toFixed(3) + ')');
 /* The restart, on the injectable clock: the death beat stepped through at 1/60 s a step, not waited for on wall time. */
-await p.evaluate(() => { window.__sim.you.dead = 1.5; for (let i = 0; i < 100; i++) window.__lab.step(1 / 60); });
+await p.evaluate(() => { const L = window.__lab, S = window.__sim; S.you.dead = 1.5; let worst = 0;
+  for (let i = 0; i < 100; i++) { const z0 = L.zoom(), r0 = S.you.runs; L.step(1 / 60); const z1 = L.zoom(); if (z0 && z1 && S.you.runs === r0) worst = Math.max(worst, Math.abs(z1 / z0 - 1) / 0.02); }
+  window.__deathWorst = worst; });
 await p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))); await wait(300);
-const log = await p.evaluate(() => window.__zl), driveWorst = await p.evaluate(() => window.__driveWorst || 0);
+const log = await p.evaluate(() => window.__zl), driveWorst = await p.evaluate(() => window.__driveWorst || 0), deathWorst = await p.evaluate(() => window.__deathWorst || 0);
 let worst = 0, worstDt = 0, over = 0, n = 0, restartZoom = null, restartLen = null, restartAbs = null;
 for (let i = 1; i < log.length; i++) { const [r, dt, len, dead, runs, z] = log[i];
   if (runs !== log[i - 1][4]) { restartZoom = r; restartLen = len; restartAbs = z; continue; }   // the restart's own frame is a cut, by design
   const cap = 0.02 * Math.max(1, dt / (1000 / 60)); n++; const ch = Math.abs(r - 1); if (ch / cap > worst) { worst = ch / cap; worstDt = dt; } if (ch > cap + 1e-6) over++; }
 const sEnd = await state(); const afterRestart = sEnd.zoom;
-ok('the zoom never changes by more than 2% per 1/60 s of frame time, through growth, the cut and the death beat (' + n + ' real frames and the driven quarter-second steps)', n > 10 && over === 0 && driveWorst <= 1 + 1e-9, 'worst ' + (worst * 2).toFixed(2) + '% per 1/60 s on a ' + worstDt + ' ms frame; driven steps at most ' + (driveWorst * 30).toFixed(1) + '% per 0.25 s (cap 30%); frames over the cap: ' + over);
+ok('the zoom never changes by more than 2% per 1/60 s of frame time, through growth, the cut and the death beat (' + n + ' real frames, the driven quarter-second steps and the death beat\'s sixtieths)', n > 10 && over === 0 && driveWorst <= 1 + 1e-9 && deathWorst <= 1 + 1e-9, 'worst ' + (worst * 2).toFixed(2) + '% per 1/60 s on a ' + worstDt + ' ms frame; driven steps at most ' + (driveWorst * 30).toFixed(1) + '% per 0.25 s (cap 30%); the death beat at most ' + (deathWorst * 2).toFixed(2) + '% a sixtieth; frames over the cap: ' + over);
 /* Retired (3O): browser/camera.mjs proves this with a train nothing can crash. */ (() => {})('a restart (clock driven past the death beat) starts close in: on its first frame the zoom is the curve for the new train\'s length, no easing across the cut', sEnd.runs > 0 && restartAbs !== null && Math.abs(restartAbs - curve(restartLen, P)) <= 0.01 * curve(restartLen, P), 'runs ' + sEnd.runs + ', first frame zoom ' + restartAbs + ' at length ' + restartLen + ' (curve ' + (restartLen !== null ? curve(restartLen, P).toFixed(3) : '?') + '), a ' + (restartZoom ? ((restartZoom - 1) * 100).toFixed(0) : '?') + '% step from the frame before; later ' + afterRestart.toFixed(3) + (restartZoom ? ', the restart frame itself stepped ' + ((restartZoom - 1) * 100).toFixed(0) + '%' : ''));
 /* The light memory and the shadow target across the range. */
 const near = ends[0], far = ends[650];

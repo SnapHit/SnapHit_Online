@@ -9,7 +9,7 @@ const b=await chromium.launch({executablePath:process.env.CHROME,
   args:['--enable-unsafe-webgpu','--use-gl=angle','--use-angle=swiftshader','--ignore-gpu-blocklist']});
 async function mk(vp){
   const ctx=await b.newContext({viewport:vp,deviceScaleFactor:2});
-  const p=await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  const p=await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   const rec={off:[],bad:[],errs:[],reqs:[]};
   p.on('request',r=>{const u=r.url();rec.reqs.push(u.replace(O,''));if(!u.startsWith(O)&&!/^(data|about|blob):/.test(u))rec.off.push(u);});
   p.on('response',r=>{if(r.status()>=400)rec.bad.push(r.status()+' '+r.url().replace(O,''));});
@@ -199,7 +199,7 @@ console.log('\n== forced webgl2, cold/warm, copy ==');
 {
   const ctx=await b.newContext({viewport:{width:412,height:915},deviceScaleFactor:2});
   await ctx.grantPermissions(['clipboard-read','clipboard-write']);
-  const p=await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  const p=await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   const errs=[],off=[]; let log=[];
   p.on('request',r=>{const u=r.url();log.push(u.replace(O,''));if(!u.startsWith(O)&&!/^(data|about|blob):/.test(u))off.push(u);});
   p.on('console',c=>{if(c.type()==='error')errs.push(c.text().slice(0,200));});

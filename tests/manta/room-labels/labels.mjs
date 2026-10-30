@@ -11,7 +11,7 @@ async function page (b, w, h) {
   /* 3K: a returning player, so the feedback page goes straight in (the solo lab has no name: "you"). */
   if (process.env.PART !== 'solo' && process.env.PART !== 'cost') await ctx.addInitScript(() => { try { if (!localStorage.getItem('manta:name')) localStorage.setItem('manta:name', 'lab ' + Math.floor(Math.random() * 900 + 100)); } catch (_) {} });
   const p = await ctx.newPage();
-  p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   p.on('console', c => { if (c.type() === 'error') errs.push(c.text().slice(0, 160)); });
   p.on('pageerror', e => errs.push('pageerror: ' + e.message.slice(0, 160)));
   p.on('request', r => { const u = r.url(); if (!u.startsWith(O) && !u.startsWith(O.replace('http', 'ws')) && !/^(data|about|blob):/.test(u)) off.push(u); });

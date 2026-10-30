@@ -9,7 +9,7 @@ const b = await chromium.launch({ executablePath: process.env.CHROME, args: ['--
 const errs = [], times = [], seats = [], fps = [];
 for (let run = 0; run < 3; run++) {
   const p = await (await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true })).newPage();
-  p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000); p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
+  p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
   await p.goto(O + '/lab/manta/play/?backend=webgl2&tier=low', { waitUntil: 'load' });
   await p.waitForFunction(() => window.__lab && window.__lab.startPlaying && window.__lab.room && window.__lab.room.connected, null, { timeout: 30000 }).catch(() => {});
   const lenText = await p.evaluate(() => (document.getElementById('len') || {}).textContent || '');

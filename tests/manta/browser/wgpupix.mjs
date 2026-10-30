@@ -9,7 +9,7 @@ const b=await chromium.launch({executablePath:process.env.CHROME,
   args:['--enable-unsafe-webgpu','--use-gl=angle','--use-angle=swiftshader','--ignore-gpu-blocklist']});
 for (const [q,label] of [['?tier=high','WebGPU'],['?tier=high&backend=webgl2','WebGL2']]) {
   const ctx=await b.newContext({viewport:{width:412,height:915},deviceScaleFactor:1});
-  const p=await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  const p=await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   await p.goto(O+'/lab/manta/'+q,{waitUntil:'load'}).catch(e=>console.log('  goto '+e.message));
   await p.waitForFunction(()=>window.__labReady===true,null,{timeout:25000}).catch(()=>{});
   await p.waitForTimeout(5000);

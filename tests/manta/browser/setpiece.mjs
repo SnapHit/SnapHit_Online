@@ -7,7 +7,7 @@ const die=setTimeout(()=>{console.log('WATCHDOG');process.exit(3);},85000 * (+pr
 const b=await chromium.launch({executablePath:process.env.CHROME,
   args:['--use-gl=angle','--use-angle=swiftshader','--ignore-gpu-blocklist']});
 const p=await (await b.newContext({viewport:{width:412,height:915},deviceScaleFactor:1})).newPage();
-p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
 const errs=[]; p.on('pageerror',e=>errs.push(e.message)); p.on('console',c=>{if(c.type()==='error')errs.push(c.text());});
 let bad=0; const ok=(n,c,x='')=>{if(!c)bad++;console.log((c?'  PASS  ':'  FAIL  ')+n+(x?'  ['+x+']':''));};
 await p.goto(O+'/lab/manta/?tier=low&backend=webgl2&seed=4242',{waitUntil:'load'}).catch(e=>console.log('goto '+e.message));

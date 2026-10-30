@@ -13,7 +13,7 @@ const b=await puppeteer.launch({executablePath:exe, headless:true,
         '--use-angle=swiftshader','--use-gl=angle','--ignore-gpu-blocklist','--no-sandbox']});
 const p=await b.newPage();
 await p.setViewport({width:412,height:915,deviceScaleFactor:2});
-p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
 const errs=[]; p.on('pageerror',e=>errs.push(String(e.message).slice(0,200)));
 p.on('console',m=>{if(m.type()==='error')errs.push('console: '+m.text().slice(0,200));});
 await p.goto(O+'/lab/manta/?tier=high',{waitUntil:'load'}).catch(e=>console.log('  goto '+e.message));

@@ -11,7 +11,7 @@ const off = [], errs = [], dialogs = [];
 async function page (b, w, h, init) {
   const ctx = await b.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1, hasTouch: true });
   if (init) await ctx.addInitScript(init);
-  const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  const p = await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   p.on('console', c => { if (c.type() === 'error') errs.push(c.text().slice(0, 160)); });
   p.on('pageerror', e => errs.push('pageerror: ' + e.message.slice(0, 160)));
   p.on('dialog', d => { dialogs.push(d.message()); d.dismiss().catch(() => {}); });

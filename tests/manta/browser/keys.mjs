@@ -13,7 +13,7 @@ const b = await chromium.launch({ executablePath: process.env.CHROME,
   args: ['--enable-unsafe-webgpu', '--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
 const errs = [];
 async function open (ctx, url) {
-  const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  const p = await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   p.on('console', c => { if (c.type() === 'error') errs.push(c.text().slice(0, 140)); });
   p.on('pageerror', e => errs.push('pageerror: ' + e.message.slice(0, 140)));
   await p.goto(O + url, { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));

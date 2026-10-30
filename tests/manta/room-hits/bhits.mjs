@@ -9,7 +9,7 @@ let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  P
 const b = await chromium.launch({ executablePath: process.env.CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
 const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true });
 await ctx.addInitScript(() => { try { localStorage.setItem('manta:name', 'hit tester'); } catch (_) {} });
-const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+const p = await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
 const errs = []; p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
 const name = Array.from({ length: 8 }, () => 'abcdefghjkmnpqrstuvwxyz23456789'[Math.floor(Math.random() * 31)]).join('');
 await p.goto(O + '/lab/manta/play/?room=' + name + '&stage=cut&backend=webgl2&tier=low&fx=off', { waitUntil: 'load' });

@@ -49,7 +49,7 @@ async function page (opts = {}) {
   if (opts.name !== false) await ctx.addInitScript(n => { try { localStorage.setItem('manta:name', n); } catch (_) {} }, opts.name || 'plays tester');
   if (opts.lastDay) await ctx.addInitScript(d => { try { localStorage.setItem('manta:lastPlayDay', d); } catch (_) {} }, opts.lastDay);
   if (opts.addr) await ctx.setExtraHTTPHeaders({ 'X-Test-Address': opts.addr });
-  const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  const p = await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
   p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
   p.on('console', c => { if (c.type() === 'error' && !/WebSocket connection to|Failed to load resource|popErrorScope/.test(c.text())) errs.push(c.text().slice(0, 160)); });
   p.counts = [];

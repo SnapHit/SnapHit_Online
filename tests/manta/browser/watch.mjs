@@ -9,7 +9,7 @@ const BACK=process.env.BACK||'gpu';
 const b=await chromium.launch({executablePath:process.env.CHROME,
   args:['--enable-unsafe-webgpu','--use-gl=angle','--use-angle=swiftshader','--ignore-gpu-blocklist']});
 const ctx=await b.newContext({viewport:{width:412,height:915},deviceScaleFactor:1});
-const p=await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+const p=await ctx.newPage(); p.setDefaultTimeout(30000 * (+process.env.WATCHDOG_X || 1)); p.setDefaultNavigationTimeout(30000 * (+process.env.WATCHDOG_X || 1));
 const errs=[]; p.on('pageerror',e=>errs.push('pageerror: '+e.message.slice(0,200)));
 const q = BACK==='gl' ? '?tier=high&backend=webgl2' : '?tier=high';
 await p.goto(O+'/lab/manta/'+q,{waitUntil:'load'}).catch(e=>console.log('  goto '+e.message));
