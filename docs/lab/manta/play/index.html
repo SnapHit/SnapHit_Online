@@ -236,6 +236,13 @@
     color: #cfe6f5; text-shadow: 0 1px 3px #000a, 0 0 10px #0009;
     letter-spacing: 0.02em;
   }
+  /* A portal's frame on a desktop (4C): 13 px from 760 px wide with a mouse;
+     see THE PORTAL PACKAGE'S FRAMES below. Before the desktop sizes, which win. */
+  @media (min-width: 760px) and (pointer: fine) {
+    #board { font-size: 13px; }
+    #len { font-size: 13px; }
+    :root { --label-size: 13px; }
+  }
   /* DESKTOP (4A): a wide screen with a mouse gets larger interface text,
      so the board, the score line and the names in the water stay readable
      at 1080p and 1440p; the radar's own cap is in follow.js. Pointer: fine
@@ -258,6 +265,21 @@
      and (4C) no feedback box. */
   body.portal #friends, body.portal #solo, body.portal #online, body.portal #corner,
   body.portal #fbOpen, body.portal #fbBox { display: none !important; }
+  /* THE PORTAL'S NAME (4C, design doc 10.7): the generated name you swim
+     under, top left where a room's signal mark sits, with a pencil. */
+  #meName { position: fixed; z-index: 5; top: calc(env(safe-area-inset-top, 0px) + 8px); left: calc(env(safe-area-inset-left, 0px) + 8px);
+    display: inline-flex; align-items: center; min-height: 34px; max-width: calc(100vw - 110px); padding: 0 12px;
+    font: 600 13px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #dff6ee; white-space: nowrap; overflow: hidden;
+    background: rgba(4, 9, 18, .6); border: 1px solid rgba(120, 190, 210, .35); border-radius: 999px; cursor: pointer; }
+  #meName[hidden] { display: none; }
+  #meName span[aria-hidden] { margin-left: 6px; }
+  #meEdit { position: fixed; z-index: 7; top: calc(env(safe-area-inset-top, 0px) + 48px); left: calc(env(safe-area-inset-left, 0px) + 8px);
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center; max-width: calc(100vw - 16px); padding: 8px;
+    background: rgba(4, 9, 18, .9); border: 1px solid rgba(120, 190, 210, .35); border-radius: 12px; }
+  #meEdit input { flex: 1 1 150px; min-width: 0; font: 16px system-ui, sans-serif; color: #eaf4ff; background: rgba(0, 0, 0, .35);
+    border: 1px solid rgba(120, 190, 210, .45); border-radius: 8px; padding: 6px 8px; }
+  #meEdit button { font: 600 14px system-ui, sans-serif; min-height: 34px; padding: 0 12px; color: #dff6ee; background: rgba(4, 9, 18, .6);
+    border: 1px solid rgba(120, 190, 210, .35); border-radius: 999px; cursor: pointer; }
   /* THE FEEDBACK BOX (4C): over the ocean, like the name panel. */
   #fbBox {
     position: fixed; z-index: 7; left: 50%; top: 50%; transform: translate(-50%, -50%);
@@ -307,6 +329,7 @@
     font: 400 12px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     color: #cfe6f5; text-shadow: 0 1px 3px #000a, 0 0 10px #0009;
   }
+  @media (min-width: 760px) and (pointer: fine) { #stats { font-size: 13px; } }   /* a portal's frame (4C), after the base rule */
   body:not(.lab) #board { top: calc(env(safe-area-inset-top, 0px) + 96px); }
   /* The signal mark and your name (with its pencil) sit below the play bar,
      clear of a private room's link box. */
@@ -316,6 +339,15 @@
   @media (max-height: 330px) { #radar { --radar-bottom: 46px; } }
   /* Landscape: the board stops above the radar, which sits bottom right. */
   @media (orientation: landscape) and (max-height: 520px) { body:not(.lab) #board { max-height: calc(100vh - 162px - max(96px, min(160px, 28vh))); overflow: hidden; } }
+  /* THE PORTAL PACKAGE'S FRAMES (4C, design doc 10.7): a portal frames the
+     game at 800x450 to 1080x607 on a desktop, at a pixel ratio of 1. With
+     only the Privacy link at the top, the board starts under it (50 px, not
+     96), which leaves room above the radar for all ten rows and your rank
+     line; and from 760 px wide with a mouse the board, the score and stats
+     lines and the names in the water are 13 px, not 11 and 12 (the 1200 px
+     desktop sizes below still win where they apply). */
+  body.portal:not(.lab) #board { top: calc(env(safe-area-inset-top, 0px) + 50px); }
+  @media (orientation: landscape) and (max-height: 520px) { body.portal:not(.lab) #board { max-height: calc(100vh - 116px - max(96px, min(160px, 28vh))); line-height: 1.3; } }
   /* THE NAME PANEL (3J): the first visit, over the live ocean. Centred in
      what the keyboard leaves (interactive-widget=resizes-content). */
   #namePanel {
@@ -342,6 +374,7 @@
     #fb { font-size: 15px; top: calc(env(safe-area-inset-top, 0px) + 12px); right: calc(env(safe-area-inset-right, 0px) + 12px); }
     #fb button, #fb a.btn { min-height: 38px; padding: 0 14px; }
     body:not(.lab) #board { top: calc(env(safe-area-inset-top, 0px) + 108px); }
+    body.portal:not(.lab) #board { top: calc(env(safe-area-inset-top, 0px) + 56px); }
     body:not(.lab) #signal { top: calc(env(safe-area-inset-top, 0px) + 108px) !important; }
     #namePanel { width: min(400px, calc(100vw - 32px)); font-size: 16px; padding: 20px; }
     #nameBox { font-size: 18px; }
@@ -367,6 +400,7 @@
 <div id="board" aria-live="off"></div>
 
 <div id="corner" aria-hidden="true"></div>
+<button id="meName" type="button" hidden aria-label="Change your name"><span id="meNameText"></span><span aria-hidden="true"> ✎</span></button>
 <div id="fb">
   <button id="friends" type="button">Play with friends</button>
   <button id="solo" type="button">Solo</button>
@@ -640,22 +674,48 @@ window.MANTA_LAB = window.MANTA_ROOT + 'lab/manta/';
     return t ? 'Rooms are resting until ' + t + ', so this is solo.' : 'Rooms are resting for today, so this is solo.';
   }
 
+  /* A generated name: the name panel's placeholder, and the portal's. */
+  function genName () {
+    var A = ['amber', 'blue', 'bright', 'coral', 'deep', 'misty', 'quiet', 'silver', 'sunny', 'swift', 'lucky', 'salty'];
+    var B = ['comet', 'drift', 'finch', 'fox', 'heron', 'kelp', 'lantern', 'moth', 'pebble', 'tide', 'wave', 'reef'];
+    var r = new Uint32Array(2); try { crypto.getRandomValues(r); } catch (e) { r[0] = Date.now(); r[1] = r[0] >> 3; }
+    return A[r[0] % A.length] + ' ' + B[r[1] % B.length];
+  }
   /* THE PORTAL PACKAGE (3O): solo against bots and nothing else. No rooms,
-     no Play with friends, no lab chip or corner press, no name box. */
+     no Play with friends, no lab chip or corner press, no name box, and
+     (4C) no feedback box or play counter. */
   if (P.portal) {
     document.body.classList.add('portal');
     $('privacy').hidden = true; $('privacyPortal').hidden = false;
+    /* STRAIGHT INTO A SWIM (4C, design doc 10.7) under a generated name,
+       over your leader (labels.js reads window.MANTA_NAME in the package)
+       and top left with a pencil that changes it, cleaned as a room
+       cleans a name (names.js, through labels.js). For this visit only:
+       the package stores nothing. */
+    window.MANTA_NAME = genName();
+    var showMe = function () { $('meNameText').textContent = window.MANTA_NAME; };
+    showMe(); $('meName').hidden = false;
+    $('meName').onclick = function () {
+      if ($('meEdit')) return;
+      var ed = document.createElement('div'), nb = document.createElement('input'), done = document.createElement('button'), cancel = document.createElement('button');
+      ed.id = 'meEdit';
+      nb.type = 'text'; nb.maxLength = 64; nb.value = window.MANTA_NAME; nb.spellcheck = false; nb.setAttribute('aria-label', 'Your name'); nb.setAttribute('enterkeyhint', 'done');
+      done.type = 'button'; done.textContent = 'Done'; cancel.type = 'button'; cancel.textContent = 'Cancel';
+      var close = function () { ed.remove(); };
+      var take = function () { import(window.MANTA_LAB + 'labels.js').then(function (m) { var n = m.cleanName(nb.value); if (n) window.MANTA_NAME = n; showMe(); close(); }).catch(close); };
+      done.onclick = take; cancel.onclick = close;
+      nb.addEventListener('keydown', function (e) { if (e.key === 'Enter') take(); });
+      ed.append(nb, done, cancel); document.body.appendChild(ed);
+      try { nb.focus(); nb.select(); } catch (e) { /* no focus here */ }
+    };
   }
 
   /* THE NAME PANEL (3J). The placeholder is a name made here; Play (or
      Enter) takes what was typed, cleaned as the room cleans it, or the
      placeholder, keeps it on this phone and swims at once. */
   if (P.naming) {
-    var A = ['amber', 'blue', 'bright', 'coral', 'deep', 'misty', 'quiet', 'silver', 'sunny', 'swift', 'lucky', 'salty'];
-    var B = ['comet', 'drift', 'finch', 'fox', 'heron', 'kelp', 'lantern', 'moth', 'pebble', 'tide', 'wave', 'reef'];
-    var r = new Uint32Array(2); try { crypto.getRandomValues(r); } catch (e) { r[0] = Date.now(); r[1] = r[0] >> 3; }
     var box = $('nameBox'), start = false;
-    box.placeholder = A[r[0] % A.length] + ' ' + B[r[1] % B.length];
+    box.placeholder = genName();
     $('namePanel').hidden = false;
     var startPlay = function () {
       if (start) return; start = true;

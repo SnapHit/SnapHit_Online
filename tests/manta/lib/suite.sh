@@ -68,7 +68,10 @@ watch-gl|serve|CHROME=$CHROME153 BACK=gl|browser/watch.mjs
 gpu|serve|CHROME=$CHROME153 HARNESS_TIMEOUT=200|browser/gpu.mjs
 wgpu|serve||browser/wgpu.mjs
 wgpupix|serve|CHROME=$CHROME153|browser/wgpupix.mjs
-portal|portal|CHROME=$CHROME153|portal/portal.mjs
+portal-load|portal|CHROME=$CHROME153 PART=load|portal/portal.mjs
+portal-frames|portal|CHROME=$CHROME153 PART=frames|portal/portal.mjs
+portal-rules|portal|CHROME=$CHROME153 PART=rules|portal/portal.mjs
+portal-hz|portal|CHROME=$CHROME153 PART=hz|portal/portal.mjs
 roomtest|rooms|NAMES=1 DIRECT=1|room-base/roomtest.mjs
 devcheck3b|rooms|DIRECT=1|room-base/devcheck3b.mjs
 watchmode|rooms|NAMES=1 DIRECT=1|room-base/watchmode.mjs

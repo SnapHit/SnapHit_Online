@@ -20,9 +20,11 @@ const STYLE = 'position:absolute;left:0;top:0;white-space:nowrap;pointer-events:
   'opacity:0.7;will-change:transform;' +
   'text-shadow:0 0 2px rgba(0,0,0,0.85),0 0 1px rgba(0,0,0,0.9)';
 export const PALE = '#e6f1fb';
+/* The portal package's name editor cleans a name as the room does (4C). */
+export { cleanName } from './names.js';
 /* Your typed name, kept on this phone (3J stage 2 writes it). */
 export const NAME_KEY = 'manta:name';
-export function savedName () { if (typeof window !== 'undefined' && window.MANTA_PORTAL) return null; try { const v = localStorage.getItem(NAME_KEY); return v && v.length ? v : null; } catch (_) { return null; } }
+export function savedName () { if (typeof window !== 'undefined' && window.MANTA_PORTAL) return typeof window.MANTA_NAME === 'string' && window.MANTA_NAME ? window.MANTA_NAME : null; try { const v = localStorage.getItem(NAME_KEY); return v && v.length ? v : null; } catch (_) { return null; } }
 
 export function createLabels () {
   const root = document.createElement('div');
