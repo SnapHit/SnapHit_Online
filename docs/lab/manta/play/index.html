@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-<title></title>
+<title>Raywake</title>
 <!-- An empty data URL, so the browser never asks for /favicon.ico. A data:
      URL is not a request; a missing favicon is a 404 in the log. -->
 <link rel="icon" href="data:,">
 
 <!--
-  Manta trains: the feedback page (3G stage 3). Not part of the site.
+  Raywake (working title Manta trains): the feedback page (3G stage 3). Not part of the site.
 
   Nothing links here: no GAMES entry, no sitemap line, noindex/nofollow above.
   It is the lab page (../index.html) with the lab's tools hidden and a small
@@ -303,6 +303,9 @@
   }
   #namePanel[hidden] { display: none; }
   #namePanel label { font-weight: 600; }
+  /* The game's name over the name box (4C): the first thing a first visit reads. */
+  #nameTitle { margin: 0 0 2px; text-align: center; font: 800 34px/1.05 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    letter-spacing: 0.01em; color: #eaf6ff; text-shadow: 0 0 18px rgba(127, 227, 208, .35); }
   #nameBox { font: 17px system-ui, sans-serif; color: #eaf4ff; background: rgba(0, 0, 0, .35);
     border: 1px solid rgba(120, 190, 210, .5); border-radius: 10px; padding: 10px 12px; min-width: 0; }
   #playBtn { font: 700 20px/1 system-ui, sans-serif; color: #04121a; background: #7fe3d0; border: 0;
@@ -318,6 +321,7 @@
     body:not(.lab) #signal { top: calc(env(safe-area-inset-top, 0px) + 108px) !important; }
     #namePanel { width: min(400px, calc(100vw - 32px)); font-size: 16px; padding: 20px; }
     #nameBox { font-size: 18px; }
+    #nameTitle { font-size: 40px; }
     #playBtn { font-size: 22px; min-height: 56px; }
     #radar { --radar-bottom: 58px; }
   }
@@ -326,6 +330,7 @@
     #namePanel label { flex-basis: 100%; font-size: 13px; }
     #nameBox { flex: 1 1 150px; padding: 6px 10px; }
     #playBtn { min-height: 40px; padding: 0 22px; font-size: 17px; }
+    #nameTitle { flex-basis: 100%; font-size: 20px; }
   }
 </style>
 </head>
@@ -347,21 +352,23 @@
   <div class="row" id="shareRow" hidden>
     <input id="shareLink" type="text" readonly aria-label="Link to this room">
     <button id="copyLink" type="button">Copy</button>
+    <button id="shareBtn" type="button" hidden>Share</button>
   </div>
   <div class="row" id="noteRow" hidden><span id="note"></span></div>
   <div class="row" id="privacyRow" hidden>
-    <p id="privacy"><span class="gameName"></span> keeps nothing about you. Playing online, your phone sends the room only your
+    <p id="privacy"><span class="gameName">Raywake</span> keeps nothing about you. Playing online, your phone sends the room only your
     steering, the part of the ocean you are looking at and a random key, kept in this tab, that lets you
     rejoin after a dropped connection. The room gives you a random name and forgets it all when it
     empties. A private room's code is kept until it has had no players for 24 hours, and the address
     that asked for it for 10 seconds, to stop floods. No accounts, no cookies, no analytics, nothing
     from anyone else's servers. The site runs on Cloudflare, which keeps its own short-lived
     connection logs.</p>
-    <p id="privacyPortal" hidden><span class="gameName"></span> stores nothing on this device and contacts no
+    <p id="privacyPortal" hidden><span class="gameName">Raywake</span> stores nothing on this device and contacts no
     server: it plays entirely from the files in this package. No accounts, no cookies, no analytics.</p>
   </div>
 </div>
 <div id="namePanel" hidden>
+  <h1 id="nameTitle" class="gameName">Raywake</h1>
   <label for="nameBox">Your name</label>
   <input id="nameBox" type="text" maxlength="64" autocomplete="nickname" enterkeyhint="go" spellcheck="false">
   <button id="playBtn" type="button">Play</button>
@@ -649,6 +656,13 @@ window.MANTA_LAB = window.MANTA_ROOT + 'lab/manta/';
     $('shareLink').value = location.origin + location.pathname + '?room=' + P.code;
     $('shareRow').hidden = false;
   }
+  /* Share (4C): the phone's own share sheet where it has one, with the
+     game's name in the text; Copy still copies the bare link. */
+  var SHARE_TEXT = 'Swim with me in Raywake';
+  if (P.code && navigator.share) $('shareBtn').hidden = false;
+  $('shareBtn').onclick = function () {
+    try { navigator.share({ title: 'Raywake', text: SHARE_TEXT, url: $('shareLink').value }).catch(function () { /* dismissed */ }); } catch (e) { /* not here */ }
+  };
   $('copyLink').onclick = function () {
     var b = this, text = $('shareLink').value, done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 2000); };
     function fallback () { $('shareLink').select(); try { document.execCommand('copy'); done(); } catch (_) { /* selected: copy by hand */ } }

@@ -82,7 +82,7 @@ const outside = reqs => reqs.filter(u => !u.startsWith(GAME) && !u.startsWith(PA
     return { friends: vis('friends'), solo: vis('solo'), online: vis('online'), chip: vis('chip'), corner: vis('corner'), name: vis('namePanel'), privacyLink: vis('privacyLink'), title: document.title,
       room: !!(window.__lab && window.__lab.room), stored: (() => { try { return localStorage.length + sessionStorage.length; } catch (_) { return -1; } })() }; });
   ok('portal mode: no Play with friends, Solo or Play online, no lab chip or corner press, no name box; the Privacy link kept', !ui.friends && !ui.solo && !ui.online && !ui.chip && !ui.corner && !ui.name && ui.privacyLink && !ui.room, JSON.stringify(ui));
-  ok('the title is the game\'s name from its one constant', ui.title === 'Manta trains', ui.title);
+  ok('the title is the game\'s name from its one constant', ui.title === 'Raywake', ui.title);
   await p.click('#privacyLink').catch(() => {});
   const priv = await p.evaluate(() => ({ portal: document.getElementById('privacyPortal').hidden ? null : document.getElementById('privacyPortal').textContent.replace(/\s+/g, ' ').trim(), site: !document.getElementById('privacy').hidden }));
   ok('Privacy says it stores nothing on the device and contacts no server', priv.portal && /stores nothing on this device/.test(priv.portal) && /contacts no\s+server/.test(priv.portal) && !priv.site, priv.portal);

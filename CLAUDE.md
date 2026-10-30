@@ -88,6 +88,8 @@ in try/catch, and let the game run normally when storage is blocked or full.
 ## Manta trains and the lab
 
 Manta trains is the game in development: a top-down WebGPU game on Three.js.
+The game is now called Raywake (October 2026); its code, folders, paths, file
+names and storage keys keep the manta name, so nothing stored breaks.
 Its design doc is `manta-trains-design.md` in the repo root, which is never
 served. That doc is the source of truth for the rules, the look and the build
 plan, and the same version sits in the Claude project the briefs come from.

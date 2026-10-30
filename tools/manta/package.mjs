@@ -1,4 +1,4 @@
-/* The portal package for Manta trains (3O): a zip for game portals such as
+/* The portal package for Raywake (3O; the working title was Manta trains): a zip for game portals such as
    Poki and CrazyGames. It COPIES, never builds: every file goes into the zip
    byte for byte, nothing is rewritten, minified or bundled, and docs/ is only
    ever read.
