@@ -95,7 +95,7 @@ export function createFollow (ctx) {
   let spillSlot = new Map();
   let spillDeal = null, drawnRivals = 0;
   const SPILL_BASE = mantas.SPILL_BASE;
-  let bestPeak = 0, beatShown = false, boardAt = 0, offScreen = 0;
+  let bestPeak = 0, beatShown = false, boardAt = 0, offScreen = 0, rankShown = 0;
   let zoomNow = null, wasDying = false, lastRuns = undefined;   // the eased camera (3L)
   let pinkBelly = null, pinkDrawn = false, pinkFlashAt = -1;    // the pink manta (4A stage 4)
   let sharkStamped = false;                                       // the whale shark (4A stage 5)
@@ -151,6 +151,19 @@ export function createFollow (ctx) {
       line.textContent = (i + 1) + '. ' + r.name + '  ' + r.len;
       el.appendChild(line);
     });
+    /* YOUR RANK (4C, design doc 7.1): outside the top ten, your own rank,
+       name and length on a line below the board, set apart from the ten.
+       Solo counts it from the trains here; a room says it (roomcore flag
+       128), so the phone needs no other train's length. */
+    const you = ctx.sim.you;
+    if (!you || ctx.sim.watching || rows.slice(0, 10).some(r => r.mine)) { rankShown = 0; return; }
+    const rank = ctx.sim.room ? ctx.sim.rank : rows.findIndex(r => r.mine) + 1;
+    if (!(rank > 10)) { rankShown = 0; return; }
+    const line = document.createElement('b');
+    line.className = 'rankLine';
+    line.textContent = rank + '. ' + ((ctx.sim.youName && ctx.sim.youName()) || savedName() || 'you') + '  ' + (you.dead > 0 ? 0 : you.followers.length);
+    el.appendChild(line);
+    rankShown = rank;
   }
 
   /* A label over every leader on screen (3J, labels.js). In a room the
@@ -534,7 +547,7 @@ export function createFollow (ctx) {
 
   return { followCamera, get peak () { return peakLength; }, get offScreen () { return offScreen; }, get zoom () { return zoomNow; },
            get zoomDrawn () { return zoomDrawn; }, get burstMix () { return burstMix; },
-           get kick () { return kickNow(); }, get slashing () { return slashOn; },
+           get kick () { return kickNow(); }, get slashing () { return slashOn; }, get rankShown () { return rankShown; },
            get vignette () { return vigNow; }, get card () { return { from: countFrom, to: countTo, t: beatT }; },
            get introMix () { return introMix; },
            get recruitBoost () { return lastRecruitAt >= 0 && ctx.sim.time - lastRecruitAt < BOOST_FOR ? BOOST_BY : 1; }, popAt,

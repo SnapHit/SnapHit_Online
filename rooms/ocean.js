@@ -495,7 +495,7 @@ export function createOcean (env, url, opts = {}) {
         }
         phone.watch = me.id;
       }
-      phone.sent.clear(); phone.board = null; phone.names = null; phone.mePeak = null; phone.wild = null; phone.wildTick = 0; phone.ready = true;
+      phone.sent.clear(); phone.board = null; phone.rank = null; phone.names = null; phone.mePeak = null; phone.wild = null; phone.wildTick = 0; phone.ready = true;
       const init = { t: 'init', build, seed, params: sim.params, time: sim.time, steps,
         kinds: sim.rivals.map(t => [t.id, t.kind || 'bot']) };
       if (me) { init.me = { id: me.id, name: me.name, token: me.token }; init.names = names; }

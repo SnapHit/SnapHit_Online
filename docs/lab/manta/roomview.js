@@ -59,6 +59,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   const sharkDist = (x, z) => { const t = sharkTail(), ax = shark.x, az = shark.z, dx = t.x - ax, dz = t.z - az, L2 = dx * dx + dz * dz || 1e-9; const u = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2)); return Math.hypot(x - (ax + dx * u), z - (az + dz * u)); };
   const you = { id: -1, x: 0, z: 0, head: 0, s: 0, followers: [], dead: 0, peak: 0, lastPeak: 0, len: 0, watched: -1 };
   const rivals = [], wild = [], events = [], board = [];
+  let rank = null;                         // your place among every train, as the room says (4C)
   const drawn = new Map();                 // train id -> what is drawn for it
   const kinds = new Map();                 // train id -> personality, for the board
   const names = new Map();                 // train id -> player's name, for trains a player drives
@@ -294,7 +295,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   function resync () {
     core.trains.clear(); drawn.clear(); wildView.clear();
     snaps.length = 0; pending.length = 0; gaps.length = 0; offsets.length = 0;
-    rivals.length = 0; events.length = 0; board.length = 0; names.clear();
+    rivals.length = 0; events.length = 0; board.length = 0; names.clear(); rank = null;
     for (const w of wild) w.alive = false;
     offset = null; lastArrive = null; delay = 0.1;
   }
@@ -388,6 +389,8 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
       }
       pending.push({ time: m.time, kind: e.k, x: e.x, z: e.z, by: e.by });
     }
+    /* Your rank comes only when it changed (4C). */
+    if (m.rk) rank = m.rk;
     /* The board comes only when it changed: the last one stands until then. */
     if (m.bd) {
       board.length = 0;
@@ -570,6 +573,8 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     debrisWild: () => wild.filter(w => w.alive && w.loose),
     /* Labels (3J): a player's name by train id, and your own. */
     nameOf: id => names.get(id) || null,
+    /* Your place among every train in the room (4C), for the line under the board. */
+    get rank () { return play ? rank : null; },
     youName: () => myName(),
     /* For the tests: change your name as the pencil does. */
     setName,

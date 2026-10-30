@@ -54,6 +54,8 @@
  *     i16 steps x10, u32 seq; if late u16; if ack u32
  *   a wild record: u16 slot, i16 x, i16 z, u8 h, u8 flags (1 loose,
  *     2 sinking), u8 colour it glows in (255 none)
+ *   a player's rank (flag 128, 4C): u8, where the player stands among every
+ *     train in the room in the board's own order, only when it changed
  *
  * A train: its leader, and the path points this phone has not had yet. The
  * first time a phone sees a train, and after it restarts, it comes fresh,
@@ -63,7 +65,7 @@
  */
 import { createMotion } from './motion.js';
 
-export const PROTOCOL = 4;             // 3: the pink manta (4A stage 4): flag 32, event kinds 2 to 4; 4: the whale shark (stage 5): flag 64, kinds 5 and 6
+export const PROTOCOL = 5;             // 3: the pink manta (4A stage 4): flag 32, event kinds 2 to 4; 4: the whale shark (stage 5): flag 64, kinds 5 and 6; 5: your rank (4C), flag 128
 export const SNAP_HZ = 20;
 export const WILD_EVERY = 4;             // snapshots between full wild lists: 5 a second
 export const MARGIN = 400;               // units beyond the view a phone is sent
@@ -278,6 +280,15 @@ export function snapFor (sim, phone, n, events, step = 0) {
     if (early) { w.i16(Math.round(q.early * 10)); w.u32(q.earlySeq); q.early = null; }
     if (q.late) { w.u16(q.late); q.late = 0; }
     if (phone.debug) w.u32(q.ack);
+    /* YOUR RANK (flag 128, 4C, design doc 7.1): where this player stands
+       among every train in the room, in the board's own order (length, a
+       crashed train at 0, then id), so a phone outside the top ten can show
+       its place without being sent every train's length. One byte, and only
+       when it changed since this phone's last. */
+    const len = t.dead > 0 ? 0 : t.followers.length;
+    let rank = 1;
+    for (const o of sim.rivals) { if (o === t) continue; const l = o.dead > 0 ? 0 : o.followers.length; if (l > len || (l === len && o.id < t.id)) rank++; }
+    if (rank !== phone.rank) { flags |= 128; w.u8(Math.min(255, rank)); phone.rank = rank; }
   }
   w.put8(flagsAt, flags);
   return { data: w.done(), truth };
@@ -331,6 +342,7 @@ export function decodeSnap (buf) {
     if (f & 32) me.ack = u32();
     m.me = me;
   }
+  if (flags & 128) m.rk = u8();   // your rank (4C)
   return m;
 }
 
