@@ -55,7 +55,9 @@ await p.evaluate(() => window.__sim.lay(0)); await drive(8); await wait(300); co
 await p.evaluate(() => window.__sim.lay(650)); await drive(8); await wait(300); const endFar = await ENDS();
 ok('labels track their leaders within 2 CSS px at both ends of the zoom range', endNear.labels >= 1 && endFar.labels >= 1 && endNear.worst <= 2 && endFar.worst <= 2, 'near (zoom ' + endNear.zoom + '): ' + endNear.labels + ' labels, worst ' + endNear.worst + ' px; far (zoom ' + endFar.zoom + '): ' + endFar.labels + ' labels, worst ' + endFar.worst + ' px');
 ok('the radar\'s dots sit within 1 radar px of the true positions at both ends', endNear.radarDots >= 1 && endFar.radarDots >= 1 && endNear.radarWorst <= 1 && endFar.radarWorst <= 1, 'near worst ' + endNear.radarWorst + ' px over ' + endNear.radarDots + ' dots; far worst ' + endFar.radarWorst + ' px over ' + endFar.radarDots);
-/* A WAKE STAYS WHERE IT WAS LAID THROUGH A ZOOM STEP (pixels, WebGL2): the light memory read back at the world point your leader passed a moment ago, before and after the square steps. */
+/* A WAKE STAYS WHERE IT WAS LAID THROUGH A ZOOM STEP (pixels, WebGL2): the light memory read back at the world point your leader passed a moment ago, before and after the square steps.
+   4C: from a short train, turning all the while. Until 4C this ran straight after the far end (650 long), where the zoom already sits on its floor (zoomFar 0.4), so lowering zoomNear widened nothing; the leader, left on one heading, swam on for up to 40 quarter-seconds, and the square that stepped was the memory shrinking (half 1230 to 901, 1346 to 928 in four runs), most likely after a crash into the reef and a restart elsewhere. Then the point read 0 now and then. Here the zoom is on the curve at length 0 and lowering zoomNear widens the view, as the check means. */
+await p.evaluate(() => window.__sim.lay(0)); await drive(4);
 const wake = await p.evaluate(async () => { const L = window.__lab, S = window.__sim, lm = L.lm, wait = ms => new Promise(r => setTimeout(r, ms)); if (!lm || !L.renderer) return { skip: 'no memory or renderer' };
   await wait(1500); const you = S.you, pt = you.trail[Math.max(0, you.trail.length - 30)] || you;   // a point a little behind the leader: freshly stamped
   const read = async () => { const half = lm.uHalf.value, cx = lm.uCentre.value.x, cz = lm.uCentre.value.y, n = lm.size, u = (pt.x - cx) / (2 * half) + 0.5, v = (pt.z - cz) / (2 * half) + 0.5;
@@ -64,13 +66,13 @@ const wake = await p.evaluate(async () => { const L = window.__lab, S = window._
     const fx = Math.max(0, Math.min(n - 5, (tx + (n >> 1)) % n)), fd = await L.renderer.readRenderTargetPixelsAsync(lm.target, fx, Math.max(0, Math.min(n - 5, Math.round(v * n))), 5, 5); for (let i = 0; i < fd.length; i += 4) out.far = Math.max(out.far, fd[i], fd[i + 1], fd[i + 2]); return out; };
   const before = await read(), steps0 = lm.resteps;
   /* Widen the view a lot: the square steps up within a second. */
-  const P = L.params.P, near0 = P.zoomNear; P.zoomNear = 0.6; P.zoomFar = 0.4;
-  for (let i = 0; i < 40 && lm.resteps === steps0; i++) L.step(0.25);
+  const P = L.params.P, near0 = P.zoomNear, far0 = P.zoomFar, runs0 = S.you.runs; P.zoomNear = 0.6; P.zoomFar = 0.4;
+  for (let i = 0; i < 40 && lm.resteps === steps0; i++) { S.input.want = S.you.head + 1.0; L.step(0.25); }
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-  const after = await read(); P.zoomNear = near0;
-  return { before, after, stepped: lm.resteps - steps0 }; });
+  const after = await read(); P.zoomNear = near0; P.zoomFar = far0;
+  return { before, after, stepped: lm.resteps - steps0, sameRun: S.you.runs === runs0 }; });
 console.log('WAKE ' + JSON.stringify(wake));
-ok('a wake stays where it was laid through a zoom step: the memory at that world point keeps at least a third of its light (fading aside) and stays well above clear water', !wake.skip && wake.stepped >= 1 && wake.before.px > 2 * Math.max(1, wake.before.far) && wake.after.px >= wake.before.px / 3 && wake.after.px > 2 * Math.max(1, wake.after.far), JSON.stringify(wake));
+ok('a wake stays where it was laid through a zoom step (the view widened, the same run): the memory at that world point keeps at least a third of its light (fading aside) and stays well above clear water', !wake.skip && wake.stepped >= 1 && wake.sameRun && wake.after.half > wake.before.half && wake.before.px > 2 * Math.max(1, wake.before.far) && wake.after.px >= wake.before.px / 3 && wake.after.px > 2 * Math.max(1, wake.after.far), JSON.stringify(wake));
 await p.evaluate(() => window.__sim.lay(0)); await drive(6);
 /* A cut that halves the train, then a restart. */
 await p.evaluate(() => window.__sim.lay(300)); await drive(8);
