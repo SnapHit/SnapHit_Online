@@ -31,7 +31,14 @@ const t0 = Date.now();
 mode = 'cruise'; await wait(14000);
 const seenCruise = pkSeen, minLenCruise = Math.min(...lenLog.slice(-200).map(l => l[1]));
 ok('the snapshot carries the pink manta from its appearance (flag 32): seen ' + pkSeen + ' appearance(s), ' + moves.length + ' moves, mean ' + (moves.reduce((a, b) => a + b, 0) / Math.max(1, moves.length)).toFixed(1) + ' units a snapshot', pkSeen >= 1 && moves.length > 50);
-ok('cruising at it for 14 s catches nothing: no catch event, length held (' + minLenCruise + ')', catches.length === 0 && minLenCruise >= 15);
+/* 4C: "catches nothing" is no catch event and no jump of the pink's
+   reward in the length. Until 4C it also asked that the length never fell
+   below 15, but a phone chasing the pink at cruise can crash into a bot
+   or the reef on the way (length 0 once in 4C's second full suite pass,
+   at 150:50), which is not a catch; the lowest length is still printed. */
+const cruiseLog = lenLog.filter(l => l[0] >= (lenLog.length ? lenLog[lenLog.length - 1][0] - 14.5 : 0));
+const cruiseJump = Math.max(0, ...cruiseLog.slice(1).map((l, i) => l[1] - cruiseLog[i][1]));
+ok('cruising at it for 14 s catches nothing: no catch event, no jump of the reward in the length (largest rise ' + cruiseJump + ', lowest ' + minLenCruise + ')', catches.length === 0 && cruiseJump < 8);
 /* Burst at it: caught, +pinkReward once, by this phone. */
 mode = 'burst'; const lenBefore = c.play.me ? c.play.me.len : -1; const tBurst = Date.now();
 for (let k = 0; k < 120 && catches.length === 0; k++) await wait(250);
