@@ -105,8 +105,8 @@ names-change|rooms|DIRECT=1 PART=change|room-names/names.mjs
 inplace|rooms|DELAYS=20:0|room-names/inplace.mjs
 lag|rooms|NAMES=1|room-hits/lag.mjs
 hits|rooms|NAMES=1|room-hits/hits.mjs
-bhits-crash|rooms|DIRECT=1 MODE=crash|room-hits/bhits.mjs
-bhits-cut|rooms|DIRECT=1 MODE=cut|room-hits/bhits.mjs
+bhits-crash|rooms|DIRECT=1 MODE=crash SECS=40|room-hits/bhits.mjs
+bhits-cut|rooms|DIRECT=1 MODE=cut SECS=40|room-hits/bhits.mjs
 bytes|rooms|NAMES=1|room-bytes/bytes.mjs
 room-pink-20|rooms|NAMES=1 ALONE=1 DELAYS=20:0 VARS=--var\ PINK_WAIT:4\ --var\ PINK_STAY:40|room-pink/pink.mjs
 room-pink-150|rooms|NAMES=1 ALONE=1 DELAYS=150:50 VARS=--var\ PINK_WAIT:4\ --var\ PINK_STAY:40|room-pink/pink.mjs

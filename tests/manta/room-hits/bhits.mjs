@@ -14,9 +14,13 @@ const errs = []; p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
 const name = Array.from({ length: 8 }, () => 'abcdefghjkmnpqrstuvwxyz23456789'[Math.floor(Math.random() * 31)]).join('');
 await p.goto(O + '/lab/manta/play/?room=' + name + '&stage=cut&backend=webgl2&tier=low&fx=off', { waitUntil: 'load' });
 await p.waitForFunction(() => window.__lab && window.__lab.room && window.__lab.room.me && window.__lab.cut, null, { timeout: 30000 }).catch(() => {});
-const r = await p.evaluate(async mode => {
+/* 4C: SECS (default 22) seconds of play; the suite gives it 40, since at
+   1 to 2 frames a second a crash run had only one contact in 22 s once. */
+const SECS = +(process.env.SECS || 22);
+const r = await p.evaluate(async ({ mode, secs }) => {
   const L = window.__lab, S = window.__sim, R = L.room, P = S.params, k = P.trainScale || 1, trig = [], contacts = [];
   const orig = L.cut.trigger.bind(L.cut); L.cut.trigger = at => { trig.push(performance.now()); return orig(at); };
+  const off0 = L.follower ? L.follower.offScreen : 0;
   let was = false;
   const watch = () => { const you = S.you; let touch = false;
     if (you && !(you.dead > 0)) for (const t of S.rivals) { if (!t || t.hole || t.dead > 0) continue;
@@ -27,15 +31,22 @@ const r = await p.evaluate(async mode => {
   let on = true; const loop = () => { if (!on) return; watch(); requestAnimationFrame(loop); }; requestAnimationFrame(loop);
   if (mode === 'cut') { const cv = document.querySelector('canvas'), ev = (type, x, y) => cv.dispatchEvent(new PointerEvent(type, { pointerId: 11, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, bubbles: true, cancelable: true, buttons: type === 'pointerup' ? 0 : 1 }));
     ev('pointerdown', 206, 300); ev('pointerup', 206, 300); await new Promise(r => setTimeout(r, 80)); ev('pointerdown', 206, 300); }
-  await new Promise(r => setTimeout(r, 22000)); on = false;
-  return { trig, contacts, stats: S.hitStats };
-}, MODE).catch(e => ({ error: e.message }));
+  await new Promise(r => setTimeout(r, secs * 1000)); on = false;
+  return { trig, contacts, stats: S.hitStats, off: L.follower ? L.follower.offScreen - off0 : 0 };
+}, { mode: MODE, secs: SECS }).catch(e => ({ error: e.message }));
 if (r.error) ok('ran', false, r.error); else {
   /* Each contact against the first set piece at or after it. */
   const lags = []; for (const c of r.contacts) { const t = r.trig.find(x => x >= c - 30); if (t !== undefined && t - c < 2000) lags.push(Math.max(0, t - c)); }
   const s = r.stats; lags.sort((a, b2) => a - b2);
   ok('the set piece fires on the frame of contact (the page samples after its own frame, so 0 is the same frame)', lags.length >= 2 && lags[Math.floor(0.95 * (lags.length - 1))] <= 17, lags.length + ' contacts, lags ' + JSON.stringify(lags.map(v => Math.round(v))));
-  ok('one set piece per hit: triggers = predicted + those the room played unpredicted', r.trig.length === s.predicted + s.unpredicted, r.trig.length + ' triggers; ' + JSON.stringify(s));
+  /* 4C: an event off screen fires no set piece (follow.js counts those in
+     offScreen), and at 1 to 2 frames a second the camera can be far enough
+     behind your leader for one of yours to land off it: once in 4C's
+     second full suite pass, 10 triggers against 5 predicted and 6
+     unpredicted. So at most predicted + unpredicted, and short of that by
+     no more than the events skipped off screen meanwhile. */
+  const want = s.predicted + s.unpredicted;
+  ok('one set piece per hit: triggers = predicted + those the room played unpredicted (less any skipped off screen)', r.trig.length <= want && r.trig.length >= want - r.off, r.trig.length + ' triggers; ' + JSON.stringify(s) + '; off screen ' + r.off);
   ok('no page errors', errs.length === 0, JSON.stringify(errs.slice(0, 2)));
 }
 await b.close(); clearTimeout(die); process.exit(bad ? 1 : 0);

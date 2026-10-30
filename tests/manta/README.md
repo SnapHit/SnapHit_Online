@@ -152,6 +152,7 @@ times that, so on such a machine:
 - Screenshots of big pages take longer than Playwright's 30 s default: a
   2560x1440 desktop screenshot took 20.7 to 33.0 s, the 300-long train of
   `pictures.mjs` 42 s; those harnesses allow 150 s.
+- `room-hits/bhits.mjs` plays for `SECS` seconds (22 by default; the suite gives it 40, as a crash run had one contact in 22 s once), and its one-set-piece-per-hit check allows for hits of yours that land off screen, which fire nothing (follow.js counts them).
 - `room-names/names.mjs` `PART=clean` reads the board up to ten times, 300 ms apart, until every name whose train is in the top ten is on it: the board is redrawn on its own beat, the trains with every snapshot.
 - `room-play/playmode.mjs` judges the page's prediction on at least 40 corrections (80 until 4C; at 20:0 the page here counted 63 to 94 in 20 s) and waits up to 5 s (2 s until 4C) for the room to say you are bursting (at 300:100 it had not within 2 s once in nine runs).
 - `room-full/full.mjs` (`MODE=back`) judges a first load by the page's own 5 s (note=full rather than note=slow; the page starts its 5 s when the room starts trying), not by the test's clock from the load event, which also counts the page's modules and first frames: 5.8 s once in 4C's first full pass.
