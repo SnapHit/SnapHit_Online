@@ -8,7 +8,7 @@
    rectangles, not whether it looks right. */
 import { chromium } from '../lib/tools.mjs';
 const O = 'http://127.0.0.1:' + process.env.PORT, OUT = process.env.MANTA_OUT || '/tmp';
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 85000);
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 85000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x ? '  [' + x + ']' : '')); };
 const b = await chromium.launch({ executablePath: process.env.CHROME,
   args: ['--enable-unsafe-webgpu', '--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
@@ -30,7 +30,8 @@ for (const [W, H] of SIZES) {
   const ctx = await b.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1, hasTouch: false });
   /* A fresh page for each check: the first visit's page redirects itself
      to solo after 5 s, which would interrupt a later navigation. */
-  const page = async () => { const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
+  /* 4C: a 2560x1440 SwiftShader screenshot took 20.7 to 33.0 s over two runs on a 2-core container (the 30 s limit failed there before 4C too). */
+  const page = async () => { const p = await ctx.newPage(); p.setDefaultTimeout(150000); p.setDefaultNavigationTimeout(30000);
     p.on('console', c => { if (c.type() === 'error') errs.push(W + ': ' + c.text().slice(0, 140)); });
     p.on('pageerror', e => errs.push(W + ' pageerror: ' + e.message.slice(0, 140))); return p; };
   let p = await page();
@@ -42,8 +43,12 @@ for (const [W, H] of SIZES) {
   /* The shot first, while the hint is up: its five seconds run on a real
      clock, and a 2560-wide SwiftShader frame can take seconds. */
   const hintUp = await p.evaluate(() => window.__lab.hint && window.__lab.hint.shown);
-  await p.screenshot({ path: OUT + '/desk-' + W + 'x' + H + '.png' });
-  await p.evaluate(() => { window.__lab.pause(); window.__lab.step(0.6); });   // a frame with the board drawn (it draws every half second of scene time)
+  { const t0 = Date.now(); await p.screenshot({ path: OUT + '/desk-' + W + 'x' + H + '.png' }); console.log('  (screenshot ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s)'); }
+  /* A frame with the board drawn (it draws every half second of scene
+     time), past the first swim's reveal (4A stage 3, added after this
+     harness): body.intro hides the board for its first 1.2 s of scene time,
+     and one step moves the reveal at most 0.25 s, so step in fifths. */
+  await p.evaluate(() => { window.__lab.pause(); for (let i = 0; i < 8; i++) window.__lab.step(0.2); });
   const r = await p.evaluate(rects, IDS);
   const pairs = []; for (let i = 0; i < r.length; i++) for (let j = i + 1; j < r.length; j++) if (overlaps(r[i], r[j])) pairs.push(r[i].id + '/' + r[j].id);
   const inside = r.filter(e => e.x < 0 || e.y < 0 || e.right > W || e.bottom > H).map(e => e.id);
@@ -66,7 +71,7 @@ for (const [W, H] of SIZES) {
   const r2 = await p.evaluate(rects, IDS);
   const np = r2.find(e => e.id === 'namePanel');
   const pairs2 = []; for (let i = 0; i < r2.length; i++) for (let j = i + 1; j < r2.length; j++) if (overlaps(r2[i], r2[j])) pairs2.push(r2[i].id + '/' + r2[j].id);
-  await p.screenshot({ path: OUT + '/desk-' + W + 'x' + H + '-name.png' });
+  { const t0 = Date.now(); await p.screenshot({ path: OUT + '/desk-' + W + 'x' + H + '-name.png' }); console.log('  (screenshot ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s)'); }
   ok(W + 'x' + H + ' first visit: the name panel is centred and overlaps nothing', np && Math.abs((np.x + np.w / 2) - W / 2) < 2 && Math.abs((np.y + np.h / 2) - H / 2) < 40 && pairs2.length === 0, (np ? Math.round(np.w) + 'x' + Math.round(np.h) + ' at ' + Math.round(np.x) + ',' + Math.round(np.y) : 'no panel') + (pairs2.length ? ' overlaps ' + pairs2.join(' ') : ''));
   await p.close(); p = await page();
   }
@@ -75,8 +80,8 @@ for (const [W, H] of SIZES) {
   await p.goto(O + '/lab/manta/?tier=low&backend=webgl2&train=60', { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));
   await ready(p);
   const hintUp3 = await p.evaluate(() => window.__lab.hint && window.__lab.hint.shown);
-  await p.screenshot({ path: OUT + '/desk-' + W + 'x' + H + '-lab.png' });
-  await p.evaluate(() => { window.__lab.pause(); window.__lab.step(0.6); });
+  { const t0 = Date.now(); await p.screenshot({ path: OUT + '/desk-' + W + 'x' + H + '-lab.png' }); console.log('  (screenshot ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s)'); }
+  await p.evaluate(() => { window.__lab.pause(); for (let i = 0; i < 8; i++) window.__lab.step(0.2); });
   const r3 = await p.evaluate(rects, IDS);
   const pairs3 = []; for (let i = 0; i < r3.length; i++) for (let j = i + 1; j < r3.length; j++) if (overlaps(r3[i], r3[j])) pairs3.push(r3[i].id + '/' + r3[j].id);
   ok(W + 'x' + H + ' lab page: chip, board, score and radar on screen, none overlapping; the hint ' + (hintUp3 ? 'up at the shot' : 'had faded by the shot'), ['chip', 'board', 'len', 'radar'].every(id => r3.some(e => e.id === id)) && pairs3.length === 0, r3.map(e => e.id).join(',') + (pairs3.length ? ' overlaps ' + pairs3.join(' ') : ''));
@@ -84,7 +89,8 @@ for (const [W, H] of SIZES) {
   await p.close();
   await ctx.close();
 }
-/* The first visit asks the static server for a room it cannot have: that WebSocket failure is the page going solo, not an error of the page's. */
-const real = errs.filter(e => !/popErrorScope|WebSocket/.test(e));
+/* The first visit asks the static server for a room it cannot have: that WebSocket failure, and python's 501 to the
+   public game's POST (/lab/manta/rooms/public), are the page going solo on a server with no rooms, not errors of the page's. */
+const real = errs.filter(e => !/popErrorScope|WebSocket|status of 501 \(Unsupported method \('POST'\)\)/.test(e));
 ok('no console errors at any size', real.length === 0, JSON.stringify([...new Set(real)]).slice(0, 400));
 clearTimeout(die); await b.close(); process.exit(bad ? 1 : 0);
