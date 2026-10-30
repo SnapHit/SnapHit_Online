@@ -207,7 +207,7 @@ One line each: what it checks, how to run it, roughly how long.
 
 ### Room tests (via `lib/rooms.sh`; each up to 10 min)
 
-- `room-base/roomtest.mjs`: an ocean room with Node clients, and a step's time inside workerd on the room's own ocean (from 4B: 21 trains, radius 2760, 570 wild; under 3 ms). `NAMES=1 DIRECT=1` (its rooms are test names: without `NAMES` four of its checks see no room at all, as they have since 3G's room limits). About 3 min.
+- `room-base/roomtest.mjs`: an ocean room with Node clients, and a step's time inside workerd on the room's own ocean (from 4B: 21 trains, radius 2760, 570 wild; under 3 ms). Its bytes check is the doc's bar from 4C (10.6: median under 10 KB/s per client, 95th percentile under 16); until then it was a tighter 8 KB/s of its own, which a watcher here measured at 6.7 to 8.7 KB/s over five runs. `NAMES=1 DIRECT=1` (its rooms are test names: without `NAMES` four of its checks see no room at all, as they have since 3G's room limits). About 3 min.
 - `room-base/devcheck3b.mjs`: the static site and the rooms through wrangler dev: 404s, the origin rule, the edge echo and the "probe" room's echo (pings paced at one every 40 ms, under the rooms' 30 a second) and "who". `DIRECT=1`. About 40 s.
 - `room-base/watchmode.mjs`: watch mode in the page. `NAMES=1 DIRECT=1` (its room `w1` is a test name; until 4C the README said `DIRECT=1` alone, which gets a 404 since 3G). Pause holds what is drawn and Step moves it on, after a pause of any length up to a minute (4C fixed the Step: roomview.js now keeps the snapshots the held moment needs). About 60 s.
 - `room-play/playtest.mjs`: the play-mode bars (corrections, cuts, bytes, drops, restart) with the phone's own code. `NAMES=1`, `PARTS=corr,cut,bytes,drop,restart`, ideally `ALONE=1`. About 4 min per delay.
@@ -220,7 +220,7 @@ One line each: what it checks, how to run it, roughly how long.
 - `room-feedback/fbcuts.mjs`: the feedback page's "cuts landed" in the staged room. `DIRECT=1`. About 60 s. (4C: it keeps a name on the phone, as since 3J a first visit watches under the name panel and is never seated.)
 - `room-pick/pick.mjs`: pickups through the proxy with the phone's own code. `NAMES=1`. About 90 s.
 - `room-labels/labels.mjs`: labels over leaders. `DIRECT=1`, `PART=solo|room|crash`. About 60 s each.
-- `room-names/names.mjs`: typed names. `DIRECT=1`, `PART=first|clean|change`. About 60 s each. (4C: `PART=change` times the pencil's name socket to socket, from B's WebSocket frame leaving to A's arriving, by the browsers' own frame timestamps; the page's own lag is reported beside it.)
+- `room-names/names.mjs`: typed names. `DIRECT=1`, `PART=first|clean|change`. About 60 s each. (4C: `PART=change` times the pencil's name socket to socket, from B's WebSocket frame leaving to A's arriving, by the browsers' own frame timestamps, and passes when at most one binary snapshot reached A in between, which is the doc's "within one snapshot": the milliseconds swung from 21 to 227 over six runs here, as two SwiftShader pages starve the room's ticks, so they are reported, not judged. The page's own lag is reported beside them.)
 - `room-names/inplace.mjs`: the first visit plays in place. `DELAYS=20:0`. About 60 s.
 - `room-hits/lag.mjs`: the hit lag broken into its parts. `NAMES=1`. About 90 s.
 - `room-hits/hits.mjs`: your own hits at once. `NAMES=1`. About 90 s.

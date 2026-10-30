@@ -71,7 +71,11 @@ const close = c => { try { c.ws.close(1000, 'bye'); } catch (_) {} };
   const per = []; for (let k = 0; k < 30; k++) { const a = t0 + k * 1000; per.push(c.bytes.filter(([t]) => t >= a && t < a + 1000).reduce((s, [, b]) => s + b, 0)); }
   per.sort((a, b) => a - b);
   const med = (per[14] + per[15]) / 2, p95 = per[Math.ceil(0.95 * per.length) - 1];
-  ok('bytes per second per client at the defaults: median under 8 KB/s', med < 8192, 'median ' + (med / 1024).toFixed(2) + ' KB/s, p95 ' + (p95 / 1024).toFixed(2) + ' KB/s, worst ' + (per[29] / 1024).toFixed(2) + ' KB/s over 30 s');
+  /* The design doc's bar (10.6): a median under 10 KB/s and the 95th
+     percentile under 16. Until 4C this said a median under 8, stricter than
+     the doc and from before 4B's rooms of 21 trains: five runs of this one
+     watcher (no player record, so no rank byte) measured 6.71 to 8.71 KB/s. */
+  ok('bytes per second per client at the defaults: median under 10 KB/s, 95th percentile under 16 (design doc 10.6)', med < 10240 && p95 < 16384, 'median ' + (med / 1024).toFixed(2) + ' KB/s, p95 ' + (p95 / 1024).toFixed(2) + ' KB/s, worst ' + (per[29] / 1024).toFixed(2) + ' KB/s over 30 s');
   close(c); }
 
 /* 4. A client on a different build is told to reload. */
