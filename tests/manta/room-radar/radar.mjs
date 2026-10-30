@@ -65,14 +65,24 @@ const r4 = await p.evaluate(async () => { const S = window.__sim, R = window.__r
   const ms = []; for (let k = 0; k < 40; k++) { await new Promise(r => requestAnimationFrame(r)); ms.push(R.ui.ms); }
   ms.sort((a, c) => a - c);
   const trains = [...R.model.trains.values()].filter(t => t.alive).length, mine = R.model.trains.get(you.id), lenAtCost = you.followers.length, ptsAtCost = mine ? mine.path.length / 2 : 0;
+  /* 4C: the expected counts are read with the drawn ones. Until 4C the train
+     count for range 0 was read at the very end, after the cut and another
+     0.9 s, and a bot that crashed in between (10 drawn against 9 expected,
+     4C's fifth full pass) failed it. Now a count is taken only when the
+     trains alive (and, at 800, the trains within range) were the same just
+     before and just after a radar draw, up to five tries. */
+  const aliveN = () => S.rivals.filter(t => !(t.dead > 0)).length;
+  const withinN = () => S.rivals.filter(t => !(t.dead > 0) && (t.followers.length >= you.followers.length || Math.hypot(t.x - you.x, t.z - you.z) <= 800)).length;
+  const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const steady = async f => { let got = null; for (let k = 0; k < 5; k++) { const a = f(); await frame(); const d = R.last.drawn, b = f(); got = { d, n: b }; if (a === b) break; } return got; };
   P.radarRange = 800; await wait(900); const last800 = JSON.parse(JSON.stringify(R.last)), pr800 = P.radarRange;
-  const within = S.rivals.filter(t => !(t.dead > 0) && (t.followers.length >= you.followers.length || Math.hypot(t.x - you.x, t.z - you.z) <= 800)).length;
-  const drawn800 = R.last.drawn; P.radarRange = 0; await wait(900); const drawn0 = R.last.drawn;
+  const s800 = await steady(withinN), within = s800.n, drawn800 = s800.d;
+  P.radarRange = 0; await wait(900); const s0 = await steady(aliveN), drawn0 = s0.d, alive = s0.n;
   /* A cut of your own long train: its line shortens to the new length. */
   const m0 = R.model.trains.get(you.id), ptsBefore = m0.path.length / 2, lenBefore = you.followers.length; S.cutAt(you, 250, null); await wait(900);
   const m1 = R.model.trains.get(you.id); let u = 0; for (let i = 2; i < m1.path.length; i += 2) u += Math.hypot(m1.path[i] - m1.path[i - 2], m1.path[i + 1] - m1.path[i - 1]);
   const cut = { lenBefore, lenAfter: you.followers.length, ptsBefore, ptsAfter: m1.path.length / 2, pathUnits: Math.round(u), spacing: S.params.spacing };
-  return { cut, last800, pr800, lenAtCost, ptsAtCost, msMed: ms[20], msMax: ms[39], trains, minePts: mine ? mine.path.length / 2 : 0, len: you.followers.length, within, drawn800, drawn0, alive: S.rivals.filter(t => !(t.dead > 0)).length }; });
+  return { cut, last800, pr800, lenAtCost, ptsAtCost, msMed: ms[20], msMax: ms[39], trains, minePts: mine ? mine.path.length / 2 : 0, len: you.followers.length, within, drawn800, drawn0, alive }; });
 console.log('COST ' + JSON.stringify(r4));
 ok('cost per frame with ' + r4.trains + ' trains, yours ' + r4.lenAtCost + ' long (' + r4.ptsAtCost + ' path points): median under 1 ms', r4.lenAtCost >= 500 && r4.trains >= 10 && r4.msMed < 1, 'median ' + r4.msMed.toFixed(3) + ' ms, max ' + r4.msMax.toFixed(3) + ' ms');
 ok('range 800 hides trains shorter than yours beyond 800 units and shows the rest; 0 shows every train', r4.drawn800 === r4.within + 1 && r4.drawn0 === r4.alive + 1, 'at 800: drawn ' + r4.drawn800 + ' (expected ' + (r4.within + 1) + '); at 0: ' + r4.drawn0 + ' (expected ' + (r4.alive + 1) + ')');
