@@ -41,6 +41,20 @@ export function createLab ({ scene, camera, forceWebGL, hooks }) {
     performance.mark('manta:' + tag + '-start');
     await r.init();
     performance.mark('manta:' + tag + '-end');
+    /* A WEBGPU DEVICE LOST in the opening frames (4C) is the page failing
+       in its first frames, the case the fallback exists for (design doc
+       5.5): three would only report it and draw nothing from then on, a
+       black page. Rebuilt on WebGL2 like a first draw that throws. Seen in
+       headless Chrome 153 under load in a portal's iframe: "A valid
+       external Instance reference no longer exists". After probation it is
+       reported as before. */
+    r.onDeviceLost = info => {
+      if (r === renderer && !forceWebGL && !fellBack && r.backend.isWebGPUBackend === true && goodFrames < PROBATION) {
+        fallBack('The WebGPU device was lost in the first frames.', new Error((info && info.message) || 'device lost'));
+        return;
+      }
+      r._onDeviceLost(info);
+    };
     return r;
   }
 
