@@ -47,8 +47,12 @@ export function createBrain (ctx) {
       if (keen && Math.hypot(pk.x, pk.z) <= reefLine(t) + 100) { t.goalX = pk.x; t.goalZ = pk.z; t.goalKind = 'pink'; t.goalAt = d; return; }
     }
     let best = null, bd = reach;
+    /* Food in a guarded leader's water is its own (4D): not a goal. */
+    let keep = null;
+    if (p.firstRoom > 0) for (const o of ctx.trains) if (o.guarded && o !== t && !(o.dead > 0)) (keep || (keep = [])).push(o);
     for (const w of ctx.wild) {
       if (!w || !w.alive || w.sinking > 0) continue;
+      if (keep && keep.some(o => Math.hypot(w.x - o.x, w.z - o.z) < p.firstRoom)) continue;
       /* NEVER PAST ITS OWN REEF LINE (ruling 6): food beyond where this bot
          turns back from the reef is food it will circle and never reach. */
       if (Math.hypot(w.x, w.z) > reefLine(t)) continue;
@@ -71,18 +75,21 @@ export function createBrain (ctx) {
   }
 
   /* The nearest part of somebody else's train that is AHEAD of this bot. */
+  /* A PROTECTED FIRST RUN (4D, sim.js protect): a guarded train is seen
+     from firstBerth times as far, given way to from as far, and never cut. */
+  const berthOf = (o, look) => o.guarded ? look * (p.firstBerth || 1) : look;
   function crossingAhead (t) {
     const look = lookOf(t);
     const fx = -Math.sin(t.head), fz = -Math.cos(t.head);
-    let hit = null, hd = look;
+    let hit = null, hd = Infinity;
     for (const o of ctx.trains) {
       if (o === t || o.dead > 0) continue;
-      const parts = [o, ...o.followers];
+      const parts = [o, ...o.followers], lim = berthOf(o, look);
       for (let i = 0; i < parts.length; i++) {
         const q = parts[i];
         const dx = q.x - t.x, dz = q.z - t.z;
         const d = Math.hypot(dx, dz) || 1e-6;
-        if (d > look) continue;
+        if (d >= lim) continue;
         if ((dx * fx + dz * fz) / d < 0.3) continue;      // behind or beside
         if (d < hd) { hd = d; hit = { q, o, d, dx, dz, index: i }; }
       }
@@ -117,8 +124,10 @@ export function createBrain (ctx) {
     let burst = false;
     if (hit) {
       /* Cut it, if this bot is the sort that would and has a follower to
-         pay with. 6.3: bursting into a train cuts it where it touches. */
-      burst = t.aggression > 0.5 && t.followers.length > 0 && hit.d < look * 0.75;
+         pay with. 6.3: bursting into a train cuts it where it touches.
+         Never a guarded one (4D): it goes round instead, from further. */
+      const lk = berthOf(hit.o, look);
+      burst = !hit.o.guarded && t.aggression > 0.5 && t.followers.length > 0 && hit.d < look * 0.75;
       if (!burst) {
         /* GO ROUND THE WAY THAT CLEARS IT (ruling 5 of 2B part four). This
            pushed towards whichever side the goal was on, so a bot drove into
@@ -133,7 +142,7 @@ export function createBrain (ctx) {
         let lo = Infinity, hi = -Infinity;
         for (const q of [hit.o, ...hit.o.followers]) {
           const dx = q.x - t.x, dz = q.z - t.z, d = Math.hypot(dx, dz);
-          if (d > look * 1.6) continue;
+          if (d > lk * 1.6) continue;
           const ang = Math.atan2(fx * dz - fz * dx, fx * dx + fz * dz);   // signed bearing
           const w = Math.asin(Math.min(1, body / Math.max(d, body)));
           if (ang - w < lo) lo = ang - w;
@@ -141,7 +150,7 @@ export function createBrain (ctx) {
         }
         const clear = Math.abs(hi) <= Math.abs(lo) ? hi + 0.15 : lo - 0.15;
         const c = Math.cos(clear), sn = Math.sin(clear);
-        const k = (0.4 + t.caution * 2.6) * (1 - hit.d / look);
+        const k = (0.4 + t.caution * 2.6) * (1 - hit.d / lk);
         gx += (fx * c - fz * sn) * k * 2;
         gz += (fz * c + fx * sn) * k * 2;
       }
@@ -154,19 +163,30 @@ export function createBrain (ctx) {
        a bot bursting at it is cutting, and keeps coming. */
     if (!burst) {
       const fx = -Math.sin(t.head), fz = -Math.cos(t.head);
-      let near = null, nd = look;
+      let near = null, nd = Infinity;
       for (const o of ctx.trains) {
         if (o === t || o.dead > 0) continue;
-        const dx = o.x - t.x, dz = o.z - t.z, d = Math.hypot(dx, dz);
-        if (d >= nd || (dx * fx + dz * fz) / (d || 1) < -0.2) continue;
-        nd = d; near = { dx, dz, d };
+        const dx = o.x - t.x, dz = o.z - t.z, d = Math.hypot(dx, dz), lim = berthOf(o, look);
+        if (d >= lim || d >= nd || (dx * fx + dz * fz) / (d || 1) < -0.2) continue;
+        nd = d; near = { dx, dz, d, lim };
       }
       if (near) {
         const side = (fx * near.dz - fz * near.dx) >= 0 ? -1 : 1;   // away from its side
-        const k = (0.8 + t.caution * 3.0) * (1 - near.d / look);
+        const k = (0.8 + t.caution * 3.0) * (1 - near.d / near.lim);
         gx += -fz * side * k * 2;
         gz += fx * side * k * 2;
       }
+    }
+
+    /* ROOM FOR A PROTECTED FIRST RUN (4D): every bot within firstRoom of a
+       guarded leader steers away from it, harder the nearer, so no bot's
+       body lies across a new player's water while the guard lasts. */
+    if (p.firstRoom > 0) for (const o of ctx.trains) {
+      if (!o.guarded || o === t || o.dead > 0) continue;
+      const dx = t.x - o.x, dz = t.z - o.z, d = Math.hypot(dx, dz) || 1e-6;
+      if (d >= p.firstRoom) continue;
+      const k = (1 - d / p.firstRoom) * 3;
+      gx += dx / d * k; gz += dz / d * k;
     }
 
     /* THE WHALE SHARK (4A stage 5, 7.1): steer clear of its body and the

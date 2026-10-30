@@ -35,6 +35,23 @@ export const DEF = {
      are gone with it — there is no longer a you to daze. */
   deathBeat: 1.5,       // seconds before you are swimming again
   restartMin: 800,      // units from the crash, and clear of every train
+  /* THE PROTECTED FIRST RUN (4D, design doc 10.8), every (P) value, used
+     only on a train sim.protect() has been called for: a player's first
+     run of a visit, in solo, in a room and in the portal package. It starts
+     firstNear units from the middle of a group of at least three wild
+     mantas, facing it, with no other train within firstClear. Then, for
+     firstFor seconds or until it is firstLen long, it is guarded: bots
+     never cut it, see it from firstBerth times as far, give it a berth of
+     firstRoom units and take no food inside that berth (bots.js). At
+     crossAt seconds a bot's short train of crossLen, brought in from out of
+     sight, crosses crossAhead units in front of it, swimming straight for
+     up to crossFor seconds. Tuned in Node (the harness firstrun.mjs): the
+     doc's 30 s and length 15 ended the guard after about 8 s (length 15
+     comes that fast in a full ocean) and left 20 to 28 percent of first
+     runs past a minute; a berth of 650 for 60 s gave 78, 900 for 45 s 68,
+     and 900 for 60 s 90 (60 runs each). */
+  firstNear: 70, firstClear: 600, firstFor: 60, firstLen: 100, firstBerth: 3, firstRoom: 900,
+  crossAt: 30, crossLen: 8, crossAhead: 300, crossFrom: 700, crossFor: 7,
   wildCount: 120,      // v1.10: 300 with instant respawn never ran dry
   regrow: 5,           // the refill time (3C/3D): each missing manta back within it on average
   drain: 3,            // seconds a surplus manta takes to fade out

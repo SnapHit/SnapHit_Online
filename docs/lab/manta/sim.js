@@ -452,7 +452,90 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     t.s = 0; t.followers.length = 0; t.bursting = false; t.burstOwed = 0;
     t.lastPeak = t.peak; t.peak = 0; t.runs++;
     t.dead = 0; t.crashed = 0; t.cut = 0; t.rebuild = 10;
+    t.guard = null; t.guarded = false; t.first = null; t.crossing = null;
     seedTrail(t);
+  }
+
+  /* THE PROTECTED FIRST RUN (4D, design doc 10.8). Train t starts a new
+     run beside a group of at least three wild mantas, firstNear units from
+     its middle and facing it, with no other train within firstClear (the
+     group most clear of trains if none is); its followers, if any (a room's
+     seat taken from a bot), go into the water first, and nothing records a
+     crash. Then it is guarded (bots.js) and, at crossAt, crossed. Only ever
+     called for a player's first run of a visit: every other run, and every
+     suite, draws exactly the random numbers it did before. */
+  function protect (t) {
+    if (t.followers.length) scatter(t, 0);
+    const count = new Map(), sumX = new Map(), sumZ = new Map();
+    for (const m of wild) {
+      if (!m || !m.alive || m.loose || m.sinking > 0 || m.group === undefined) continue;
+      count.set(m.group, (count.get(m.group) || 0) + 1);
+      sumX.set(m.group, (sumX.get(m.group) || 0) + m.x); sumZ.set(m.group, (sumZ.get(m.group) || 0) + m.z);
+    }
+    const spots = [];
+    for (const [g, c] of count) {
+      if (c < 3) continue;
+      const x = sumX.get(g) / c, z = sumZ.get(g) / c;
+      if (Math.hypot(x, z) > p.arenaR - 450) continue;
+      let clear = Infinity;
+      for (const o of trains) {
+        if (o === t || o.dead > 0) continue;
+        for (const q of [o, ...o.followers]) clear = Math.min(clear, Math.hypot(q.x - x, q.z - z));
+      }
+      spots.push({ x, z, clear });
+    }
+    const open = spots.filter(q => q.clear >= p.firstClear);
+    let at = null;
+    if (open.length) at = open[Math.floor(next() * open.length)];
+    else for (const q of spots) if (!at || q.clear > at.clear) at = q;
+    if (!at) { t.crashX = t.x; t.crashZ = t.z; restart(t); }
+    else {
+      const a = next() * TAU;
+      t.x = at.x + Math.cos(a) * p.firstNear; t.z = at.z + Math.sin(a) * p.firstNear;
+      t.head = Math.atan2(-(at.x - t.x), -(at.z - t.z));     // facing the group: forward is (-sin, -cos)
+      t.s = 0; t.followers.length = 0; t.bursting = false; t.burstOwed = 0;
+      t.lastPeak = t.peak; t.peak = 0; t.runs++;
+      t.dead = 0; t.crashed = 0; t.cut = 0; t.rebuild = 10; t.crossing = null;
+      seedTrail(t);
+    }
+    t.guard = { at: time }; t.guarded = true;
+    t.first = { at: time, crossed: false, crosser: null };
+    return { x: t.x, z: t.z };
+  }
+  /* The crossing (4D): a bot nobody drives, out of sight (more than 900
+     units from t, and, in a room, outside every phone's view: sim.hidden),
+     shortest first, is brought in as a new run of crossLen on a straight
+     course across t's bow, crossAhead in front of it, starting crossFrom to
+     one side. Its old followers go into the water where it was. */
+  let hidden = null;
+  function bringCrosser (t) {
+    const fx = -Math.sin(t.head), fz = -Math.cos(t.head);
+    const cx = t.x + fx * p.crossAhead, cz = t.z + fz * p.crossAhead;
+    if (Math.hypot(cx, cz) > p.arenaR - 350) return null;
+    const first = next() < 0.5 ? 1 : -1;
+    for (const sg of [first, -first]) {
+      const sx = cx + fz * sg * p.crossFrom, sz = cz - fx * sg * p.crossFrom;
+      if (Math.hypot(sx, sz) > p.arenaR - 350 || (hidden && !hidden(sx, sz))) continue;
+      let o = null;
+      for (const r of rivals) {
+        if (r === t || r.human || r.dead > 0 || r.guard || r.first || r.crossing) continue;
+        if (Math.hypot(r.x - t.x, r.z - t.z) < 900 || (hidden && !hidden(r.x, r.z))) continue;
+        if (!o || r.followers.length < o.followers.length) o = r;
+      }
+      if (!o) return null;
+      if (o.followers.length) scatter(o, 0);
+      const head = Math.atan2(-(cx - sx), -(cz - sz));
+      o.x = sx; o.z = sz; o.head = head; o.s = 0; o.bursting = false; o.burstOwed = 0;
+      o.lastPeak = o.peak; o.peak = p.crossLen; o.runs++; o.rebuild = 10;
+      o.trail.length = 0;
+      for (let d = (p.crossLen + 40) * p.spacing; d >= 0; d -= p.spacing / 4)
+        o.trail.push({ x: sx + Math.sin(head) * d, z: sz + Math.cos(head) * d, h: head, s: o.s - d });
+      for (let i = 0; i < p.crossLen; i++) o.followers.push({ x: sx, z: sz, head, born: time, from: -1 });
+      placeFollowers(o);
+      o.crossing = { until: time + p.crossFor, head };
+      return o.id;
+    }
+    return null;
   }
 
   /* The living count, the drain and regrowth live in population.js. */
@@ -498,6 +581,17 @@ export function createSim ({ seed = 1, params = {} } = {}) {
       t.dead -= dt;
       if (t.dead <= 0) restart(t);
     }
+    /* THE PROTECTED FIRST RUN (4D): a guard lasts firstFor seconds of its
+       run or until the train is firstLen long, and never comes back. Bots
+       read t.guarded (bots.js). */
+    for (const t of trains) if (t.guard) {
+      if (t.dead > 0 || time - t.guard.at >= p.firstFor || t.followers.length >= p.firstLen) { t.guard = null; t.guarded = false; }
+      else t.guarded = true;
+    }
+    for (const t of trains) if (t.first && !t.first.crossed && time - t.first.at >= p.crossAt) {
+      t.first.crossed = true;
+      if (!(t.dead > 0)) t.first.crosser = bringCrosser(t);
+    }
     you.bursting = !you.dead && input.burst && you.followers.length > 0;
     payForBurst(you, dt);
     if (!you.dead) stepTrain(you, input.want, dt);
@@ -509,6 +603,12 @@ export function createSim ({ seed = 1, params = {} } = {}) {
          think for it; otherwise it is stepped exactly like a bot's. null
          (never set, in solo) and the brain drives, which is also how a bot
          holds a dropped player's train. */
+      /* The first run's crossing train (4D) swims straight across. */
+      if (t.crossing) {
+        if (time >= t.crossing.until || Math.hypot(t.x, t.z) > p.arenaR - 380) t.crossing = null;
+        else { t.want = t.crossing.head; t.bursting = false; payForBurst(t, dt); stepTrain(t, t.want, dt);
+               if (t.followers.length > t.peak) t.peak = t.followers.length; continue; }
+      }
       if (t.human) {
         t.want = t.human.want;
         t.bursting = !!t.human.burst && t.followers.length > 0;
@@ -574,6 +674,9 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     pink: pinkRun.m,
     shark: sharkRun.m, sharkDist: sharkRun.spineDist, sharkTail: sharkRun.tail,
     scatter, crash, cutAt, makeTrain, seedTrail, restart, events, newOcean,
+    /* The protected first run (4D): protect(train), and for a room the test
+       of whether a point is out of every phone's sight. */
+    protect, set hidden (f) { hidden = f; },
     /* For tests: where a train stood `back` steps ago (null without p.history). */
     pastOf,
     get length () { return you.followers.length; },
