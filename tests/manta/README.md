@@ -152,6 +152,7 @@ times that, so on such a machine:
 - Screenshots of big pages take longer than Playwright's 30 s default: a
   2560x1440 desktop screenshot took 20.7 to 33.0 s, the 300-long train of
   `pictures.mjs` 42 s; those harnesses allow 150 s.
+- `browser/s1.mjs`'s "animating" check waits for two drawn frames as well as 700 ms between its two shots: at 1 to 2 frames a second two shots could catch the same frame (landscape, once, in 4C's first full pass).
 
 **`__lab.step` and the post pipeline** (4C). Three renders the post
 pipeline's scene pass and bloom once per animation frame (its node frame),

@@ -65,9 +65,14 @@ for (const [label,vp] of [['portrait 412x915',{width:412,height:915}],['landscap
   ok('off-origin zero', rec.off.length===0, JSON.stringify(rec.off));
   ok('no horizontal overflow', s.overflow<=0, String(s.overflow));
   ok('canvas fills viewport', s.css[0]===vp.width&&s.css[1]===vp.height, s.css.join('x'));
+  /* 4C: and at least two drawn frames apart. At 1 to 2 frames a second
+     (a 2-core container under SwiftShader) two shots 700 ms apart could
+     catch the same frame: the landscape pass failed so once in 4C's
+     first full suite pass. */
   const a=await p.locator('#gl').screenshot(); await p.waitForTimeout(700);
+  await p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r()))));
   const c2=await p.locator('#gl').screenshot();
-  ok('animating (two shots 700ms apart differ)', Buffer.compare(a,c2)!==0);
+  ok('animating (two shots 700ms and two drawn frames apart differ)', Buffer.compare(a,c2)!==0);
   // expand
   await p.click('#chip'); await p.waitForTimeout(350);
   s=await state(p);
