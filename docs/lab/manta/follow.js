@@ -15,9 +15,6 @@ import { PINK_SLOT } from './mantas.js';
 export function createFollow (ctx) {
   const { mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS, PARKED,
           camera, zoomFor, setZoom, applyView, uCam, cut } = ctx;
-  /* THE NEW LOOK (4A stage 3) is gated here and nowhere else in this file;
-     ?look=classic is the end of stage 1. */
-  const NEW = ctx.look !== 'classic';
   /* THE CUT'S KICK AND SLASH (4A stage 3, change 1). On your own cut on
      screen the camera and the ocean's view centre kick 9 units along your
      heading and spring back, critically damped (no overshoot) with a time
@@ -46,7 +43,7 @@ export function createFollow (ctx) {
      motion trigger), the deposit kept. */
   const POP_BY = 0.30, POP_HOLD = 0.12, POP_FOR = 0.40, BOOST_FOR = 0.2, BOOST_BY = 2;
   let lastRecruitAt = -1;
-  const popAt = age => (!NEW || (cut && cut.reduced) || age < 0 || age >= POP_FOR) ? 1
+  const popAt = age => ((cut && cut.reduced) || age < 0 || age >= POP_FOR) ? 1
     : 1 + POP_BY * (age <= POP_HOLD ? 1 : Math.pow(1 - (age - POP_HOLD) / (POP_FOR - POP_HOLD), 2));
   let vigBase = null, vigNow = null, beatT = 0, countFrom = 0, countTo = 0, aliveLen = 0;
   const realNow = () => performance.now();
@@ -119,7 +116,7 @@ export function createFollow (ctx) {
      waits for it (body.intro, the pages' CSS), so the first frame has one
      focal point. A one-off camera move on top of the zoom curve, which is
      untouched, and only on the first frame: a restart starts at the
-     curve. Reduced flash and motion: no move. ?look=classic: none. */
+     curve. Reduced flash and motion: no move. */
   const INTRO_BY = 0.25, INTRO_FOR = 1.2;
   let introMix = 1, introOn = false;
 
@@ -245,7 +242,7 @@ export function createFollow (ctx) {
     /* On the scene clock, like everything drawn: a zero-second step moves
        nothing, and the tests drive it with the injectable clock. */
     const edt = Math.max(0, Math.min(0.25, dt));
-    if (zoomNow === null && ctx.look !== 'classic' && !(cut && cut.reduced) && !watching) { introMix = 0; introOn = true; document.body.classList.add('intro'); }
+    if (zoomNow === null && !(cut && cut.reduced) && !watching) { introMix = 0; introOn = true; document.body.classList.add('intro'); }
     if (zoomNow === null || restarted) zoomNow = target;
     else {
       const tau = Math.max(0.05, (ZP.zoomEase || 1) * (target < zoomNow ? 1 : 2));
@@ -290,7 +287,7 @@ export function createFollow (ctx) {
       if (src >= 0) m.adoptOwn(i + 1, WILD_BASE + src);
       m.setCutMix(i + 1, 1);
       fading.set(i + 1, RECRUIT_FADE);
-      if (NEW && !dying) lastRecruitAt = ctx.sim.time;
+      if (!dying) lastRecruitAt = ctx.sim.time;
     }
     for (const [slot, left] of fading) {
       const t = left - dt;
@@ -473,16 +470,15 @@ export function createFollow (ctx) {
         if (e.kind === 'shark') continue;   // seen, not announced
         cut.trigger({ x: e.x, z: e.z });
         if (e.kind === 'crash' && e.id === you.id) shake = 0.25;
-        if (NEW && e.kind === 'cut') {
+        if (e.kind === 'cut') {
           const cutter = e.by === you.id ? you : (ctx.sim.trains.find(t => t.id === e.by) || null);
           if (cutter) startSlash(e, cutter, dressOf.has(e.by) ? dressOf.get(e.by) : -1);
           if (cutter === you && !(cut && cut.reduced)) { kickAt = realNow(); kickX = -Math.sin(you.head) * KICK; kickZ = -Math.cos(you.head) * KICK; }
         }
       }
     }
-    if (NEW) {
-      drawSlash();
-      const a = kickNow();
+    drawSlash();
+    { const a = kickNow();
       if (a > 0) {
         camera.position.x += kickX * a; camera.position.z += kickZ * a;
         uCam.value.x += kickX * a; uCam.value.y += kickZ * a;
@@ -512,19 +508,19 @@ export function createFollow (ctx) {
     if (card) {
       if (dying && !beatShown) {
         beatShown = true; beatT = 0;
-        countTo = Math.max(you.peak, you.lastPeak); countFrom = NEW ? Math.min(countTo, aliveLen) : countTo;
+        countTo = Math.max(you.peak, you.lastPeak); countFrom = Math.min(countTo, aliveLen);
         card.textContent = String(countFrom);
         card.className = 'on';
       } else if (!dying && beatShown) { beatShown = false; card.className = ''; }
       if (!dying) aliveLen = you.followers.length;   // the length the crash took, for the count-up
-      if (NEW && beatShown) {
+      if (beatShown) {
         beatT += Math.max(0, dt);
         const n = countFrom + Math.round((countTo - countFrom) * Math.min(1, beatT / COUNT_FOR));
         if (String(n) !== card.textContent) card.textContent = String(n);
       }
     }
     /* The vignette through the beat (post.js owns the uniform; ctx.post is read at call time). */
-    if (NEW && ctx.post) {
+    if (ctx.post) {
       const P0 = ctx.post;
       if (vigBase === null) { vigBase = P0.vignette; vigNow = vigBase; }
       if (!dying && !beatShown && vigNow === vigBase && vigBase !== P0.vignette) { vigBase = P0.vignette; vigNow = vigBase; }   // ?vig= or a later setting moved it
@@ -538,10 +534,10 @@ export function createFollow (ctx) {
 
   return { followCamera, get peak () { return peakLength; }, get offScreen () { return offScreen; }, get zoom () { return zoomNow; },
            get zoomDrawn () { return zoomDrawn; }, get burstMix () { return burstMix; },
-           get kick () { return kickNow(); }, get slashing () { return slashOn; }, get look () { return NEW ? 'new' : 'classic'; },
+           get kick () { return kickNow(); }, get slashing () { return slashOn; },
            get vignette () { return vigNow; }, get card () { return { from: countFrom, to: countTo, t: beatT }; },
            get introMix () { return introMix; },
-           get recruitBoost () { return NEW && lastRecruitAt >= 0 && ctx.sim.time - lastRecruitAt < BOOST_FOR ? BOOST_BY : 1; }, popAt,
+           get recruitBoost () { return lastRecruitAt >= 0 && ctx.sim.time - lastRecruitAt < BOOST_FOR ? BOOST_BY : 1; }, popAt,
            /* THE VIEW THE ROOM IS TOLD is the base one, without the burst's
               widening: roomcore's MARGIN (400 units beyond the view) covers
               the extra 12% with room to spare (at the far zoom on a phone

@@ -55,11 +55,8 @@ const query = new URLSearchParams(typeof window.MANTA_QUERY === 'string' ? windo
    scene on a real phone rather than guessed at. */
 export const FX = query.get('fx') !== 'off';
 const TONE = query.get('tone') || 'neutral';
-/* THE LOOK (4A stage 3). ?look=classic is the look as it was at the end of
-   stage 1, pixel for pixel at a fixed seed and step (browser/classic.mjs
-   proves it); the new look is the default. Everything the art pass adds is
-   gated on this and nothing else, so the switch is one line per effect. */
-export const LOOK = query.get('look') === 'classic' ? 'classic' : 'new';
+/* THE LOOK (4A stage 3) is the only look: ?look=classic, the look as it
+   was at the end of stage 1, was removed in 4C with the code only it used. */
 /* ?tier=high|medium|low pins the tier so each one can be looked at and
    measured on demand instead of waiting for a device slow enough to pick it. */
 const FORCED_TIER = query.get('tier');
@@ -106,8 +103,7 @@ panel.probeAdapter();
 const STAMP_SLOTS = 24;
 const BURST_SLOT = STAMP_SLOTS;
 /* One more past the burst, for the cut's slash (4A stage 3). A slot that
-   deposits nothing adds exactly zero, which is what the classic proof
-   measures. */
+   deposits nothing adds exactly zero. */
 const SLASH_SLOT = STAMP_SLOTS + 1;
 /* And one for the whale shark's wake (4A stage 5), the plankton it disturbs. */
 const SHARK_SLOT = STAMP_SLOTS + 2;
@@ -260,7 +256,7 @@ const stamper = createStamper({ mantas, COUNT, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN,
                                 get sim () { return sim; },
                                 spillSlotOf: g => follower.spillSlotOf(g),   // follower: below, read at run time
                                 recruitBoost: () => follower ? follower.recruitBoost : 1,
-                                burstHot: () => LOOK !== 'classic' && !!sim && sim.you.bursting === true });
+                                burstHot: () => !!sim && sim.you.bursting === true });
 const stampMantas = dt => stamper.stampMantas(dt);
 window.__lab.stamper = stamper;                // which slots lay wakes, for the checks
 
@@ -304,7 +300,7 @@ function applyView (v) {
 
 /* The camera and every instance live in follow.js. */
 follower = createFollow({ mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS,
-                                PARKED, camera, zoomFor, setZoom, applyView, uCam, cut, look: LOOK, slashSlot: SLASH_SLOT,
+                                PARKED, camera, zoomFor, setZoom, applyView, uCam, cut, slashSlot: SLASH_SLOT,
                                 sharkSlot: SHARK_SLOT, sharkMesh: createSharkMesh(scene),
                                 get view () { return view; }, get sim () { return sim; }, get P () { return P; },
                                 get lm () { return lm; }, get lmSlow () { return lmSlow; }, get post () { return post; },
@@ -313,7 +309,6 @@ const followCamera = dt => follower.followCamera(dt);
 window.__lab.zoom = () => follower.zoom;   // the eased camera zoom (3L), for the tests
 window.__lab.zoomDrawn = () => follower.zoomDrawn;   // with the burst zoom (4A) applied
 window.__lab.roomView = roomView;                // the view the room is told (4A tests)
-window.__lab.look = LOOK;
 window.__lab.view = view;                   // the live view in world units, what the room is told (4A tests)
 window.__lab.follower = follower;              // events skipped off screen, for the checks
 

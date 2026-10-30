@@ -1,7 +1,7 @@
-/* 4A stage 6: the before-and-after pictures. Each pair is the same seed and
-   the same staged moment at 412x915 on WebGL2 at the high tier, the classic
-   look (?look=classic, the end of stage 1) on the left and the new look on
-   the right, composed into one image; then three singles of the new look.
+/* 4A stage 6: the pictures. Each is a seed and a staged moment at 412x915
+   on WebGL2 at the high tier, in the game's look. Until 4C the first six
+   were pairs against ?look=classic (the end of stage 1), which 4C removed
+   with the code only it used; every scene is now a single.
    Pictures, not checks: the only assertion is that every page loaded and
    drew without console errors. SCENES (comma list) picks from first,
    firstswim, cut, crash, giant, radar, pinkflash, catch, sharkcut; default
@@ -18,7 +18,7 @@ const errs = [];
 /* A fresh context each time: a first visit, nothing stored. */
 async function open (q) {
   const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
-  const p = await ctx.newPage(); p.setDefaultTimeout(40000); p.setDefaultNavigationTimeout(40000);
+  const p = await ctx.newPage(); p.setDefaultTimeout(150000); p.setDefaultNavigationTimeout(40000);   // 4C: a 300-long train's screenshot at the high tier took 42 s on a 2-core container under SwiftShader (the 40 s limit failed before 4C too)
   p.on('console', c => { if (c.type() === 'error' && !/popErrorScope/.test(c.text())) errs.push(c.text().slice(0, 140)); });
   p.on('pageerror', e => errs.push('pageerror: ' + e.message.slice(0, 140)));
   await p.goto(O + '/lab/manta/?seed=7&paused=1&tier=high&backend=webgl2&' + q, { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));
@@ -62,10 +62,10 @@ const STAGE = {
     sh.x = px + sx * 40; sh.z = pz + sz * 40; sh.turn = 0;
     for (let k = 0; k < 30; k++) { L.step(1 / 60); if (S.you.dead > 0 || S.shark.cuts > 0) break; } for (let i = 0; i < 8; i++) L.step(1 / 60); }); },
 };
-const PAIRS = { first: 'train=0', firstswim: 'train=0', cut: 'train=30&hint=0', crash: 'train=30&hint=0', giant: 'train=300&hint=0', radar: 'train=40&hint=0' };
+const SCENES = { first: 'train=0', firstswim: 'train=0', cut: 'train=30&hint=0', crash: 'train=30&hint=0', giant: 'train=300&hint=0', radar: 'train=40&hint=0' };
 /* The pink scenes without bots (as pink.mjs stages them): its appearance needs a spot clear of every leader by 800, which ten bots' leaders in a 2000 arena rarely leave, and its appearance is what the scene wants to show, not the spot. */
-const SINGLES = { pinkflash: 'train=20&hint=0&bots=0', catch: 'train=20&hint=0&bots=0', sharkcut: 'train=40&hint=0' };
-const WANT = (process.env.SCENES || Object.keys(PAIRS).concat(Object.keys(SINGLES)).join(',')).split(',');
+const SINGLES = Object.assign(SCENES, { pinkflash: 'train=20&hint=0&bots=0', catch: 'train=20&hint=0&bots=0', sharkcut: 'train=40&hint=0' });
+const WANT = (process.env.SCENES || Object.keys(SINGLES).join(',')).split(',');
 
 /* A frame drawn after an animation-frame yield: a thing shown for the first time (the shark's mesh, the pink manta's slot) is not drawn by a step driven inside one evaluate until the page has yielded once; measured: body luminance 47 (water 33) without the yield, 7 with it. The game's own loop yields every frame, so this is the harness's concern only. */
 const settle = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() => { window.__lab.step(1 / 60); r(); })));
@@ -73,27 +73,13 @@ async function shot (q, key) {
   const { p, ctx } = await open(q);
   await STAGE[key](p);
   await settle(p);
-  const png = await p.screenshot();
+  const t0 = Date.now(); const png = await p.screenshot(); console.log('  (' + key + ': screenshot ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s)');
   const info = await p.evaluate(() => ({ t: window.__sim.time, len: window.__sim.you.followers.length, zoom: window.__lab.zoomDrawn ? window.__lab.zoomDrawn() : null }));
   await ctx.close();
   return { png, info };
 }
-/* Two pictures side by side, classic left and new right, with a caption strip. */
-async function compose (left, right, path) {
-  const ctx = await b.newContext({ viewport: { width: 412 * 2 + 6, height: 915 + 24 }, deviceScaleFactor: 1 });
-  const p = await ctx.newPage();
-  const img = png => '<img width="412" height="915" src="data:image/png;base64,' + png.toString('base64') + '">';
-  await p.setContent('<body style="margin:0;background:#111;color:#bbb;font:12px/24px sans-serif"><div style="display:flex;gap:6px"><div style="width:412px;text-align:center">classic (?look=classic)</div><div style="width:412px;text-align:center">new</div></div><div style="display:flex;gap:6px">' + img(left) + img(right) + '</div></body>');
-  await p.screenshot({ path });
-  await ctx.close();
-}
 for (const key of WANT) {
-  if (PAIRS[key]) {
-    const c = await shot(PAIRS[key] + '&look=classic', key), n = await shot(PAIRS[key], key);
-    await compose(c.png, n.png, OUT + '/' + key + '-pair.png');
-    writeFileSync(OUT + '/' + key + '-classic.png', c.png); writeFileSync(OUT + '/' + key + '-new.png', n.png);
-    console.log('  ' + key + ': classic at ' + c.info.t.toFixed(2) + ' s, length ' + c.info.len + ', drawn zoom ' + (c.info.zoom === null ? '-' : c.info.zoom.toFixed(3)) + '; new at ' + n.info.t.toFixed(2) + ' s, length ' + n.info.len + ', drawn zoom ' + (n.info.zoom === null ? '-' : n.info.zoom.toFixed(3)) + ' -> ' + key + '-pair.png');
-  } else if (SINGLES[key]) {
+  if (SINGLES[key]) {
     const n = await shot(SINGLES[key], key);
     writeFileSync(OUT + '/' + key + '.png', n.png);
     console.log('  ' + key + ': at ' + n.info.t.toFixed(2) + ' s, length ' + n.info.len + ' -> ' + key + '.png');

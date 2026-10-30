@@ -1,7 +1,11 @@
-/* 4A stage 3: the art pass, one block per change, each against ?look=classic
-   and reduced flash and motion. Driven through ?paused=1 and __lab.step, so a
-   cut lands on a known frame. Screenshots at 412x915 go to MANTA_OUT as
-   art-<moment>-<look>.png, to be looked at. CHANGE=1 runs one block. */
+/* 4A stage 3: the art pass, one block per change, each against reduced
+   flash and motion. Driven through ?paused=1 and __lab.step, so a cut lands
+   on a known frame. Screenshots at 412x915 go to MANTA_OUT as
+   art-<moment>-<look>.png, to be looked at. CHANGE=1 runs one block.
+   Until 4C each block also ran against ?look=classic, which 4C removed with
+   the code only it used; the burst's wake (block 4) is now measured against
+   a cruise at the burst's own speed, which lays the same line at the cap
+   every other manta keeps. */
 import { chromium } from '../lib/tools.mjs';
 const O = 'http://127.0.0.1:' + process.env.PORT, OUT = process.env.MANTA_OUT || '/tmp';
 const WANT = process.env.CHANGE ? process.env.CHANGE.split(',') : ['1'];
@@ -40,8 +44,8 @@ if (WANT.includes('1')) {
     window.__lab.step(1 / 60);
     const cam = window.__lab.camera; return { px, pz, fx, fz, head: you.head, offX: cam.position.x - you.x, offZ: cam.position.z - you.z, kick: window.__lab.follower.kick, slashing: window.__lab.follower.slashing, events: S.events.length }; });
   let onNew = 0;
-  for (const look of ['new', 'classic', 'reduced']) {
-    const { p, ctx } = await open(look === 'classic' ? 'look=classic' : '');
+  for (const look of ['new', 'reduced']) {
+    const { p, ctx } = await open('');
     if (look === 'reduced') await p.evaluate(() => { const c = document.getElementById('reduceFlash'); c.checked = true; c.dispatchEvent(new Event('change')); });
     const r = await cutByYou(p);
     const along = r.offX * r.fx + r.offZ * r.fz, across = Math.abs(-r.offX * r.fz + r.offZ * r.fx);
@@ -56,16 +60,14 @@ if (WANT.includes('1')) {
       ok('new: your cut kicks the camera about 9 units along your heading on the cut frame (' + along.toFixed(1) + ' along, ' + across.toFixed(1) + ' across)', r.events === 0 && along > 6 && along < 10 && across < 1);
       ok('new: the kick is gone within 0.3 s (' + later.off.toFixed(2) + ' units left)', later.off < 0.5 && later.kick === 0);
       ok('new: the slash writes the light memory along the cutter\'s heading: ' + on.toFixed(3) + ' on the line against ' + off.toFixed(3) + ' forty units beside it', on > 2 * Math.max(0.01, off) && r.slashing === true); onNew = on;
-    } else if (look === 'classic') {
-      ok('classic: no kick (' + Math.hypot(r.offX, r.offZ).toFixed(2) + ' units) and no slash (' + on.toFixed(3) + ' on the line against ' + off.toFixed(3) + ' beside)', Math.hypot(r.offX, r.offZ) < 0.01 && r.kick === 0 && on <= Math.max(0.01, off * 1.2) && r.slashing === false);
     } else {
       ok('reduced flash and motion: no kick (' + Math.hypot(r.offX, r.offZ).toFixed(2) + ' units) and the slash at 30 percent of the full one (' + on.toFixed(3) + ' against ' + onNew.toFixed(3) + ', ratio ' + (on / Math.max(1e-6, onNew)).toFixed(2) + ')', Math.hypot(r.offX, r.offZ) < 0.01 && Math.abs(on / Math.max(1e-6, onNew) - 0.3) < 0.03 && r.slashing === true);
     }
     await ctx.close();
   }
-  /* The moment to look at: a rival cuts your train on screen, both looks. */
-  for (const look of ['new', 'classic']) {
-    const { p, ctx } = await open(look === 'classic' ? 'look=classic' : '');
+  /* The moment to look at: a rival cuts your train on screen. */
+  for (const look of ['new']) {
+    const { p, ctx } = await open('');
     await p.evaluate(() => { const S = window.__sim; S.cutAt(S.you, 8, S.rivals[0], null, null); for (let i = 0; i < 6; i++) window.__lab.step(1 / 60); });
     await p.screenshot({ path: OUT + '/art-cutpeak-' + look + '.png' });
     await ctx.close();
@@ -79,16 +81,14 @@ if (WANT.includes('2')) {
     /* Sampled against SCENE time: the beat, the card and the vignette all run on it, and the crash's slow-motion beat stretches it. */
     const out = []; for (let k = 0; k < n; k++) { window.__lab.step(1 / 60); if (k === 5 || k === 23 || k === 35 || k === 47 || k === 59 || k === 71 || k === 83) out.push({ k, t: +(S.time - t0).toFixed(4), vig: P0 ? P0.vignette : null, card: document.getElementById('beat').textContent, dead: S.you.dead }); }
     return { len, peak, out, vig: P0 ? P0.vignette : null, card: document.getElementById('beat').textContent, dead: S.you.dead, runs: S.you.runs }; }, steps);
-  for (const look of ['new', 'classic', 'reduced']) {
-    const { p, ctx } = await open(look === 'classic' ? 'look=classic' : '');
+  for (const look of ['new', 'reduced']) {
+    const { p, ctx } = await open('');
     if (look === 'reduced') await p.evaluate(() => { const c = document.getElementById('reduceFlash'); c.checked = true; c.dispatchEvent(new Event('change')); });
     const r = await crashRun(p, 84);
     await p.screenshot({ path: OUT + '/art-crash-' + look + '.png' });
     const at = k => r.out.find(o => o.k === k) || {};
     const near = (a, b, t = 0.012) => a !== null && Math.abs(a - b) < t;
-    if (look === 'classic') {
-      ok('classic: the vignette stays at 0.15 through the beat and the card shows the peak at once', r.out.every(o => near(o.vig, 0.15) && o.card === String(r.peak)), JSON.stringify(r.out.slice(0, 3)));
-    } else {
+    {
       const vigWant = t => 0.15 + 0.27 * Math.min(1, t / 0.4), cardWant = t => r.len + Math.round((r.peak - r.len) * Math.min(1, t / 0.5));
       ok(look + ': the vignette deepens 0.15 to 0.42 over 0.4 s of scene time and holds (' + r.out.map(o => o.t.toFixed(2) + 's:' + (o.vig === null ? 'null' : o.vig.toFixed(3))).join(' ') + ')', r.out.every(o => near(o.vig, vigWant(o.t))) && r.out.some(o => o.t >= 0.4) && near(at(83).vig, 0.42));
       ok(look + ': the card counts up from the length the crash took (' + r.len + ') to the peak (' + r.peak + ') over 0.5 s of scene time (' + r.out.map(o => o.t.toFixed(2) + 's:' + o.card).join(' ') + ')', r.len < r.peak && r.out.every(o => Math.abs(+o.card - cardWant(o.t)) <= 1) && r.out.some(o => o.t >= 0.55 && o.card === String(r.peak)));   // the card's clock starts on the beat's first frame, one frame behind t0
@@ -111,8 +111,8 @@ if (WANT.includes('3')) {
   const recruitRest = async p => p.evaluate(async () => { const S = window.__sim, you = S.you, M = window.__lab.mantas, F = window.__lab.follower; const m = await import('/lab/manta/simcore.js'); const out = [];
     for (let k = window.__recruitRest || 0; k < 30; k++) { window.__lab.step(1 / 60); const n = you.followers.length; const f = you.followers[n - 1], age = S.time - f.born; const base = m.sizeFor(m.joinMix(f, S.time), S.params); out.push({ k, age: +age.toFixed(3), ratio: +(M.aSize.getX(n) / base).toFixed(3), boost: F.recruitBoost }); }
     return out; });
-  for (const look of ['new', 'classic', 'reduced']) {
-    const { p, ctx } = await open(look === 'classic' ? 'look=classic' : '');
+  for (const look of ['new', 'reduced']) {
+    const { p, ctx } = await open('');
     if (look === 'reduced') await p.evaluate(() => { const c = document.getElementById('reduceFlash'); c.checked = true; c.dispatchEvent(new Event('change')); });
     const r = await recruit(p);
     if (look !== 'reduced') await p.screenshot({ path: OUT + '/art-recruit-' + look + '.png' });
@@ -122,8 +122,6 @@ if (WANT.includes('3')) {
     if (look === 'new') {
       ok('new: the new follower is drawn 1.30x its size for its first 0.12 s, between at 0.27 s, and 1.00x from 0.4 s (' + r.out.map(o => o.age + ':' + o.ratio).slice(0, 8).join(' ') + ' ...)', r.joined >= 1 && early.length >= 5 && early.every(o => Math.abs(o.ratio - 1.3) < 0.01) && mid && mid.ratio > 1.03 && mid.ratio < 1.2 && late.length >= 1 && late.every(o => Math.abs(o.ratio - 1) < 0.001));
       ok('new: your leader\'s deposit is doubled for 0.2 s after the recruit and not after', r.boostAt0 === 2 && boosted && unboosted, JSON.stringify(r.out.map(o => o.age + ':' + o.boost)));
-    } else if (look === 'classic') {
-      ok('classic: no overshoot (ratio 1.000 throughout) and no deposit boost', r.joined >= 1 && r.out.every(o => Math.abs(o.ratio - 1) < 0.001 && o.boost === 1), JSON.stringify(r.out.slice(0, 4)));
     } else {
       ok('reduced flash and motion: no overshoot, the deposit boost kept', r.joined >= 1 && r.out.every(o => Math.abs(o.ratio - 1) < 0.001) && r.boostAt0 === 2 && boosted, JSON.stringify(r.out.slice(0, 4)));
     }
@@ -131,35 +129,38 @@ if (WANT.includes('3')) {
   }
 }
 if (WANT.includes('4')) {
-  /* A burst for 20 steps straight ahead with a 30-long train; the memory read just behind the leader (new against classic) is the wake the burst writes. */
-  const burst = async p => p.evaluate(() => { const S = window.__sim, you = S.you; S.input.burst = true; S.input.want = null;
+  /* A burst for 20 steps straight ahead with a 30-long train; the memory read just behind the leader is the wake the burst writes, against a
+     cruise at the burst's own speed (the same line, at the cap every other manta keeps). */
+  const burst = async (p, cruise) => p.evaluate(cruise => { const S = window.__sim, you = S.you, P = window.__lab.params.P;
+    if (cruise) { P.cruise = P.burstSpeed; for (let k = 0; k < 20; k++) window.__lab.step(1 / 60); }   // up to the burst's speed before the measured steps
+    S.input.burst = !cruise; S.input.want = null;
     /* The controls would overwrite the input each step, so the burst is held through the keyboard: a space keydown on the window. */
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    if (!cruise) window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
     for (let k = 0; k < 20; k++) window.__lab.step(1 / 60);
     const fx = -Math.sin(you.head), fz = -Math.cos(you.head);
-    return { bursting: you.bursting, len: you.followers.length, pts: [[you.x - fx * 30, you.z - fz * 30], [you.x - fx * 60, you.z - fz * 60], [you.x - fx * 90, you.z - fz * 90]] }; });
+    return { bursting: you.bursting, len: you.followers.length, pts: [[you.x - fx * 30, you.z - fz * 30], [you.x - fx * 60, you.z - fz * 60], [you.x - fx * 90, you.z - fz * 90]] }; }, cruise);
   const got = {};
-  for (const look of ['new', 'classic']) {
-    const { p, ctx } = await open(look === 'classic' ? 'look=classic' : '');
-    const r = await burst(p);
+  for (const look of ['new', 'cruise']) {
+    const { p, ctx } = await open('');
+    const r = await burst(p, look === 'cruise');
     const mem = await memAt(p, r.pts);
     got[look] = { bursting: r.bursting, len: r.len, mem };
     await p.screenshot({ path: OUT + '/art-burst-' + look + '.png' });
     await ctx.close();
   }
-  const ratio = got.new.mem.map((v, i) => v / Math.max(1e-6, got.classic.mem[i]));
-  /* The leader's own deposit is 2.0 / 1.5 = 1.33x; the texels just behind it also hold the followers' deposits (unchanged) and the fading wake from before the burst, so the pixel ratio sits between 1.1 and 1.33. */
-  ok('new: the burst wake just behind your leader is brighter than the classic one (its own deposit 1.33x, the texels 1.1 to 1.33x with the followers\' share) at 30, 60 and 90 units back: ' + ratio.map(x => x.toFixed(2)).join(' '), got.new.bursting && got.classic.bursting && ratio.every(x => x > 1.1 && x <= 1.34), JSON.stringify(got));
+  const ratio = got.new.mem.map((v, i) => v / Math.max(1e-6, got.cruise.mem[i]));
+  /* The leader's own deposit is 2.0 / 1.5 = 1.33x; the texels just behind it also hold the followers' deposits (unchanged) and the fading wake from before, so the pixel ratio sits between 1.1 and 1.33. */
+  ok('the burst wake just behind your leader is brighter than a cruise at the same speed (its own deposit 1.33x, the texels 1.1 to 1.33x with the followers\' share) at 30, 60 and 90 units back: ' + ratio.map(x => x.toFixed(2)).join(' '), got.new.bursting && !got.cruise.bursting && ratio.every(x => x > 1.1 && x <= 1.34), JSON.stringify(got));
 }
 
 if (WANT.includes('5')) {
   /* The first frame of a session: the drawn zoom against the camera's own, and the board, through the first 1.2 s of scene time. */
-  for (const look of ['new', 'classic', 'reduced']) {
+  for (const look of ['new', 'reduced']) {
     /* Reduced motion as the system preference: the reveal reads it on the first frame, before any checkbox could be ticked. */
     const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true, reducedMotion: look === 'reduced' ? 'reduce' : 'no-preference' });
     const p = await ctx.newPage(); p.setDefaultTimeout(30000); p.setDefaultNavigationTimeout(30000);
     p.on('pageerror', e => errs.push('pageerror: ' + e.message.slice(0, 140)));
-    await p.goto(O + '/lab/manta/?seed=7&paused=1&hint=0&tier=low&backend=webgl2' + (look === 'classic' ? '&look=classic' : ''), { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));
+    await p.goto(O + '/lab/manta/?seed=7&paused=1&hint=0&tier=low&backend=webgl2', { waitUntil: 'load' }).catch(e => console.log('goto ' + e.message));
     await p.waitForFunction(() => window.__labReady === true && window.__labDrew === true, null, { timeout: 25000, polling: 100 }).catch(() => console.log('(no ready)'));
     const r = await p.evaluate(() => { const L = window.__lab, F = L.follower, out = [], vis = () => getComputedStyle(document.getElementById('board')).visibility;
       L.step(1 / 60); out.push({ t: 1 / 60, ratio: F.zoomDrawn / F.zoom, board: vis() });

@@ -6,7 +6,10 @@
      MODE=ref    save the frame as REF (a PNG path), for a later comparison
      MODE=cmp    the frame against REF: identical, or how many pixels differ
    Q adds query terms to the second load in self mode, or to the only load
-   otherwise (Q='look=classic'). STEPS (default 45) sixtieths before the shot. */
+   otherwise (Q='train=30'). STEPS (default 45) sixtieths before the shot.
+   Until 4C the comparison it was built for was against ?look=classic; 4C
+   used ref and cmp to prove that removing the classic look left the look
+   pixel for pixel as it was. */
 import { chromium, PNG } from '../lib/tools.mjs';
 import fs from 'node:fs';
 const O = 'http://127.0.0.1:' + process.env.PORT, OUT = process.env.MANTA_OUT || '/tmp';
