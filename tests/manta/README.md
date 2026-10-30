@@ -152,6 +152,7 @@ times that, so on such a machine:
 - Screenshots of big pages take longer than Playwright's 30 s default: a
   2560x1440 desktop screenshot took 20.7 to 33.0 s, the 300-long train of
   `pictures.mjs` 42 s; those harnesses allow 150 s.
+- `room-base/watchmode.mjs` reads the positions after Step once two more frames have been drawn: Step is spent in the page's next frame.
 - `browser/raywake.mjs` and `browser/zoom.mjs` allow page loads and screenshots 30 s times `WATCHDOG_X` (a lab page load and a zoom screenshot each took over 30 s once here).
 - `room-pink/pink.mjs` judges "cruising at it catches nothing" by no catch event and no jump of the reward in the length: the phone chasing at cruise crashed on the way (length 0) twice in nine runs here, which is not a catch.
 - `room-hits/bhits.mjs` plays for `SECS` seconds (22 by default; the suite gives it 40, as a crash run had one contact in 22 s once), and its one-set-piece-per-hit check allows for hits of yours that land off screen, which fire nothing (follow.js counts them).

@@ -47,7 +47,11 @@ const r = await p.evaluate(async () => { const L = window.__lab, M = L.mantas, R
   const click = id => document.getElementById(id).click();
   click('dbgPause'); await new Promise(res => setTimeout(res, 300));
   const p0 = pos(), s0 = R.snaps; await new Promise(res => setTimeout(res, 1200)); const p1 = pos(), s1 = R.snaps;
-  click('dbgStep'); await new Promise(res => setTimeout(res, 300)); const p2 = pos();
+  /* 4C: and two drawn frames: Step is spent in the page's next frame, and
+     at 1 to 2 frames a second 300 ms could pass without one ("stepped"
+     false once in 4C's third full suite pass). */
+  const frames2 = () => new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+  click('dbgStep'); await new Promise(res => setTimeout(res, 300)); await frames2(); const p2 = pos();
   click('dbgPause'); await new Promise(res => setTimeout(res, 600)); const p3 = pos();
   out.pause = { frozen: p0 === p1, roomCarriedOn: s1 - s0, stepped: p2 !== p1, liveAgain: p3 !== p2 };
   out.overflow = document.documentElement.scrollWidth - innerWidth;
