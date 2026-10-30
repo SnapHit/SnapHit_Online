@@ -26,10 +26,28 @@ if (PART === 'first') {
   /* No saved name: the panel over a live lobby, as a watcher. */
   const { p } = await page(b, 412, 915);
   await p.goto(O + '/lab/manta/play/?' + Q, { waitUntil: 'load' });
-  await p.waitForFunction(() => window.__lab && window.__lab.room && window.__lab.room.connected && window.__sim.rivals.some(t => t && !t.hole), null, { timeout: 30000 }).catch(() => {});
-  const s0 = await p.evaluate(async () => { const S = window.__sim, R = window.__lab.room, t = S.rivals.find(q => q && !q.hole && !q.dead), x0 = t && t.x;
-    await new Promise(r => setTimeout(r, 1500)); const panel = document.getElementById('namePanel'), box = document.getElementById('nameBox');
-    return { panel: !panel.hidden && panel.getBoundingClientRect().height > 0, placeholder: box.placeholder, watching: R.connected && !R.play, moved: t ? Math.hypot(t.x - x0) : 0, query: window.MANTA_QUERY,
+  await p.waitForFunction(() => window.__lab && window.__lab.room && window.__lab.room.connected && window.__sim.rivals.some(t => t && !t.hole && !t.dead), null, { timeout: 30000 }).catch(() => {});
+  const s0 = await p.evaluate(async () => { const S = window.__sim, R = window.__lab.room;
+    /* 4C: the bots in view swimming, judged frame by frame: each drawn
+       frame, how far every live bot in view moved since the last frame it
+       was in view, summed per bot; "moved" is the most any one bot swam
+       in 1.5 s and two more drawn frames. Until 4C it read the first bot
+       once before and once after, in x alone, and that bot had often left
+       the view by then (the room view parks a stand-in in its slot and the
+       old object never moves again): "moved 0" four times in fifteen
+       runs here, at 1 to 2 drawn frames a second under SwiftShader, and
+       once more with every bot in view replaced in the 1.5 s. */
+    const live = () => new Map(S.rivals.filter(q => q && !q.hole && !q.dead).map(q => [q.id, [q.x, q.z]]));
+    const swum = new Map(); let last = live(), seen = last.size, frames = 0;
+    const count = () => { frames++; const now = live(); seen += [...now.keys()].filter(id => !last.has(id)).length;
+      for (const [id, [x, z]] of now) if (last.has(id)) swum.set(id, (swum.get(id) || 0) + Math.hypot(x - last.get(id)[0], z - last.get(id)[1]));
+      last = now; if (frames < 1e4) requestAnimationFrame(count); };
+    requestAnimationFrame(count);
+    await new Promise(r => setTimeout(r, 1500)); const f0 = frames;
+    await new Promise(r => { const w = () => frames >= f0 + 2 ? r() : setTimeout(w, 20); w(); }); frames = 1e4;
+    const moved = Math.max(0, ...swum.values()), both = swum.size;
+    const panel = document.getElementById('namePanel'), box = document.getElementById('nameBox');
+    return { panel: !panel.hidden && panel.getBoundingClientRect().height > 0, placeholder: box.placeholder, watching: R.connected && !R.play, moved, bots: seen + ' seen, ' + both + ' in two frames running', framesIn1500ms: f0, query: window.MANTA_QUERY,
       bar: ['friends', 'solo', 'privacyLink'].every(id => { const r = document.getElementById(id).getBoundingClientRect(); return r.width > 0 && r.bottom <= document.getElementById('namePanel').getBoundingClientRect().top; }) }; });
   ok('first visit: the name panel over a live lobby, watching, bots swimming, the play bar still reachable', s0.panel && s0.watching && s0.moved > 5 && s0.bar && /room=lobby/.test(s0.query) && !/play=1/.test(s0.query), JSON.stringify(s0));
   /* Screenshots: portrait, landscape, and each with the keyboard's share taken off the height. */
