@@ -11,7 +11,7 @@
 
 /* Bumped by hand every time this page is edited, so a stale deploy is obvious
    from the phone rather than something you have to take on trust. */
-export const BUILD = '2026-10-30 04:47 UTC';
+export const BUILD = '2026-10-30 04:56 UTC';
 
 const params = new URLSearchParams(location.search);
 export const FORCE_WEBGL = params.get('backend') === 'webgl2';
@@ -100,7 +100,13 @@ set('preload', PRELOAD ? 'on' : 'off');
 /* ------------------------------------------------------------ collapse */
 
 function expanded () { return el.chip.getAttribute('aria-expanded') === 'true'; }
+/* PLAYS AND FEEDBACK (4C): plays.js, loaded the first time the panel opens
+   (a dynamic import, so the portal package, which has no panel to open and
+   contacts no server, never carries it). It adds a collapsed section that
+   asks the rooms Worker for anything only when tapped. */
+let playsLoaded = false;
 function toggle (on) {
+  if (on && !playsLoaded && !window.MANTA_PORTAL) { playsLoaded = true; import('./plays.js').then(m => m.mount(el.panel)).catch(() => { playsLoaded = false; }); }
   el.panel.hidden = !on;
   el.bar.hidden = !on;
   el.chip.setAttribute('aria-expanded', on ? 'true' : 'false');

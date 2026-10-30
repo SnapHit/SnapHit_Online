@@ -51,7 +51,9 @@ on `snaphit-online`: `ROOMS_OPEN` set to `false` turns rooms off without a push,
 and `LIVE_CAP` sets how many rooms may run at once, 1 to 20, default 3.
 `wrangler.jsonc` has `keep_vars` and declares neither, so a deploy never
 overwrites them. Never add them to `wrangler.jsonc`. Changing either redeploys
-the Worker, which disconnects everyone playing, the same as a push.
+the Worker, which disconnects everyone playing, the same as a push. One secret
+lives there too: `FEEDBACK_KEY` (4C), the key the lab panel uses to read the
+feedback box's messages. Never put it in the repo or in `wrangler.jsonc`.
 
 **Every push restarts the rooms.** Anyone playing is disconnected. No pushes
 during a playtest.

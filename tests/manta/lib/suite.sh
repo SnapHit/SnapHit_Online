@@ -121,6 +121,8 @@ budget|rooms|NAMES=1 DIRECT=1|room-budget/budget.mjs
 idle|rooms|NAMES=1 DIRECT=1|room-idle/idle.mjs
 rate|rooms|NAMES=1|room-msgs/rate.mjs
 rank|rooms|NAMES=1 DIRECT=1|room-rank/rank.mjs
+plays-on|rooms|MODE=on NAMES=1 DIRECT=1 VARS=--var\ FEEDBACK_KEY:raywake-test-key|room-plays/plays.mjs
+plays-off|rooms|MODE=off DIRECT=1 VARS=--var\ ROOMS_OPEN:false|room-plays/plays.mjs
 EOF
 pass=0; fail=0
 while IFS='|' read -r NAME KIND ENVS TARGET; do

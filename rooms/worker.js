@@ -71,6 +71,31 @@ const dayOf = t => new Date(t).toISOString().slice(0, 10);
 const midnightAfter = t => { const d = new Date(t); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1); };
 const count = (v, max) => { const n = Math.floor(Number(v)); return n > 0 ? Math.min(n, max) : 0; };
 const newCode = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), b => ALPHABET[b % ALPHABET.length]).join('');
+/* THE PLAY COUNTER AND THE FEEDBACK BOX (4C, design doc 10.6), in place of
+   Cloudflare's Web Analytics. Both live in the registry, so nothing new is
+   deployed (no class, no migration), and both count towards the daily
+   budget guard: each is a Worker request and a registry request.
+   The counter: per UTC day, visits that started a run (v), returning
+   visitors (n: the phone kept a flag from an earlier UTC day, and says
+   only yes or no), runs (r), room joins (j) and runs past one minute (m),
+   at most this many of each in one request, from the feedback page's
+   sendBeacon. No identifier of any kind is read, sent or stored: no
+   address, no browser, no name. Kept for COUNT_DAYS days and a day more.
+   The feedback box: at most FB_CHARS characters (code points), stored
+   under the time it arrived and nothing else, at most FB_PER_DAY a day
+   from one connection address. The address itself never leaves the
+   Worker's handling of the request: the registry is given only a one-way
+   tag of it (addrTag: an HMAC of the UTC day and the address under
+   FEEDBACK_KEY), in a header and not the URL, since whatever records
+   requests (wrangler dev's traces, Cloudflare's logs) keeps URLs; it holds
+   the tag in memory for that day only, to count to three. The
+   latest FB_KEEP are kept. Read on the lab panel with FEEDBACK_KEY, a
+   secret Nathan sets in Cloudflare's dashboard (never in the repo or in
+   wrangler.jsonc); a wrong key is allowed KEY_TRIES a day an address. */
+const COUNT_KEYS = { v: 1, n: 1, r: 100, j: 20, m: 100 };
+const COUNT_BYTES = 64, COUNT_DAYS = 7;
+const FB_CHARS = 500, FB_BYTES = 2048, FB_PER_DAY = 3, FB_KEEP = 200, FB_SHOWN = 50, KEY_TRIES = 10;
+const ZERO = () => ({ v: 0, n: 0, r: 0, j: 0, m: 0 });
 const SITE = 'https://snap-hit.online';
 const LOCAL = /^(localhost|127\.0\.0\.1)$/;
 const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
@@ -89,7 +114,7 @@ export class Room extends DurableObject {
     const url = new URL(request.url);
     if (url.hostname === 'registry.internal') {
       if (!this.ctx.id.equals(this.env.ROOMS.idFromName(REGISTRY))) return text('no such room', 404);
-      return this.registry(url);
+      return this.registry(url, request);
     }
     /* Every request into a room is a billed request (4B): counted here and
        carried to the registry by the next report. */
@@ -218,7 +243,7 @@ export class Room extends DurableObject {
   /* THE REGISTRY: only ever the object named REGISTRY, reached only from
      this file. Codes as 'code:<code>' -> last time it had players (or was
      made); live rooms as 'live:<name>' -> until when it counts as live. */
-  async registry (url) {
+  async registry (url, request) {
     const s = this.ctx.storage, op = url.pathname.slice(1);
     /* TESTS ONLY (wrangler dev with TEST_NAMES, through /rooms/budget, which
        only a local request reaches): use added for today (extra, a fraction
@@ -244,11 +269,71 @@ export class Room extends DurableObject {
     const use = await this.useToday(now);
     if (use) {
       use.reg++;
-      if (op === 'public' || op === 'new') use.w++;
+      if (op === 'public' || op === 'new' || op === 'count' || op === 'feedback' || op === 'plays') use.w++;
       if (op !== 'live') try { await s.put('use:' + use.day, use); } catch (_) { /* counted in memory; stored with the next */ }
     }
     let level = use ? this.levelOf(use, now) : null;
     if (op === 'budget') return Response.json({ use, level }, { headers: { 'cache-control': 'no-store' } });
+    /* Rooms resting (4B): the counter and the feedback box rest with them,
+       so neither spends what is left of the day. */
+    const resting = !!level && Math.max(level.r, level.d) >= REST_AT;
+    const restingText = () => text('rooms are resting: ' + (Date.now() + (level ? level.left : midnightAfter(Date.now()) - Date.now())), 503);
+    /* THE PLAY COUNTER (4C): the canonical count the Worker checked, added
+       to today's row. Old rows go when the day turns. */
+    if (op === 'count') {
+      if (resting) return restingText();
+      const day = dayOf(now), key = 'count:' + day, c = (await s.get(key)) || ZERO();
+      for (const k of Object.keys(COUNT_KEYS)) c[k] = (c[k] || 0) + count(url.searchParams.get(k), COUNT_KEYS[k]);
+      await s.put(key, c);
+      if (this.countDay !== day) {
+        this.countDay = day;
+        const keep = 'count:' + dayOf(now - COUNT_DAYS * 864e5);
+        for (const [k] of await s.list({ prefix: 'count:' })) if (k < keep) await s.delete(k);
+      }
+      return text('counted', 200);
+    }
+    /* THE FEEDBACK BOX (4C): three a day from one address, the address in
+       memory only; the message stored with the time it came and nothing else. */
+    if (op === 'feedback') {
+      if (resting) return restingText();
+      const msg = cleanFeedback(request ? await request.text() : '');
+      if (msg === null) return text('at most ' + FB_CHARS + ' characters', 413);
+      if (!msg) return text('nothing to send', 400);
+      const day = dayOf(now), ip = (request && request.headers.get('x-who')) || '';
+      const sentBy = this.fbSent = this.fbSent || new Map();
+      for (const [k, v] of sentBy) if (v.day !== day) sentBy.delete(k);
+      const had = sentBy.get(ip) || { day, n: 0 };
+      if (had.n >= FB_PER_DAY) return text('three messages a day from one connection', 429);
+      had.n++; sentBy.set(ip, had);
+      const rand = Array.from(crypto.getRandomValues(new Uint8Array(3)), b => b.toString(16).padStart(2, '0')).join('');
+      await s.put('fb:' + String(now).padStart(15, '0') + ':' + rand, { t: now, text: msg });
+      this.fbRows = (this.fbRows ?? (await s.list({ prefix: 'fb:' })).size - 1) + 1;
+      if (this.fbRows > FB_KEEP + 20) {
+        const keys = [...(await s.list({ prefix: 'fb:' })).keys()];
+        for (const k of keys.slice(0, Math.max(0, keys.length - FB_KEEP))) await s.delete(k);
+        this.fbRows = Math.min(keys.length, FB_KEEP);
+      }
+      return text('thank you', 200);
+    }
+    /* THE LAB PANEL'S PLAYS (4C): the last COUNT_DAYS days of counts for
+       anyone on the lab panel; the latest FB_SHOWN messages only with the
+       key (k: the Worker's verdict on it: ok, wrong, none, or unset when no
+       key is set in the dashboard). */
+    if (op === 'plays') {
+      const days = [];
+      for (let i = 0; i < COUNT_DAYS; i++) days.push(dayOf(now - i * 864e5));
+      const got = await s.get(days.map(d => 'count:' + d));
+      const out = { days: days.map(d => Object.assign({ day: d }, ZERO(), got.get('count:' + d) || {})), key: '', messages: null };
+      const k = url.searchParams.get('k') || 'none', day = dayOf(now), ip = (request && request.headers.get('x-who')) || '';
+      const tries = this.keyTries = this.keyTries || new Map();
+      for (const [a, v] of tries) if (v.day !== day) tries.delete(a);
+      const t = tries.get(ip) || { day, n: 0 };
+      if ((k === 'ok' || k === 'wrong') && t.n >= KEY_TRIES) return text('too many wrong keys today', 429);
+      if (k === 'wrong') { t.n++; tries.set(ip, t); }
+      out.key = k;
+      if (k === 'ok') out.messages = [...(await s.list({ prefix: 'fb:', reverse: true, limit: FB_SHOWN })).values()].map(m => ({ t: m.t, text: m.text }));
+      return Response.json(out, { headers: { 'cache-control': 'no-store' } });
+    }
     if (op === 'live') {
       const n = +url.searchParams.get('n') || 0, p = +url.searchParams.get('p') || 0;
       if (n > 0) await s.put('live:' + name, now + LIVE_FOR_MS); else await s.delete('live:' + name);
@@ -376,6 +461,38 @@ export default {
       }
       return text('rooms are open', 200);
     }
+    /* THE PLAY COUNTER (4C): a visit's counts, batched by the feedback
+       page and sent with sendBeacon. Five small numbers and nothing else:
+       no address, browser or name is read here or passed on. */
+    if (path === ROOMS + 'count') {
+      if (request.method !== 'POST') return text('expected a POST', 405);
+      if (!originAllowed(request, url)) return text('not from this site', 403);
+      const c = parseCount(await bodyOf(request, COUNT_BYTES));
+      if (!c) return text('not a count', 400);
+      return registry(env).fetch(REG + 'count?' + c);
+    }
+    /* THE FEEDBACK BOX (4C): the message, and the connection's address only
+       so the registry can hold it to three a day, in memory. */
+    if (path === ROOMS + 'feedback') {
+      if (request.method !== 'POST') return text('expected a POST', 405);
+      if (!originAllowed(request, url)) return text('not from this site', 403);
+      const body = await bodyOf(request, FB_BYTES), msg = cleanFeedback(body);
+      if (msg === null) return text('at most ' + FB_CHARS + ' characters', 413);
+      if (!msg) return text('nothing to send', 400);
+      const ip = (LOCAL.test(url.hostname) && request.headers.get('X-Test-Address')) || request.headers.get('CF-Connecting-IP') || '';
+      return registry(env).fetch(REG + 'feedback', { method: 'POST', body: msg, headers: { 'x-who': await addrTag(env, ip) } });
+    }
+    /* THE LAB PANEL'S PLAYS (4C): the counts, and with FEEDBACK_KEY the
+       messages. The key is checked here, where the secret is, in constant
+       time; the registry is told only the verdict. */
+    if (path === ROOMS + 'plays') {
+      if (request.method !== 'POST') return text('expected a POST', 405);
+      if (!originAllowed(request, url)) return text('not from this site', 403);
+      const given = (request.headers.get('X-Feedback-Key') || '').slice(0, 256), set = typeof env.FEEDBACK_KEY === 'string' && env.FEEDBACK_KEY.length > 0;
+      const k = !given ? 'none' : !set ? 'unset' : (await sameKey(given, env.FEEDBACK_KEY)) ? 'ok' : 'wrong';
+      const ip = (LOCAL.test(url.hostname) && request.headers.get('X-Test-Address')) || request.headers.get('CF-Connecting-IP') || '';
+      return registry(env).fetch(REG + 'plays?k=' + k, { headers: { 'x-who': await addrTag(env, ip) } });
+    }
     /* The public game (3O): which public room a joining player swims in. */
     if (path === ROOMS + 'public') {
       if (request.method !== 'POST') return text('expected a POST', 405);
@@ -433,6 +550,56 @@ export default {
 };
 
 const registry = env => env.ROOMS.get(env.ROOMS.idFromName(REGISTRY));
+
+/* A request's body as text, or null when it is longer than max bytes. */
+async function bodyOf (request, max) {
+  if (+(request.headers.get('content-length') || 0) > max) return null;
+  const buf = await request.arrayBuffer();
+  if (buf.byteLength > max) return null;
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch (_) { return null; }
+}
+/* A count as the page sends it (v=1&n=0&r=2&j=1&m=0): only the five keys,
+   whole numbers within their caps, at least one above zero, and returning
+   (n) only with a visit (v). The canonical form, or null. */
+function parseCount (body) {
+  if (typeof body !== 'string' || !body) return null;
+  const q = new URLSearchParams(body), c = ZERO();
+  for (const [k, v] of q) {
+    if (!(k in COUNT_KEYS) || !/^\d{1,3}$/.test(v) || +v > COUNT_KEYS[k]) return null;
+    c[k] = +v;
+  }
+  if (!c.v) c.n = 0;
+  if (!(c.v + c.r + c.j + c.m)) return null;
+  return Object.keys(COUNT_KEYS).map(k => k + '=' + c[k]).join('&');
+}
+/* A feedback message: control characters (but line breaks and tabs) and
+   text-direction overrides removed, trimmed; '' when nothing is left; null
+   when it is over FB_CHARS characters or was not text. Shown only ever as
+   plain text (textContent), never as markup. */
+function cleanFeedback (s) {
+  if (typeof s !== 'string') return null;
+  const t = s.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u202A-\u202E\u2066-\u2069]/g, '').trim();
+  return [...t].length > FB_CHARS ? null : t;
+}
+/* A connection address as the registry is given it (4C): a one-way tag, the
+   first 16 bytes of an HMAC-SHA-256 of the UTC day and the address under
+   FEEDBACK_KEY (a plain SHA-256 when no key is set), so it differs every
+   day and cannot be turned back into the address without the secret. */
+async function addrTag (env, ip) {
+  const data = new TextEncoder().encode(dayOf(Date.now()) + '|' + ip);
+  const key = typeof env.FEEDBACK_KEY === 'string' ? env.FEEDBACK_KEY : '';
+  let buf;
+  if (key) { const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']); buf = await crypto.subtle.sign('HMAC', k, data); }
+  else buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf).slice(0, 16), b => b.toString(16).padStart(2, '0')).join('');
+}
+/* Two keys compared in constant time, through their SHA-256 digests. */
+async function sameKey (a, b) {
+  const h = async s => new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)));
+  const [x, y] = await Promise.all([h(a), h(b)]);
+  let d = 0; for (let i = 0; i < x.length; i++) d |= x[i] ^ y[i];
+  return d === 0;
+}
 function shut (ws, code, why) { try { ws.close(code, why); } catch (_) { /* already closed */ } }
 
 function text (body, status) {

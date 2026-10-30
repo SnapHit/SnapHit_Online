@@ -30,7 +30,7 @@ const state = p => p.evaluate(() => {
   return { url: location.search, room: R ? { connected: R.connected, play: R.play, me: !!R.me, id: R.id, name: (window.__sim && window.__sim.youName && window.__sim.youName()) || R.name, snaps: R.snaps, players: R.players || [] } : null, solo: !!S && !R,
     x: S && S.you ? S.you.x : null, z: S && S.you ? S.you.z : null, stats: (document.getElementById('stats') || {}).textContent, note: (document.getElementById('note') || {}).textContent,
     noteShown: vis('noteRow'), share: vis('shareRow') ? document.getElementById('shareLink').value : null, board: (document.getElementById('board') || {}).textContent || '',
-    lab: ['chip', 'panel', 'bar', 'plain', 'drawerToggle'].filter(vis), feedback: vis('feedback'), privacy: vis('privacyRow'),
+    lab: ['chip', 'panel', 'bar', 'plain', 'drawerToggle'].filter(vis), feedback: vis('fbOpen'), privacy: vis('privacyRow'),
     robots: (document.querySelector('meta[name=robots]') || {}).content, overflow: document.documentElement.scrollWidth - innerWidth, backend: window.__labBackend || '' };
 });
 const until = async (p, f, ms) => { const t0 = Date.now(); let s; while (Date.now() - t0 < ms) { s = await state(p).catch(() => null); if (s && f(s)) return [s, Date.now() - t0]; await wait(200); } return [s, -1]; };
@@ -78,7 +78,7 @@ const [s1, t1] = await until(p, s => s.room && s.room.connected && s.room.me, 20
 ok('noindex, nofollow in the head', s1 && s1.robots === 'noindex, nofollow', s1 && s1.robots);
 ok('no lab tools visible (chip, panel, bar, report, drawer)', s1 && s1.lab.length === 0, s1 && JSON.stringify(s1.lab));
 ok('it joins "lobby" at once as a player', s1 && s1.room.play && s1.room.me && /room=lobby/.test(await p.evaluate(() => window.MANTA_QUERY)), s1 && (s1.room.name + ' #' + s1.room.id + ' in ' + t1 + ' ms'));
-ok('the feedback link is hidden while FEEDBACK_URL is empty', s1 && s1.feedback === false);
+ok('the Feedback button for the feedback box is shown (4C; until then a link, hidden while FEEDBACK_URL was empty)', s1 && s1.feedback === true);
 await p.evaluate(() => { const cv = document.querySelector('canvas'); const ev = (type, x, y) => cv.dispatchEvent(new PointerEvent(type, { pointerId: 11, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, bubbles: true, cancelable: true, buttons: type === 'pointerup' ? 0 : 1 })); ev('pointerdown', 380, 700); setTimeout(() => ev('pointerup', 380, 700), 2500); });
 const a = await state(p); await wait(3000); const a2 = await state(p);
 ok('it plays: the manta moves and the stats line counts a run', Math.hypot(a2.x - a.x, a2.z - a.z) > 20 && /runs [1-9]/.test(a2.stats), 'moved ' + Math.hypot(a2.x - a.x, a2.z - a.z).toFixed(0) + ', "' + a2.stats + '"');
