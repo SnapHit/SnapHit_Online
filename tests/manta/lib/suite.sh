@@ -110,9 +110,9 @@ hits-300|rooms|NAMES=1 ALONE=1 DELAYS=300:100|room-hits/hits.mjs
 bhits-crash|rooms|DIRECT=1 MODE=crash SECS=70|room-hits/bhits.mjs
 bhits-cut|rooms|DIRECT=1 MODE=cut SECS=40|room-hits/bhits.mjs
 bytes|rooms|NAMES=1|room-bytes/bytes.mjs
-room-pink-20|rooms|NAMES=1 ALONE=1 DELAYS=20:0 VARS=--var\ PINK_WAIT:4\ --var\ PINK_STAY:40|room-pink/pink.mjs
-room-pink-150|rooms|NAMES=1 ALONE=1 DELAYS=150:50 VARS=--var\ PINK_WAIT:4\ --var\ PINK_STAY:40|room-pink/pink.mjs
-room-pink-300|rooms|NAMES=1 ALONE=1 DELAYS=300:100 VARS=--var\ PINK_WAIT:4\ --var\ PINK_STAY:40|room-pink/pink.mjs
+room-pink-20|rooms|NAMES=1 ALONE=1 DELAYS=20:0 VARS=--var\ PINK_WAIT:4\ --var\ PINK_STAY:90|room-pink/pink.mjs
+room-pink-150|rooms|NAMES=1 ALONE=1 DELAYS=150:50 VARS=--var\ PINK_WAIT:4\ --var\ PINK_STAY:90|room-pink/pink.mjs
+room-pink-300|rooms|NAMES=1 ALONE=1 DELAYS=300:100 VARS=--var\ PINK_WAIT:4\ --var\ PINK_STAY:90|room-pink/pink.mjs
 room-shark|rooms|NAMES=1 VARS=--var\ SHARK_ON:1\ --var\ SHARK_EVERY:5|room-shark/shark.mjs
 room-radar|rooms|NAMES=1|room-radar/room.mjs
 radar-page|rooms|DIRECT=1|room-radar/page.mjs

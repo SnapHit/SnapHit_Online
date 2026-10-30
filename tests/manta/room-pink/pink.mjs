@@ -1,6 +1,7 @@
 /* 4A stage 4: the pink manta through a room, with the phone's own code
    (playclient.mjs, roomcore's decodeSnap and createPlay). The room runs with
-   PINK_WAIT:4 and PINK_STAY:40 (--var, test only) so it appears in seconds.
+   PINK_WAIT:4 and PINK_STAY:90 (--var, test only) so it appears in seconds
+   and stays through the whole chase (40 until 4C, see below).
    Checks: the snapshot carries it (flag 32) from its appearance, moving,
    one at a time; a phone that cruises at it never catches it; a phone that
    bursts at it catches it, its length jumps by exactly pinkReward once, and
@@ -40,8 +41,13 @@ const cruiseLog = lenLog.filter(l => l[0] >= (lenLog.length ? lenLog[lenLog.leng
 const cruiseJump = Math.max(0, ...cruiseLog.slice(1).map((l, i) => l[1] - cruiseLog[i][1]));
 ok('cruising at it for 14 s catches nothing: no catch event, no jump of the reward in the length (largest rise ' + cruiseJump + ', lowest ' + minLenCruise + ')', catches.length === 0 && cruiseJump < 8);
 /* Burst at it: caught, +pinkReward once, by this phone. */
+/* 4C: up to 60 s (30 until 4C). Over twelve runs at the three delays the
+   chase took 2.8 to 19.8 s, and once, at 300:100, longer than the 27 s left
+   before a pink staying 40 s swam away. It flees the nearest leader, often
+   a bot, and turns away from the reef, and this phone steers at where the
+   snapshots last had it. So the room now keeps it 90 s (PINK_STAY:90). */
 mode = 'burst'; const lenBefore = c.play.me ? c.play.me.len : -1; const tBurst = Date.now();
-for (let k = 0; k < 120 && catches.length === 0; k++) await wait(250);
+for (let k = 0; k < 240 && catches.length === 0; k++) await wait(250);
 await wait(1500);
 const mine = catches.filter(e => e.by === c.play.id), lenAfter = c.play.me ? c.play.me.len : -1;
 const jump = (() => { for (let i = 1; i < lenLog.length; i++) if (lenLog[i][1] - lenLog[i - 1][1] >= 8) return lenLog[i][1] - lenLog[i - 1][1]; return 0; })();
