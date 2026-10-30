@@ -216,6 +216,9 @@
     letter-spacing: 0.02em;
   }
   #beat.on { display: flex; }
+  /* Your best under the run's peak (4D): kept on the device on the feedback page and in the portal package. */
+  #beat { flex-direction: column; gap: 10px; }
+  #beat .best { font: 600 18px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; letter-spacing: 0.04em; color: #cfe6f5; text-shadow: 0 1px 6px #000c; }
   /* The board: top ten by current length, top right, clear of the chip on
      the left and the bar below. Small, and it never takes a touch. */
   #board {
@@ -417,7 +420,7 @@
     <p id="privacy"><span class="gameName">Raywake</span> keeps nothing about you, apart from any feedback you choose to send.
     Playing online, your phone sends the room your name, your steering, the part of the ocean you are
     looking at and a random key, kept in this tab, that lets you rejoin after a dropped connection; the
-    room forgets it all when it empties. Your name, and the day you last played, stay on this phone. A
+    room forgets it all when it empties. Your name, your best and the day you last played stay on this phone. A
     private room's code is kept until it has had no players for 24 hours, and the address that asked
     for it for 10 seconds, to stop floods. The game counts plays (visits, runs, room joins, runs past a
     minute, and whether you have played on an earlier day) with nothing that identifies you: no
@@ -426,7 +429,7 @@
     memory for that day only. No accounts, no cookies, nothing from
     anyone else's servers. The site runs on Cloudflare, which keeps its own short-lived connection
     logs.</p>
-    <p id="privacyPortal" hidden><span class="gameName">Raywake</span> stores nothing on this device and contacts no
+    <p id="privacyPortal" hidden><span class="gameName">Raywake</span> stores only your best on this device, and contacts no
     server: it plays entirely from the files in this package. No accounts, no cookies, no analytics.</p>
   </div>
 </div>
@@ -868,6 +871,8 @@ window.MANTA_LAB = window.MANTA_ROOT + 'lab/manta/';
     if (wasDead && !dead) runs++;
     wasDead = dead;
     if (!watching) best = Math.max(best, you.peak || 0, you.lastPeak || 0, you.followers ? you.followers.length : 0);
+    /* Your best kept on this device (4D, manta:best), from earlier visits too. */
+    var F = window.__lab && window.__lab.follower; if (F && F.best > best) best = F.best;
     $('stats').textContent = 'runs ' + runs + ' · best peak ' + best + ' · cuts landed ' + cuts;
   }, 100);
 

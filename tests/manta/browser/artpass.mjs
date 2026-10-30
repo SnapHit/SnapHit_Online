@@ -79,8 +79,8 @@ if (WANT.includes('2')) {
     S.cutAt(S.you, 10, S.rivals[0], null, null); for (let i = 0; i < 6; i++) window.__lab.step(1 / 60);
     const len = S.you.followers.length, peak = S.you.peak; S.you.dead = 1.5; const t0 = S.time;
     /* Sampled against SCENE time: the beat, the card and the vignette all run on it, and the crash's slow-motion beat stretches it. */
-    const out = []; for (let k = 0; k < n; k++) { window.__lab.step(1 / 60); if (k === 5 || k === 23 || k === 35 || k === 47 || k === 59 || k === 71 || k === 83) out.push({ k, t: +(S.time - t0).toFixed(4), vig: P0 ? P0.vignette : null, card: document.getElementById('beat').textContent, dead: S.you.dead }); }
-    return { len, peak, out, vig: P0 ? P0.vignette : null, card: document.getElementById('beat').textContent, dead: S.you.dead, runs: S.you.runs }; }, steps);
+    const out = []; for (let k = 0; k < n; k++) { window.__lab.step(1 / 60); if (k === 5 || k === 23 || k === 35 || k === 47 || k === 59 || k === 71 || k === 83) out.push({ k, t: +(S.time - t0).toFixed(4), vig: P0 ? P0.vignette : null, card: (document.querySelector('#beat .num') || document.getElementById('beat')).textContent, dead: S.you.dead }); }
+    return { len, peak, out, vig: P0 ? P0.vignette : null, card: (document.querySelector('#beat .num') || document.getElementById('beat')).textContent, dead: S.you.dead, runs: S.you.runs }; }, steps);
   for (const look of ['new', 'reduced']) {
     const { p, ctx } = await open('');
     if (look === 'reduced') await p.evaluate(() => { const c = document.getElementById('reduceFlash'); c.checked = true; c.dispatchEvent(new Event('change')); });

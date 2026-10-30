@@ -11,6 +11,7 @@ import { joinMix, looseMix, sizeFor, leaderSize } from './sim.js';
 import { createLabels, savedName, PALE } from './labels.js';
 import { createRadar, createRadarModel } from './radar.js';
 import { PINK_SLOT } from './mantas.js';
+import { createBest } from './best.js';
 
 export function createFollow (ctx) {
   const { mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS, PARKED,
@@ -95,7 +96,11 @@ export function createFollow (ctx) {
   let spillSlot = new Map();
   let spillDeal = null, drawnRivals = 0;
   const SPILL_BASE = mantas.SPILL_BASE;
-  let bestPeak = 0, beatShown = false, boardAt = 0, offScreen = 0, rankShown = 0;
+  /* YOUR BEST (4D, best.js): kept on the device by the feedback page and
+     the portal package (ctx.keepBest), so it carries over between visits;
+     the lab keeps it for the visit only, as before. */
+  const keep = ctx.keepBest ? createBest() : null;
+  let bestPeak = keep ? keep.value : 0, beatShown = false, boardAt = 0, offScreen = 0, rankShown = 0;
   let zoomNow = null, wasDying = false, lastRuns = undefined;   // the eased camera (3L)
   let pinkBelly = null, pinkDrawn = false, pinkFlashAt = -1;    // the pink manta (4A stage 4)
   let sharkStamped = false;                                       // the whale shark (4A stage 5)
@@ -508,8 +513,11 @@ export function createFollow (ctx) {
 
     /* The score is the run's peak, and the run ends at a crash. */
     peakLength = you.peak;
-    if (you.lastPeak > bestPeak) bestPeak = you.lastPeak;
-    if (peakLength > bestPeak) bestPeak = peakLength;
+    if (!watching) {
+      if (you.lastPeak > bestPeak) bestPeak = you.lastPeak;
+      if (peakLength > bestPeak) bestPeak = peakLength;
+      if (keep) keep.offer(bestPeak, realNow(), dying && !beatShown);
+    }
     const el = document.getElementById('len');
     /* The feedback page (window.MANTA_QUERY) shows players no lab wording (3K). */
     if (el) el.textContent = watching ? (typeof window.MANTA_QUERY === 'string' ? '' : 'watching bot ' + you.watched + '   length ' + you.len + '   tap for the next')
@@ -522,14 +530,16 @@ export function createFollow (ctx) {
       if (dying && !beatShown) {
         beatShown = true; beatT = 0;
         countTo = Math.max(you.peak, you.lastPeak); countFrom = Math.min(countTo, aliveLen);
-        card.textContent = String(countFrom);
+        cardNum(card).textContent = String(countFrom);
+        cardBest(card).textContent = 'best ' + bestPeak;
         card.className = 'on';
       } else if (!dying && beatShown) { beatShown = false; card.className = ''; }
       if (!dying) aliveLen = you.followers.length;   // the length the crash took, for the count-up
       if (beatShown) {
         beatT += Math.max(0, dt);
         const n = countFrom + Math.round((countTo - countFrom) * Math.min(1, beatT / COUNT_FOR));
-        if (String(n) !== card.textContent) card.textContent = String(n);
+        const el = cardNum(card);
+        if (String(n) !== el.textContent) el.textContent = String(n);
       }
     }
     /* The vignette through the beat (post.js owns the uniform; ctx.post is read at call time). */
@@ -545,7 +555,15 @@ export function createFollow (ctx) {
   }
 
 
-  return { followCamera, get peak () { return peakLength; }, get offScreen () { return offScreen; }, get zoom () { return zoomNow; },
+  /* The card's number and its best line, made once inside #beat. */
+  function cardPart (card, cls) {
+    let el = card.querySelector('.' + cls);
+    if (!el) { el = document.createElement('span'); el.className = cls; card.appendChild(el); }
+    return el;
+  }
+  const cardNum = card => cardPart(card, 'num'), cardBest = card => cardPart(card, 'best');
+
+  return { followCamera, get peak () { return peakLength; }, get best () { return bestPeak; }, get offScreen () { return offScreen; }, get zoom () { return zoomNow; },
            get zoomDrawn () { return zoomDrawn; }, get burstMix () { return burstMix; },
            get kick () { return kickNow(); }, get slashing () { return slashOn; }, get rankShown () { return rankShown; },
            get vignette () { return vigNow; }, get card () { return { from: countFrom, to: countTo, t: beatT }; },

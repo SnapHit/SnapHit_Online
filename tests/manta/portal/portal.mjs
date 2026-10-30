@@ -9,7 +9,8 @@
      WebGPU directly, WebGL2 with ?backend=webgl2, and in the iframe either
      WebGPU or the WebGL2 fallback, drawing; portal mode (no room buttons,
      chip, corner press or name box; your label "you"; the privacy note);
-     nothing stored on the device; no console errors; no horizontal
+     nothing stored on the device but the manta: keys the design doc names
+     (4D: STORED_OK); no console errors; no horizontal
      overflow in either orientation; all three touch schemes steer and burst.
    4C, design doc 10.7 (CrazyGames' rules), in parts: PART=load is the above;
    PART=frames: readable at a pixel ratio of 1 in 16:9 frames of 800x450 and
@@ -28,6 +29,11 @@
      your leader identical across the three, 60 steps a second, cruise 200
      units a second and turns at 5.2 radians a second.
    Default: all. The suite runs each part on its own. */
+/* 4D: the package may keep only the keys the design doc names (10.8): your
+   best (manta:best) and, from part 4, the sound pill's setting; nothing
+   in sessionStorage and nothing else in localStorage. */
+const STORED_OK = ['manta:best'];
+const storedBad = keys => !Array.isArray(keys) || keys.some(k => !STORED_OK.includes(k));
 import { chromium, PNG } from '../lib/tools.mjs';
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, statSync, mkdtempSync } from 'node:fs';
@@ -103,16 +109,16 @@ if (want('load')) {
   ok('directly, on Chrome 153: drawn on WebGPU with a device (or, the device lost in the first frames, on the WebGL2 fallback, saying so)', (be === 'WebGPU' || (be === 'WebGL2' && lostNote)) && (await ink(p)) > 0.05, be + (lostNote ? ' after the device was lost' : ''));
   const ui = await p.evaluate(() => { const vis = id => { const e = document.getElementById(id); return !!e && getComputedStyle(e).display !== 'none' && !e.hidden && e.getClientRects().length > 0; };
     return { friends: vis('friends'), solo: vis('solo'), online: vis('online'), chip: vis('chip'), corner: vis('corner'), name: vis('namePanel'), privacyLink: vis('privacyLink'), title: document.title,
-      room: !!(window.__lab && window.__lab.room), stored: (() => { try { return localStorage.length + sessionStorage.length; } catch (_) { return -1; } })() }; });
+      room: !!(window.__lab && window.__lab.room), stored: (() => { try { const k = []; for (let i = 0; i < localStorage.length; i++) k.push(localStorage.key(i)); for (let i = 0; i < sessionStorage.length; i++) k.push('session:' + sessionStorage.key(i)); return k; } catch (_) { return null; } })() }; });
   ok('portal mode: no Play with friends, Solo or Play online, no lab chip or corner press, no name box; the Privacy link kept', !ui.friends && !ui.solo && !ui.online && !ui.chip && !ui.corner && !ui.name && ui.privacyLink && !ui.room, JSON.stringify(ui));
   ok('the title is the game\'s name from its one constant', ui.title === 'Raywake', ui.title);
   await p.click('#privacyLink').catch(() => {});
   const priv = await p.evaluate(() => ({ portal: document.getElementById('privacyPortal').hidden ? null : document.getElementById('privacyPortal').textContent.replace(/\s+/g, ' ').trim(), site: !document.getElementById('privacy').hidden }));
-  ok('Privacy says it stores nothing on the device and contacts no server', priv.portal && /stores nothing on this device/.test(priv.portal) && /contacts no\s+server/.test(priv.portal) && !priv.site, priv.portal);
+  ok('Privacy says it stores only your best on the device and contacts no server', priv.portal && /stores only your best/.test(priv.portal) && /contacts no\s+server/.test(priv.portal) && !priv.site, priv.portal);
   /* 4C: your label is the name you swim under, generated (until 4C, "you"). */
   const label = await p.evaluate(() => ({ name: window.MANTA_NAME, shown: [...document.querySelectorAll('#labels div')].map(d => d.textContent) }));
   ok('your label reads the generated name you swim under', /^[a-z]+ [a-z]+$/.test(label.name || '') && label.shown.includes(label.name), JSON.stringify(label).slice(0, 160));
-  ok('nothing stored on the device after play', ui.stored === 0, ui.stored);
+  ok('nothing stored on the device after play but ' + STORED_OK.join(' and '), !storedBad(ui.stored), JSON.stringify(ui.stored));
   ok('directly: zero requests outside the package\'s own files, and no room connection', outside(reqs).length === 0 && !reqs.some(u => /rooms\//.test(u)), outside(reqs).slice(0, 3).join(' ') + ' (' + reqs.length + ' requests)');
   ok('directly: no console errors', errs.length === 0, JSON.stringify(errs.slice(0, 3)) + (known.length ? ' (known headless artefact ' + known.length + 'x: popErrorScope)' : ''));
   await ctx.close();
@@ -270,8 +276,8 @@ if (want('rules')) {
   await p.click('#meEdit button >> text=Done');
   await p.waitForFunction(() => !document.getElementById('meEdit'), null, { timeout: 10000 }).catch(() => {});
   await settle(p);
-  const nm = await p.evaluate(() => ({ name: window.MANTA_NAME, me: document.getElementById('meNameText').textContent, labels: [...document.querySelectorAll('#labels div')].map(d => d.textContent), stored: (() => { try { return localStorage.length + sessionStorage.length; } catch (_) { return -1; } })() }));
-  ok('the pencil changes it, cleaned as a room cleans a name ("Reef Rider of th", 16 characters), over your leader and top left, and nothing is stored', nm.name === 'Reef Rider of th' && nm.me === nm.name && nm.labels.includes(nm.name) && nm.stored === 0, JSON.stringify(nm));
+  const nm = await p.evaluate(() => ({ name: window.MANTA_NAME, me: document.getElementById('meNameText').textContent, labels: [...document.querySelectorAll('#labels div')].map(d => d.textContent), stored: (() => { try { const k = []; for (let i = 0; i < localStorage.length; i++) k.push(localStorage.key(i)); for (let i = 0; i < sessionStorage.length; i++) k.push('session:' + sessionStorage.key(i)); return k; } catch (_) { return null; } })() }));
+  ok('the pencil changes it, cleaned as a room cleans a name ("Reef Rider of th", 16 characters), over your leader and top left, and the name is not stored', nm.name === 'Reef Rider of th' && nm.me === nm.name && nm.labels.includes(nm.name) && !storedBad(nm.stored), JSON.stringify(nm));
   ok('no fullscreen button of its own (the portal provides one)', st.full === 0, JSON.stringify(st.controls));
   ok('no link but Privacy: no <a> shown, the only controls your name and Privacy, and the privacy note links nowhere', st.links.length === 0 && st.controls.every(c => c === 'meName' || c === 'privacyLink') && st.privacyLinks === 0, JSON.stringify({ links: st.links, controls: st.controls }));
   /* Hidden, a page of the site would send its counts: the package must not. */

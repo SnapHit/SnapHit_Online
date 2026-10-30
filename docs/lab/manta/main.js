@@ -304,7 +304,9 @@ follower = createFollow({ mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, W
                                 sharkSlot: SHARK_SLOT, sharkMesh: createSharkMesh(scene),
                                 get view () { return view; }, get sim () { return sim; }, get P () { return P; },
                                 get lm () { return lm; }, get lmSlow () { return lmSlow; }, get post () { return post; },
-                                get shadows () { return shadows; } });
+                                get shadows () { return shadows; },
+                                /* The feedback page and the portal keep your best on the device (4D). */
+                                keepBest: typeof window.MANTA_QUERY === 'string' });
 const followCamera = dt => follower.followCamera(dt);
 window.__lab.zoom = () => follower.zoom;   // the eased camera zoom (3L), for the tests
 window.__lab.zoomDrawn = () => follower.zoomDrawn;   // with the burst zoom (4A) applied
