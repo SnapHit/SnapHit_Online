@@ -108,11 +108,24 @@ if (PART === 'clean') {
   const cs = [];
   for (const [, n] of INPUTS) { const c = player(+process.env.PORT, code, {}); cs.push(c); await c.opened; c.sendRaw({ t: 'nm', n }); await wait(150); }
   await wait(2500);
-  const seen = await p.evaluate(() => { const S = window.__sim, board = document.getElementById('board');
+  /* 4C: the board is redrawn on its own beat, the trains with every
+     snapshot, so one reading can catch a train newly in the top ten
+     before the board has drawn it (once in 4C's second full suite pass:
+     "abcde" in the trains, not yet on the board). Read up to ten times,
+     300 ms apart, until every name whose train is in the top ten is on
+     the board; the last reading is judged either way. */
+  const want = INPUTS.map(([, n]) => cleanName(n)), ids = cs.map(c => c.play.id);
+  let seen = null;
+  for (let k = 0; k < 10; k++) {
+    if (k) await wait(300);
+    seen = await read();
+    if (ids.every((id, i) => !seen.onBoard.includes(id) || seen.board.includes(want[i]))) break;
+  }
+  async function read () { return p.evaluate(() => { const S = window.__sim, board = document.getElementById('board');
     /* 4B: the board is the top ten of a room's 20 trains, so a name is
        looked for there only when its train is on it. */
     return { names: [...Array(21).keys()].map(i => S.nameOf(i)), onBoard: (S.trains || []).map(t => t.id), board: board.textContent, boardEls: [...board.querySelectorAll('*')].map(e => e.tagName),
-      labelEls: [...document.querySelectorAll('#labels *')].filter(e => e.children.length).length, imgs: document.querySelectorAll('img').length, x: window.__x || 0 }; });
+      labelEls: [...document.querySelectorAll('#labels *')].filter(e => e.children.length).length, imgs: document.querySelectorAll('img').length, x: window.__x || 0 }; }); }
   for (let i = 0; i < INPUTS.length; i++) {
     const [what, n] = INPUTS[i], want = cleanName(n), id = cs[i].play.id, got = seen.names[id];
     const listed = seen.onBoard.includes(id);

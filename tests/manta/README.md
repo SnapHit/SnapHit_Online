@@ -152,6 +152,7 @@ times that, so on such a machine:
 - Screenshots of big pages take longer than Playwright's 30 s default: a
   2560x1440 desktop screenshot took 20.7 to 33.0 s, the 300-long train of
   `pictures.mjs` 42 s; those harnesses allow 150 s.
+- `room-names/names.mjs` `PART=clean` reads the board up to ten times, 300 ms apart, until every name whose train is in the top ten is on it: the board is redrawn on its own beat, the trains with every snapshot.
 - `room-play/playmode.mjs` judges the page's prediction on at least 40 corrections (80 until 4C; at 20:0 the page here counted 63 to 94 in 20 s) and waits up to 5 s (2 s until 4C) for the room to say you are bursting (at 300:100 it had not within 2 s once in nine runs).
 - `room-full/full.mjs` (`MODE=back`) judges a first load by the page's own 5 s (note=full rather than note=slow; the page starts its 5 s when the room starts trying), not by the test's clock from the load event, which also counts the page's modules and first frames: 5.8 s once in 4C's first full pass.
 - `browser/def.mjs`'s zero-second step allows the renderer's rounding: under SwiftShader two draws of the same frame differed at 1, 2, 1 and 0 pixels by one level in four runs; the bar is 0.01% of the ocean and two levels, where a shader on the wall clock moves the whole ocean.
