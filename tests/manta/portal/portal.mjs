@@ -221,14 +221,19 @@ if (want('frames')) for (const [vw, vh, touch] of [[800, 450, false], [1080, 607
   await p.screenshot({ path: OUTD + '/portal-' + tag + '-hint.png' });
   /* Fifteen bots given trains of 8 to 22 and yours emptied: you are off the ten, so your rank line shows. */
   await p.evaluate(() => { const L = window.__lab, S = window.__sim; L.pause(); S.rivals.slice(0, 15).forEach((r, i) => { for (let k = 0; k < 8 + i; k++) r.followers.push({ x: r.x, z: r.z, head: r.head, born: -100, from: -1 }); });
-    S.you.followers.length = 0; for (let i = 0; i < 8; i++) L.step(0.2); });
+    S.you.followers.length = 0; for (let i = 0; i < 8; i++) L.step(0.2);
+    /* 4C: with twenty bots about, your leader sometimes swims into a train in
+       those 1.6 s (360x800 once in 4C's fifth full pass: the death beat on
+       screen, so no name over a leader). Stepped on past the beat, a restart
+       is still off the ten, so the rank line still shows. */
+    window.__framesCrashed = 0; for (let k = 0; k < 40 && S.you.dead > 0; k++) { if (!k) window.__framesCrashed = 1; L.step(0.2); } });
   await settle(p);
-  const r = await rectsOf(p);
+  const r = await rectsOf(p), crashed = await p.evaluate(() => window.__framesCrashed);
   await p.screenshot({ path: OUTD + '/portal-' + tag + '.png' });
   const inside = e => !!e && e.x >= 0 && e.y >= 0 && e.right <= r.W + 0.5 && e.bottom <= r.H + 0.5;
   const minFont = touch ? 11 : 13;
   ok(tag + (touch ? ' (phone)' : ' (a portal\'s frame, mouse)') + ': the board with your rank line under it, the radar, your name over your leader and your name with its pencil, all on screen, the rank line not cut off',
-     inside(r.board) && inside(r.rank) && r.rank.bottom <= r.board.bottom + 0.5 && inside(r.radar) && inside(r.label) && inside(r.me) && inside(r.privacy), JSON.stringify({ board: r.board, rank: r.rank, clip: r.boardClip, radar: r.radar && Math.round(r.radar.w) }).slice(0, 300));
+     inside(r.board) && inside(r.rank) && r.rank.bottom <= r.board.bottom + 0.5 && inside(r.radar) && inside(r.label) && inside(r.me) && inside(r.privacy), JSON.stringify({ label: !!r.label, me: !!r.me, privacy: !!r.privacy, crashedFirst: crashed, board: r.board, rank: r.rank, clip: r.boardClip, radar: r.radar && Math.round(r.radar.w) }).slice(0, 380));
   const keys = ['board', 'radar', 'len', 'stats', 'privacy', 'me'], pairs = [];
   for (let i = 0; i < keys.length; i++) for (let j = i + 1; j < keys.length; j++) if (overlaps(r[keys[i]], r[keys[j]])) pairs.push(keys[i] + '/' + keys[j]);
   if (hint && hint.shown) for (const k of ['board', 'radar', 'len', 'stats', 'privacy', 'me']) if (overlaps(hint, r[k])) pairs.push('hint/' + k);
