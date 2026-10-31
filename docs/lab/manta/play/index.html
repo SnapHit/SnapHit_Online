@@ -387,6 +387,23 @@
      desktop sizes below still win where they apply). */
   body.portal:not(.lab) #board { top: calc(env(safe-area-inset-top, 0px) + 50px); }
   @media (orientation: landscape) and (max-height: 520px) { body.portal:not(.lab) #board { max-height: calc(100vh - 116px - max(96px, min(160px, 28vh))); line-height: 1.3; } }
+  /* THE SOUND PILL (4D, sound.js): bottom left, above the score and stats lines. It
+     reads SOUND ON or SOUND OFF and breathes until it has been used once,
+     then settles to a quiet icon, as on the site (NOTES.md, Sound). */
+  #sound { position: fixed; z-index: 5; left: calc(env(safe-area-inset-left, 0px) + 8px); bottom: calc(env(safe-area-inset-bottom, 0px) + 50px);
+    display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 12px 0 10px; cursor: pointer;
+    font: 800 12px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; letter-spacing: 1.4px; color: #dff6ee;
+    background: rgba(6, 14, 26, .72); border: 1px solid rgba(127, 227, 208, .55); border-radius: 999px;
+    -webkit-tap-highlight-color: transparent; animation: soundBreathe 2.6s ease-in-out infinite; }
+  #sound.off { color: #bcd9f0; border-color: rgba(127, 182, 221, .55); }
+  #sound .x { display: none; } #sound.off .x { display: inline; } #sound.off .w1, #sound.off .w2 { display: none; }
+  #sound.shy { animation: none; opacity: .62; min-height: 28px; }
+  #sound.shy .t { font-size: 11px; }
+  @keyframes soundBreathe { 0%, 100% { opacity: .72; } 50% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { #sound { animation: none; } }
+  body.reduced #sound { animation: none; }
+  @media (min-width: 760px) and (pointer: fine) { #sound { font-size: 13px; } #sound.shy .t { font-size: 13px; } }
+  @media (min-width: 1200px) and (min-height: 700px) and (pointer: fine) { #sound { left: 14px; bottom: 60px; } }
   /* THE NAME PANEL (3J): the first visit, over the live ocean. Centred in
      what the keyboard leaves (interactive-widget=resizes-content). */
   #namePanel {
@@ -456,7 +473,7 @@
     <p id="privacy"><span class="gameName">Raywake</span> keeps nothing about you, apart from any feedback you choose to send.
     Playing online, your phone sends the room your name, your steering, the part of the ocean you are
     looking at and a random key, kept in this tab, that lets you rejoin after a dropped connection; the
-    room forgets it all when it empties. Your name, your best and the day you last played stay on this phone. A
+    room forgets it all when it empties. Your name, your best, your sound setting and the day you last played stay on this phone. A
     private room's code is kept until it has had no players for 24 hours, and the address that asked
     for it for 10 seconds, to stop floods. The game counts plays (visits, runs, room joins, runs past a
     minute, and whether you have played on an earlier day) with nothing that identifies you: no
@@ -465,7 +482,7 @@
     memory for that day only. No accounts, no cookies, nothing from
     anyone else's servers. The site runs on Cloudflare, which keeps its own short-lived connection
     logs.</p>
-    <p id="privacyPortal" hidden><span class="gameName">Raywake</span> stores only your best on this device, and contacts no
+    <p id="privacyPortal" hidden><span class="gameName">Raywake</span> stores only your best and your sound setting on this device, and contacts no
     server: it plays entirely from the files in this package. No accounts, no cookies, no analytics.</p>
   </div>
 </div>

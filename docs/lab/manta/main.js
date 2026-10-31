@@ -41,6 +41,7 @@ import { savedName } from './labels.js';
 import { GAME_NAME } from './game.js';
 import { createHint } from './hint.js';
 import { createSharkMesh } from './sharkmesh.js';
+import { createSound } from './sound.js';
 /* The game's name (3O), from its one constant: the title, plus the page's
    own suffix (<html data-title>), and every .gameName on the page. */
 document.title = GAME_NAME + (document.documentElement.dataset.title || '');
@@ -84,6 +85,10 @@ const HOLD = typeof window.MANTA_QUERY === 'string' && query.get('hold') !== '0'
    30 s; solo here, in a room by the hello's f:1. ?first=0 (tests) and the
    lab page start as before. */
 const FIRST = typeof window.MANTA_QUERY === 'string' && query.get('first') !== '0';
+/* SOUND (4D, sound.js): on the feedback page and in the portal package,
+   with its pill; ?sound=0 leaves it out (tests), ?sound=1 puts it on the
+   lab page. Made before anything draws, so the first tap can wake it. */
+const sound = (typeof window.MANTA_QUERY === 'string' ? query.get('sound') !== '0' : query.get('sound') === '1') ? createSound() : null;
 
 /* Before anything else builds: a complaint during init is the one most worth
    catching, and console.error is where three makes most of them. */
@@ -318,7 +323,7 @@ follower = createFollow({ mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, W
                                 get lm () { return lm; }, get lmSlow () { return lmSlow; }, get post () { return post; },
                                 get shadows () { return shadows; },
                                 /* The feedback page and the portal keep your best on the device (4D). */
-                                keepBest: typeof window.MANTA_QUERY === 'string', holdDeath: HOLD });
+                                keepBest: typeof window.MANTA_QUERY === 'string', holdDeath: HOLD, sound });
 const followCamera = dt => follower.followCamera(dt);
 /* The card's taps (4D): solo, a skip ends the simulation's beat now and
    the next tap lets your train restart; in a room the room is told. */
@@ -328,6 +333,7 @@ if (follower.deathCard && HOLD) {
   follower.deathCard.onGo = () => { if (ROOM) { if (sim.go) sim.go(); } else { sim.you.go = true; if (sim.you.dead > 1e-5) sim.you.dead = 1e-6; } };
 }
 window.__lab.card = follower.deathCard;
+window.__lab.sound = sound;
 window.__lab.zoom = () => follower.zoom;   // the eased camera zoom (3L), for the tests
 window.__lab.zoomDrawn = () => follower.zoomDrawn;   // with the burst zoom (4A) applied
 window.__lab.roomView = roomView;                // the view the room is told (4A tests)

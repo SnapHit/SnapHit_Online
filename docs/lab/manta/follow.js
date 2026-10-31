@@ -118,7 +118,7 @@ export function createFollow (ctx) {
      kept). Kept apart from zoomNow, so the close-up camera's own ease and
      its 2% a frame cap are untouched and the tests still read them. */
   const BURST_OUT = 0.3, BURST_BACK = 0.6;
-  let burstMix = 0, zoomDrawn = null, baseScale = 1;
+  let burstMix = 0, zoomDrawn = null, baseScale = 1, wasBursting = false, pinkWas = false;
   /* THE FIRST SWIM'S REVEAL (4A stage 3, change 5): on a session's first
      frame the view is INTRO_BY wider than the close zoom and eases in over
      INTRO_FOR seconds of scene time (a smoothstep), so the first frame
@@ -277,6 +277,8 @@ export function createFollow (ctx) {
        prediction carries the same flag, and the input says so until it does. */
     const bursting = !dying && !watching && (you.bursting === true ||
       (!!(ctx.sim.input && ctx.sim.input.burst) && you.followers.length > 0));
+    if (ctx.sound && bursting && !wasBursting) ctx.sound.burst();
+    wasBursting = bursting;
     burstMix = bursting ? Math.min(1, burstMix + edt / BURST_OUT) : Math.max(0, burstMix - edt / BURST_BACK);
     const pct = Math.max(0, ZP.burstZoom ?? 12) * (cut && cut.reduced ? 0.5 : 1) / 100;
     const ease = burstMix * burstMix * (3 - 2 * burstMix);
@@ -305,6 +307,8 @@ export function createFollow (ctx) {
     /* Anyone who joined since the last frame arrives wearing their own colour
        and fades into yours. The slot has to take their colour as its own too,
        or a scatter in stage 3 would hand it the one the deal gave the slot. */
+    /* SOUND (4D, sound.js): a chime for a recruit, pitched by the length. */
+    if (ctx.sound && !watching && !dying && n > drawnFollowers && !restarted) ctx.sound.recruit(n);
     for (let i = drawnFollowers; i < n; i++) {
       const src = f[i].from;
       if (src >= 0) m.adoptOwn(i + 1, WILD_BASE + src);
@@ -409,6 +413,9 @@ export function createFollow (ctx) {
        span narrowed through the roll to suggest the turn. Parked when it is
        not in the water. */
     const pk = ctx.sim.pink;
+    /* The pink manta's sparkle when it appears, wherever it is: it is on every radar (4D). */
+    if (ctx.sound && pk && pk.alive && !pinkWas) ctx.sound.pink('appear');
+    pinkWas = !!(pk && pk.alive);
     if (pk && pk.alive) {
       const r = pk.roll, belly = r >= 0 && r > 0.25 && r < 0.75;
       m.aPos.setXYZ(PINK_SLOT, pk.x, 0, pk.z); m.aHead.setX(PINK_SLOT, pk.head);
@@ -486,7 +493,16 @@ export function createFollow (ctx) {
       const v = ctx.view, hw = v.w / 2 + 40, hh = v.h / 2 + 40;
       for (const e of evs.splice(0)) {
         if (deathCard && e.kind === 'cut' && you.id >= 0 && e.by === you.id && !watching) deathCard.cut();
-        if (Math.abs(e.x - at.x) > hw || Math.abs(e.z - at.z) > hh) { offScreen++; continue; }
+        /* Sound (4D): your own cut and crash wherever they are, anyone
+           else's only on screen, and quieter. */
+        const mineHit = !watching && you.id >= 0 && ((e.kind === 'cut' && e.by === you.id) || (e.kind === 'crash' && e.id === you.id));
+        const onScreen = !(Math.abs(e.x - at.x) > hw || Math.abs(e.z - at.z) > hh);
+        if (ctx.sound && (mineHit || onScreen)) {
+          if (e.kind === 'cut') ctx.sound.cut(mineHit);
+          else if (e.kind === 'crash') ctx.sound.crash(mineHit);
+          else if (e.kind === 'pink' && e.what === 'catch') ctx.sound.pink('catch');
+        }
+        if (!onScreen) { offScreen++; continue; }
         /* The pink manta's catch on screen: a pink light burst stamped for
            0.3 s where it was taken (the slash's slot, free at a catch). Its
            appearance and leaving play nothing: it is seen, not announced. */

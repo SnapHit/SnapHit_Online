@@ -30,9 +30,10 @@
      units a second and turns at 5.2 radians a second.
    Default: all. The suite runs each part on its own. */
 /* 4D: the package may keep only the keys the design doc names (10.8): your
-   best (manta:best) and, from part 4, the sound pill's setting; nothing
-   in sessionStorage and nothing else in localStorage. */
-const STORED_OK = ['manta:best'];
+   best (manta:best) and the sound pill's setting (manta:sound: the doc
+   says "remembered on the device", the brief "under a manta: key");
+   nothing in sessionStorage and nothing else in localStorage. */
+const STORED_OK = ['manta:best', 'manta:sound'];
 const storedBad = keys => !Array.isArray(keys) || keys.some(k => !STORED_OK.includes(k));
 import { chromium, PNG } from '../lib/tools.mjs';
 import { createServer } from 'node:http';
@@ -114,7 +115,7 @@ if (want('load')) {
   ok('the title is the game\'s name from its one constant', ui.title === 'Raywake', ui.title);
   await p.click('#privacyLink').catch(() => {});
   const priv = await p.evaluate(() => ({ portal: document.getElementById('privacyPortal').hidden ? null : document.getElementById('privacyPortal').textContent.replace(/\s+/g, ' ').trim(), site: !document.getElementById('privacy').hidden }));
-  ok('Privacy says it stores only your best on the device and contacts no server', priv.portal && /stores only your best/.test(priv.portal) && /contacts no\s+server/.test(priv.portal) && !priv.site, priv.portal);
+  ok('Privacy says it stores only your best and your sound setting on the device and contacts no server', priv.portal && /stores only your best and your sound setting/.test(priv.portal) && /contacts no\s+server/.test(priv.portal) && !priv.site, priv.portal);
   /* 4C: your label is the name you swim under, generated (until 4C, "you"). */
   const label = await p.evaluate(() => ({ name: window.MANTA_NAME, shown: [...document.querySelectorAll('#labels div')].map(d => d.textContent) }));
   ok('your label reads the generated name you swim under', /^[a-z]+ [a-z]+$/.test(label.name || '') && label.shown.includes(label.name), JSON.stringify(label).slice(0, 160));
@@ -212,7 +213,7 @@ async function openAt (url, vw, vh, touch, init) {
 const settle = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() => { window.__lab.step(1 / 60); r(); })));
 const rectsOf = p => p.evaluate(() => { const g = el => { if (!el) return null; const cs = getComputedStyle(el); if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0 || el.hidden) return null; const r = el.getBoundingClientRect(); if (!r.width || !r.height) return null; return { x: r.x, y: r.y, w: r.width, h: r.height, right: r.right, bottom: r.bottom, font: parseFloat(cs.fontSize) }; };
   const $ = id => document.getElementById(id), board = $('board'), rank = document.querySelector('#board .rankLine');
-  return { board: g(board), rank: g(rank), radar: g($('radar')), len: g($('len')), stats: g($('stats')), privacy: g($('privacyLink')), me: g($('meName')), hint: g($('hint')), beat: g($('beat')),
+  return { board: g(board), rank: g(rank), radar: g($('radar')), len: g($('len')), stats: g($('stats')), privacy: g($('privacyLink')), me: g($('meName')), sound: g($('sound')), hint: g($('hint')), beat: g($('beat')),
     label: (() => { const e = [...document.querySelectorAll('#labels div')].find(d => d.textContent === window.MANTA_NAME); return e ? g(e) : null; })(),
     labelFont: (() => { const e = document.querySelector('#labels div'); return e ? parseFloat(getComputedStyle(e).fontSize) : null; })(),
     boardClip: board ? board.scrollHeight - board.clientHeight : null, W: innerWidth, H: innerHeight, over: document.documentElement.scrollWidth - innerWidth }; });
@@ -242,10 +243,10 @@ if (want('frames')) for (const [vw, vh, touch] of [[800, 450, false], [1080, 607
   const minFont = touch ? 11 : 13;
   ok(tag + (touch ? ' (phone)' : ' (a portal\'s frame, mouse)') + ': the board with your rank line under it, the radar, your name over your leader and your name with its pencil, all on screen, the rank line not cut off',
      inside(r.board) && inside(r.rank) && r.rank.bottom <= r.board.bottom + 0.5 && inside(r.radar) && inside(r.label) && inside(r.me) && inside(r.privacy), JSON.stringify({ label: !!r.label, me: !!r.me, privacy: !!r.privacy, crashedFirst: crashed, board: r.board, rank: r.rank, clip: r.boardClip, radar: r.radar && Math.round(r.radar.w) }).slice(0, 380));
-  const keys = ['board', 'radar', 'len', 'stats', 'privacy', 'me'], pairs = [];
+  const keys = ['board', 'radar', 'len', 'stats', 'privacy', 'me', 'sound'], pairs = [];
   for (let i = 0; i < keys.length; i++) for (let j = i + 1; j < keys.length; j++) if (overlaps(r[keys[i]], r[keys[j]])) pairs.push(keys[i] + '/' + keys[j]);
-  if (hint && hint.shown) for (const k of ['board', 'radar', 'len', 'stats', 'privacy', 'me']) if (overlaps(hint, r[k])) pairs.push('hint/' + k);
-  ok(tag + ': nothing over anything else (board, radar, score, stats, Privacy, your name' + (hint && hint.shown ? ', the hint' : '') + ')', pairs.length === 0 && r.over <= 0, pairs.join(' ') || 'none');
+  if (hint && hint.shown) for (const k of ['board', 'radar', 'len', 'stats', 'privacy', 'me', 'sound']) if (overlaps(hint, r[k])) pairs.push('hint/' + k);
+  ok(tag + ': nothing over anything else (board, radar, score, stats, Privacy, your name, the sound pill' + (hint && hint.shown ? ', the hint' : '') + '), the sound pill on screen at least ' + minFont + ' px', pairs.length === 0 && r.over <= 0 && !!r.sound && r.sound.x >= 0 && r.sound.bottom <= r.H + 0.5 && r.sound.font >= minFont, (pairs.join(' ') || 'none') + ' sound ' + JSON.stringify(r.sound));
   ok(tag + ': text at least ' + minFont + ' px (board ' + (r.board && r.board.font) + ', score ' + (r.len && r.len.font) + ', stats ' + (r.stats && r.stats.font) + ', names ' + r.labelFont + ', your name ' + (r.me && r.me.font) + '), the hint at least 15 (' + (hint && hint.font) + ')',
      [r.board, r.len, r.stats, r.me].every(e => e && e.font >= minFont) && r.labelFont >= minFont && hint && hint.font >= 15, '');
   ok(tag + ': the hint was up on the first frames, on screen' + (hint && hint.shown ? '' : ' (it had faded by the shot: five seconds of a real clock)'), !!hint && (!hint.shown || (hint.x >= 0 && hint.right <= vw + 0.5 && hint.bottom <= vh + 0.5)), hint ? hint.text : 'no hint');
@@ -284,7 +285,8 @@ if (want('rules')) {
   const nm = await p.evaluate(() => ({ name: window.MANTA_NAME, me: document.getElementById('meNameText').textContent, labels: [...document.querySelectorAll('#labels div')].map(d => d.textContent), stored: (() => { try { const k = []; for (let i = 0; i < localStorage.length; i++) k.push(localStorage.key(i)); for (let i = 0; i < sessionStorage.length; i++) k.push('session:' + sessionStorage.key(i)); return k; } catch (_) { return null; } })() }));
   ok('the pencil changes it, cleaned as a room cleans a name ("Reef Rider of th", 16 characters), over your leader and top left, and the name is not stored', nm.name === 'Reef Rider of th' && nm.me === nm.name && nm.labels.includes(nm.name) && !storedBad(nm.stored), JSON.stringify(nm));
   ok('no fullscreen button of its own (the portal provides one)', st.full === 0, JSON.stringify(st.controls));
-  ok('no link but Privacy: no <a> shown, the only controls your name and Privacy, and the privacy note links nowhere', st.links.length === 0 && st.controls.every(c => c === 'meName' || c === 'privacyLink') && st.privacyLinks === 0, JSON.stringify({ links: st.links, controls: st.controls }));
+  /* 4D: the sound pill is a control too (a sound switch, not a fullscreen button). */
+  ok('no link but Privacy: no <a> shown, the only controls your name, the sound pill and Privacy, and the privacy note links nowhere', st.links.length === 0 && st.controls.every(c => c === 'meName' || c === 'privacyLink' || c === 'sound') && st.controls.includes('sound') && st.privacyLinks === 0, JSON.stringify({ links: st.links, controls: st.controls }));
   /* Hidden, a page of the site would send its counts: the package must not. */
   await p.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' }); document.dispatchEvent(new Event('visibilitychange')); window.dispatchEvent(new Event('pagehide')); });
   await new Promise(r => setTimeout(r, 1000));
