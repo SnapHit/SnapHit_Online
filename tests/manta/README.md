@@ -299,7 +299,27 @@ node tools/manta/media.mjs covers  "$OUT"   # raywake-cover-1920x1080.png, -800x
 node tools/manta/media.mjs video16 "$OUT"   # raywake-preview-1920x1080.mp4
 node tools/manta/media.mjs video23 "$OUT"   # raywake-preview-1080x1620.mp4
 node tools/manta/media.mjs plan    "$OUT"   # the video's steering run without frames: lengths, deaths, crashes and cuts
+node tools/manta/media.mjs bright  "$OUT"   # 4D: raywake-cover-bright-1920x1080.png, -800x1200.png, -800x800.png, and each at 320 wide (about 1 min)
+node tools/manta/media.mjs brightstill 1920x1080 "$OUT"   # one bright cover without its title, while tuning
 ```
+
+The bright covers (4D, design doc 10.8) are composed rather than taken:
+the close-up camera held at a closer zoom, your lime train laid along a
+curl and turned gently through a 1.6 s lead-in so its wake builds, then
+bursting straight into a short orange train laid across its path (swimming
+away from the title), the frame taken 0.13 s after the cut, at the burst of
+light; a scarlet train and (on two of the three) a violet one laid a sixth
+of a second before, where they stand on the cover (laid any earlier, their
+lead-in crossed your laid train and they crashed); three ordinary wild
+mantas in four in the frame moved out of it, and none in the title's band.
+The camera always sits on your leader, so each frame is drawn taller than
+the cover and cropped, with your leader about 60 percent of the way down
+and the zoom raised by the square root of the extra height (the same-area
+rule gives a taller page more ocean). The page's real clock, which the
+cut's flash and slash run on, is replaced by one the script moves a
+thirtieth of a second a frame. The title is Inter Display Black with a
+wider, warmer glow than 4C's. Judge them at 320 wide as well as full size:
+the script writes both.
 
 It needs `MANTA_TOOLS` and `CHROME` (Chromium 141, as above) and, for the
 videos, ffmpeg. The videos are drawn frame by frame on a fixed clock (the

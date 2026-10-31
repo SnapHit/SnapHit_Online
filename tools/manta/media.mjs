@@ -11,6 +11,15 @@
        speed, silent H.264, no cursor, bars or text
      node tools/manta/media.mjs still <name> <w> <h> [output directory]
        one frame of the staged moment, to look at while tuning the staging
+     node tools/manta/media.mjs bright [output directory]
+       raywake-cover-bright-1920x1080.png, -800x1200.png, -800x800.png (4D,
+       design doc 10.8): composed rather than a screenshot, closer in, your
+       lime train curling through much of the frame, its burst cutting an
+       orange train in a burst of light, two rivals in other colours, the
+       title "Raywake" the only text; and raywake-cover-bright-*-320.png,
+       each at a thumbnail's width, to judge them as a portal shows them
+     node tools/manta/media.mjs brightstill <name> [output directory]
+       one bright cover without its title, at half size, while tuning
      node tools/manta/media.mjs plan [output directory]
        the video's steering run without frames: your length, deaths, and
        every crash and cut, to check a change to the staging or steering
@@ -44,7 +53,7 @@ import { tmpdir } from 'node:os';
 const ROOT = resolve(dirname(new URL(import.meta.url).pathname), '../..');
 const DOCS = join(ROOT, 'docs');
 const [MODE = 'covers', ...rest] = process.argv.slice(2);
-const OUTARG = MODE === 'still' ? rest[3] : rest[0];
+const OUTARG = MODE === 'still' ? rest[3] : MODE === 'brightstill' ? rest[1] : rest[0];
 const OUT = resolve(OUTARG || process.env.MANTA_OUT || mkdtempSync(join(tmpdir(), 'raywake-media-')));
 if (!relative(ROOT, OUT).startsWith('..')) throw new Error('media never goes inside the repo: ' + OUT);
 mkdirSync(OUT, { recursive: true });
@@ -241,19 +250,28 @@ async function steer (p, t) {
 }
 /* The title over a frame: "Raywake", centred near the top, white with a
    soft glow, in the cleanest bold face here. */
-async function titled (png, w, h, size, top) {
+async function titled (png, w, h, size, top, bright = false) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
   const p = await ctx.newPage();
   await p.setContent('<!doctype html><style>html,body{margin:0;width:' + w + 'px;height:' + h + 'px;overflow:hidden;background:#000}' +
     'img{position:absolute;left:0;top:0;width:' + w + 'px;height:' + h + 'px}' +
-    'h1{position:absolute;left:0;right:0;top:' + top + 'px;margin:0;text-align:center;font:800 ' + size + 'px/1 "Inter Display","Inter",system-ui,sans-serif;letter-spacing:-0.01em;color:#fbfdff;' +
-    'text-shadow:0 0 ' + Math.round(size * 0.35) + 'px rgba(140,240,255,.45),0 ' + Math.round(size * 0.04) + 'px ' + Math.round(size * 0.12) + 'px rgba(0,8,20,.55)}</style>' +
+    'h1{position:absolute;left:0;right:0;top:' + top + 'px;margin:0;text-align:center;font:' + (bright ? 900 : 800) + ' ' + size + 'px/1 "Inter Display","Inter",system-ui,sans-serif;letter-spacing:-0.01em;color:#fbfdff;' +
+    /* 4D, the bright covers: a wider, warmer glow and a firmer shadow under it, so the title holds at a thumbnail. */
+    'text-shadow:' + (bright ? '0 0 ' + Math.round(size * 0.22) + 'px rgba(200,255,120,.55),0 0 ' + Math.round(size * 0.6) + 'px rgba(120,230,255,.45),0 ' + Math.round(size * 0.05) + 'px ' + Math.round(size * 0.1) + 'px rgba(0,6,16,.85)'
+      : '0 0 ' + Math.round(size * 0.35) + 'px rgba(140,240,255,.45),0 ' + Math.round(size * 0.04) + 'px ' + Math.round(size * 0.12) + 'px rgba(0,8,20,.55)') + '}</style>' +
     '<img src="data:image/png;base64,' + png.toString('base64') + '"><h1>Raywake</h1>');
   await p.evaluate(() => document.fonts.ready);
   const face = await p.evaluate(() => ['Inter Display', 'Inter'].find(f => document.fonts.check('800 40px "' + f + '"')) || 'a fallback bold sans');
   const out = await p.screenshot({ type: 'png' });
   await ctx.close();
   return { out, face };
+}
+/* The part of a frame of rw x rh from (x, y), w x h, pixel for pixel. */
+async function cropped (png, rw, rh, x, y, w, h) {
+  const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
+  const p = await ctx.newPage();
+  await p.setContent('<!doctype html><style>html,body{margin:0;overflow:hidden;background:#000}img{position:absolute;left:' + (-x) + 'px;top:' + (-y) + 'px;width:' + rw + 'px;height:' + rh + 'px}</style><img src="data:image/png;base64,' + png.toString('base64') + '">');
+  const out = await p.screenshot({ type: 'png' }); await ctx.close(); return out;
 }
 /* A frame rendered at rw x rh, scaled to w x h by the compositor (smooth). */
 async function scaled (png, rw, rh, w, h) {
@@ -262,6 +280,139 @@ async function scaled (png, rw, rh, w, h) {
   const p = await ctx.newPage();
   await p.setContent('<!doctype html><style>html,body{margin:0;overflow:hidden}img{width:' + w + 'px;height:' + h + 'px;display:block}</style><img src="data:image/png;base64,' + png.toString('base64') + '">');
   const out = await p.screenshot({ type: 'png' }); await ctx.close(); return out;
+}
+
+/* THE BRIGHT COVERS (4D, design doc 10.8). The first set was mostly dark
+   water with small trains, which is what the portals warn against. These
+   are composed: the camera closer in (the zoom the close-up camera has at
+   length 0, held), your lime train laid along a curl that fills much of
+   the frame, a lead-in that keeps it curling so its wake builds, then a
+   burst straight into an orange train laid across its path (swimming away
+   from the title), and the frame
+   taken BRIGHT_AT seconds after the cut, at the burst of light. Two more
+   rivals, red and another colour, swim through the open water. The page's
+   real clock (the cut's flash and the slash run on it) is replaced by one
+   this script moves a thirtieth of a second a frame, so the set piece
+   plays as on a phone at 30 frames a second however slowly SwiftShader
+   draws. Positions are fractions of the frame (u right, v down), your
+   leader at the middle, where the camera sits. */
+const BRIGHT_AT = +(process.env.BRIGHT_AT || 0.13);
+const BRIGHT = {
+  /* cover w, h, title size and top; the zoom; lead: where your leader (the camera's centre) sits on the cover, as a
+     fraction of its height, the frame drawn taller and cropped so the action sits under the title; your curl
+     [radius of the laid train's curl in units, train length, final heading, turning 1 right or -1 left, radius of
+     the lead-in's turn]; the cut train [length, how far
+     ahead]; the other rivals [index, length, u, v, heading, bend], their leaders on the cover; the title's band (v) */
+  '1920x1080': { cover: [1920, 1080], title: [168, 40], zoom: 2.25, lead: 0.62, curl: [130, 44, -0.85, 1, 420], cut: [10, 46],
+    others: [[2, 14, 0.8, 0.5, 0.35, 0.002], [4, 9, 0.2, 0.42, -1.75, 0]], band: 0.26 },
+  '800x1200': { cover: [800, 1200], title: [124, 74], zoom: 1.9, lead: 0.6, curl: [140, 44, -0.45, 1, 420], cut: [10, 44],
+    others: [[2, 12, 0.84, 0.44, 0.45, 0.002], [4, 8, 0.86, 0.25, -1.75, 0]], band: 0.2 },
+  '800x800': { cover: [800, 800], title: [112, 40], zoom: 1.9, lead: 0.62, curl: [130, 42, -0.6, 1, 420], cut: [10, 44],
+    others: [[2, 11, 0.87, 0.5, 0.35, 0.002]], band: 0.25 },
+};
+/* The page for a bright cover: half the frame (the high tier draws at a pixel ratio of 2), tall enough that the
+   cover can be cropped with your leader at B.lead; the zoom raised so a unit is as many pixels as on a page of the
+   cover's own shape (the same-area rule gives a taller page more ocean); and where the crop starts. */
+function brightPage (B) {
+  const [cw, ch] = B.cover, pw = cw / 2, ph = Math.ceil(Math.max(ch / 2, B.lead * ch));
+  return { pw, ph, zoom: B.zoom * Math.sqrt(ph / (ch / 2)), y0: ph - Math.round(B.lead * ch) };
+}
+async function stageBright (name) {
+  const B = BRIGHT[name], G = brightPage(B), w = G.pw, h = G.ph;
+  const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1, hasTouch: false });
+  const p = await ctx.newPage(); p.setDefaultTimeout(180000); p.setDefaultNavigationTimeout(60000);
+  const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', c => { if (c.type() === 'error' && !/popErrorScope/.test(c.text())) errs.push(c.text()); });
+  await p.addInitScript(() => { document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); s.textContent = '#chip,#panel,#bar,#board,#len,#radar,#labels,#hint,#signal,#beat,#stats,#plain{display:none!important}html,body{cursor:none}'; document.head.appendChild(s); }); });
+  await p.goto(O + '/lab/manta/?seed=' + SEED + '&player=lime&paused=1&hint=0&tier=high&backend=webgl2&bots=10', { waitUntil: 'load' });
+  await p.waitForFunction(() => window.__labReady === true && window.__labDrew === true, null, { timeout: 120000, polling: 200 });
+  const info = await p.evaluate(([B, G]) => {
+    const L = window.__lab, S = window.__sim, P = S.params, U = L.params.P, TAU = Math.PI * 2;
+    /* The script's clock in place of the page's real one. */
+    let now = performance.now(); performance.now = () => now; window.__tick = ms => { now += ms; };
+    /* Closer in, held there: the zoom at length 0, whatever the length; no burst zoom. */
+    U.zoomNear = G.zoom; U.zoomHalf = 1e6; U.zoomFar = 0.25; U.burstZoom = 0;
+    /* A train laid along a path ending at (x, z) heading h, turning at
+       `bend` radians a unit behind it (a circle of radius 1/bend). */
+    const lay = (t, n, x, z, hd, bend) => {
+      const sp = P.spacing, step = sp / 4, total = (n + 40) * sp, pts = [];
+      let px = x, pz = z, ph = hd;
+      for (let l = 0; l <= total; l += step) { pts.push({ x: px, z: pz, h: ph }); ph -= bend * step; px += Math.sin(ph) * step; pz += Math.cos(ph) * step; }
+      pts.reverse();
+      t.trail.length = 0; const s0 = t.s - total;
+      pts.forEach((q, i) => t.trail.push({ x: q.x, z: q.z, h: q.h, s: s0 + i * step }));
+      t.x = x; t.z = z; t.head = hd; t.followers.length = 0;
+      for (let k = 0; k < n; k++) t.followers.push({ x, z, head: hd, born: -100, from: -1 });
+      t.dead = 0; t.bursting = false;
+    };
+    window.__bright = { lay };
+    const [R, n, hEnd, dir, RL] = B.curl, you = S.you;
+    /* Your leader turns gently through the lead-in (radius RL), so it comes up from below and its wake with
+       it; the laid train behind that curls harder (radius R), off into a corner. */
+    const omega = dir * P.cruise / RL;
+    window.__steerBright = { omega, burst: false, straight: false };
+    if (L.controls) L.controls.apply = (y, dt) => { const st = window.__steerBright; S.input.want = st.straight ? y.head : y.head + st.omega * dt; S.input.burst = st.burst; };
+    /* Laid so that after the lead-in (LEAD s at cruise, turning) the leader heads hEnd, and where it will
+       then be, worked out by the same steps the simulation takes (motion.js advance). */
+    const LEAD = 1.6, h0 = hEnd - omega * LEAD, x0 = 150, z0 = 250;
+    lay(you, n, x0, z0, h0, dir / R);
+    let fx = x0, fz = z0, fh = h0;
+    for (let k = 0; k < Math.round(LEAD * 60); k++) { fh += omega / 60; fx -= Math.sin(fh) * P.cruise / 60; fz -= Math.cos(fh) * P.cruise / 60; }
+    window.__final = { x: fx, z: fz, h: fh };
+    S.rivals.forEach((r, i) => { const a = i * TAU / S.rivals.length; lay(r, 3, Math.cos(a) * 1700, Math.sin(a) * 1700, a + Math.PI / 2, 0); r.human = { want: a + Math.PI / 2, burst: false, rewind: 0 }; });
+    return { LEAD, G, colour: L.mantas.colours.mine.key, rivals: S.rivals.slice(0, 6).map(r => L.mantas.colours.rivals[(Math.max(1, r.id) - 1) % L.mantas.colours.rivals.length].key) };
+  }, [B, G]);
+  const step = async (n, dt = 1 / 30) => { await p.evaluate(([n, dt]) => { for (let i = 0; i < n; i++) { window.__tick(dt * 1000); window.__lab.step(dt); } }, [n, dt]); };
+  await step(Math.round(info.LEAD * 30) - 5);
+  /* The other rivals, laid now, a sixth of a second short of where they are on the cover, steered straight
+     on: laid any earlier, their lead-in crossed your laid train and they crashed. */
+  info.view = await p.evaluate(([B, G]) => {
+    const S = window.__sim, L = window.__lab, P = S.params, you = S.you, LEAD = 1 / 6;
+    let fx = you.x, fz = you.z, fh = you.head; const om = window.__steerBright.omega;
+    for (let k = 0; k < 10; k++) { fh += om / 60; fx -= Math.sin(fh) * P.cruise / 60; fz -= Math.cos(fh) * P.cruise / 60; }
+    const V = L.view;
+    for (const [i, len, u, vc, hd, bend] of B.others) {
+      const r = S.rivals[i], go = P.cruise * LEAD;
+      const v = (vc * B.cover[1] / 2 + G.y0) / G.ph;   // v on the cover to v on the taller frame drawn
+      const x = fx + (u - 0.5) * V.w, z = fz + (v - 0.5) * V.h;
+      window.__bright.lay(r, len, x + Math.sin(hd) * go, z + Math.cos(hd) * go, hd, bend);
+      r.human = { want: hd, burst: false, rewind: 0 };
+    }
+    return [Math.round(V.w), Math.round(V.h)];
+  }, [B, G]);
+  await step(5);
+  /* Clear water: the title's band empty, and of the ordinary wild mantas elsewhere in the frame one in
+     four kept, so the trains read. The rest are moved out of the frame, where they swim on. The
+     glowing loose ones (a train's spill) stay. */
+  info.cleared = await p.evaluate(bandCover => {
+    const S = window.__sim, you = S.you, V = window.__lab.view; let n = 0, k = 0;
+    const band = bandCover;
+    for (const m of S.wild || []) {
+      if (!m || !m.alive || m.loose) continue;
+      const u = 0.5 + (m.x - you.x) / V.w, v = 0.5 + (m.z - you.z) / V.h;
+      if (u < -0.05 || u > 1.05 || v < -0.05 || v > 1.05) continue;
+      if (v < band || (k++ % 4) !== 0) { m.z = you.z + (0.8 + (n % 5) * 0.1) * V.h; m.x = you.x + ((n % 7) / 7 - 0.5) * V.w; n++; }
+    }
+    return n;
+  }, (B.band * B.cover[1] / 2 + G.y0) / G.ph);
+  /* The cut: your leader straight on, bursting, into an orange train laid across its path just ahead. */
+  const cut = await p.evaluate(B => {
+    const S = window.__sim, you = S.you, fx = -Math.sin(you.head), fz = -Math.cos(you.head), rx = -fz, rz = fx;
+    const [n, ahead] = B.cut, r = S.rivals[0];
+    /* Its leader just to your right, swimming away to the right (down the frame, clear of the title);
+       its body trails back across your path. */
+    const hx = you.x + fx * ahead + rx * 45, hz = you.z + fz * ahead + rz * 45, hd = Math.atan2(-rx, -rz);
+    window.__bright.lay(r, n, hx, hz, hd, 0);
+    r.human = { want: hd, burst: false, rewind: 0 };
+    window.__steerBright.straight = true; window.__steerBright.burst = true;
+    return { colour: 'rival 0' };
+  }, B);
+  let cutAt = null;
+  for (let i = 0; i < 20 && cutAt === null; i++) { await step(1); cutAt = await p.evaluate(() => window.__lab.follower.slashing ? window.__sim.time : null); }
+  /* Then to the burst of light, BRIGHT_AT seconds of the script's clock after the cut. */
+  await step(Math.max(0, Math.round(BRIGHT_AT * 30) - 1));
+  await p.evaluate(() => { window.__steerBright.burst = false; });
+  info.cut = cutAt; info.trains = await p.evaluate(() => { const S = window.__sim, y = S.you; return { you: y.followers.length, dead: y.dead, rivals: S.rivals.slice(0, 6).map(t => t.followers.length + (t.dead ? 'x' : '')) }; });
+  return { ctx, p, errs, info };
 }
 
 const COVERS = [
@@ -286,6 +437,20 @@ if (MODE === 'covers') {
     writeFileSync(join(OUT, 'raywake-frame-' + rw + 'x' + rh + '.png'), raw);
     report.files.push({ file: f, w, h, bytes: out.length, face, colour: s.info.colour, seconds: (Date.now() - t0) / 1000 });
     await s.ctx.close();
+  }
+} else if (MODE === 'bright' || MODE === 'brightstill') {
+  const names = MODE === 'bright' ? Object.keys(BRIGHT) : [rest[0] || '1920x1080'];
+  for (const name of names) {
+    const B = BRIGHT[name], G = brightPage(B), [w, h] = B.cover, t0 = Date.now(), s = await stageBright(name);
+    /* The frame: its last step drawn after an animation frame, read back in the same task (frame()). */
+    const tall = await frame(s.p, 0, G.pw * 2, G.ph * 2), raw = await cropped(tall, G.pw * 2, G.ph * 2, 0, G.y0 * 2, w, h), vw = w / 2, vh = h / 2;
+    if (s.errs.length) console.log('page errors: ' + JSON.stringify(s.errs.slice(0, 3)));
+    await s.ctx.close();
+    if (MODE === 'brightstill') { const f = join(OUT, 'bright-still-' + name + '.png'); writeFileSync(f, raw); report.files.push({ file: f, info: s.info }); continue; }
+    const { out, face } = await titled(await scaled(raw, vw * 2, vh * 2, w, h), w, h, B.title[0], B.title[1], true);
+    const f = join(OUT, 'raywake-cover-bright-' + name + '.png'); writeFileSync(f, out);
+    const th = join(OUT, 'raywake-cover-bright-' + name + '-320.png'); writeFileSync(th, await scaled(out, w, h, 320, Math.round(320 * h / w)));
+    report.files.push({ file: f, thumb: th, w, h, bytes: out.length, face, info: s.info, seconds: (Date.now() - t0) / 1000 });
   }
 } else if (MODE === 'video16' || MODE === 'video23') {
   const [w, h] = MODE === 'video16' ? [1920, 1080] : [1080, 1620];   // drawn by a page half that size
@@ -327,6 +492,6 @@ if (MODE === 'covers') {
   const f = join(OUT, name + '.png'); writeFileSync(f, await frame(s.p, 0, +w, +h));
   report.files.push({ file: f, errors: s.errs.slice(0, 3), info: s.info });
   await s.ctx.close();
-} else throw new Error('mode: covers, video16, video23 or still');
+} else throw new Error('mode: covers, bright, brightstill, video16, video23, plan or still');
 await browser.close(); server.close();
 console.log(JSON.stringify(report, null, 1));
