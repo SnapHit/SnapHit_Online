@@ -369,7 +369,10 @@
     color: #cfe6f5; text-shadow: 0 1px 3px #000a, 0 0 10px #0009;
   }
   @media (min-width: 760px) and (pointer: fine) { #stats { font-size: 13px; } }   /* a portal's frame (4C), after the base rule */
-  body:not(.lab) #board { top: calc(env(safe-area-inset-top, 0px) + 96px); }
+  /* 4D: never under the play bar's rows (a solo note of two lines reached
+     past 96 px on a 412 px phone): --fb-push is the bar's last row's
+     bottom plus 8, set by the page when a row shows or the window changes. */
+  body:not(.lab) #board { top: max(calc(env(safe-area-inset-top, 0px) + 96px), var(--fb-push, 0px)); }
   /* The signal mark and your name (with its pencil) sit below the play bar,
      clear of a private room's link box. */
   body:not(.lab) #signal { top: calc(env(safe-area-inset-top, 0px) + 96px) !important; }
@@ -377,7 +380,7 @@
   #radar { --radar-bottom: 50px; }
   @media (max-height: 330px) { #radar { --radar-bottom: 46px; } }
   /* Landscape: the board stops above the radar, which sits bottom right. */
-  @media (orientation: landscape) and (max-height: 520px) { body:not(.lab) #board { max-height: calc(100vh - 162px - max(96px, min(160px, 28vh))); overflow: hidden; } }
+  @media (orientation: landscape) and (max-height: 520px) { body:not(.lab) #board { max-height: calc(100vh - 66px - max(96px, var(--fb-push, 0px)) - max(96px, min(160px, 28vh))); overflow: hidden; } }
   /* THE PORTAL PACKAGE'S FRAMES (4C, design doc 10.7): a portal frames the
      game at 800x450 to 1080x607 on a desktop, at a pixel ratio of 1. With
      only the Privacy link at the top, the board starts under it (50 px, not
@@ -429,7 +432,7 @@
     #stats { font-size: 14px; right: 14px; bottom: 34px; }
     #fb { font-size: 15px; top: calc(env(safe-area-inset-top, 0px) + 12px); right: calc(env(safe-area-inset-right, 0px) + 12px); }
     #fb button, #fb a.btn { min-height: 38px; padding: 0 14px; }
-    body:not(.lab) #board { top: calc(env(safe-area-inset-top, 0px) + 108px); }
+    body:not(.lab) #board { top: max(calc(env(safe-area-inset-top, 0px) + 108px), var(--fb-push, 0px)); }
     body.portal:not(.lab) #board { top: calc(env(safe-area-inset-top, 0px) + 56px); }
     body:not(.lab) #signal { top: calc(env(safe-area-inset-top, 0px) + 108px) !important; }
     #namePanel { width: min(400px, calc(100vw - 32px)); font-size: 16px; padding: 20px; }
@@ -721,7 +724,16 @@ window.MANTA_LAB = window.MANTA_ROOT + 'lab/manta/';
   /* Test switches ride along; nothing else does. */
   function keep (u) { var q = new URLSearchParams(location.search); ['backend', 'tier'].forEach(function (k) { if (q.get(k)) u.searchParams.set(k, q.get(k)); }); return u; }
   function go (params) { var u = new URL(location.pathname, location.href); for (var k in params) u.searchParams.set(k, params[k]); location.replace(keep(u).href); }
-  function say (text) { $('note').textContent = text; $('noteRow').hidden = !text; }
+  /* The board starts under the play bar's last row shown (4D): a note of
+     two lines, or a private room's link, reached past where it starts. The
+     privacy note is a popover over everything and is left out. */
+  function pushBoard () {
+    var fb = $('fb'), bottom = 0;
+    if (fb) for (var i = 0; i < fb.children.length; i++) { var c = fb.children[i]; if (c.id === 'privacyRow' || c.hidden) continue; var r = c.getBoundingClientRect(); if (r.height) bottom = Math.max(bottom, r.bottom); }
+    document.documentElement.style.setProperty('--fb-push', bottom ? Math.ceil(bottom + 8) + 'px' : '0px');
+  }
+  function say (text) { $('note').textContent = text; $('noteRow').hidden = !text; pushBoard(); }
+  addEventListener('resize', pushBoard);
   function goSolo (why, until) { if (P.room) go(!why ? { solo: '1' } : until ? { solo: '1', note: why, until: String(until) } : { solo: '1', note: why }); }
   /* Rooms resting (4B): when they return, on this phone's clock and in its
      own way of writing a time (00:00 UTC is 11am in Sydney in daylight saving). */
@@ -844,6 +856,7 @@ window.MANTA_LAB = window.MANTA_ROOT + 'lab/manta/';
     $('shareLink').value = location.origin + location.pathname + '?room=' + P.code;
     $('shareRow').hidden = false;
   }
+  pushBoard();
   /* Share (4C): the phone's own share sheet where it has one, with the
      game's name in the text; Copy still copies the bare link. */
   var SHARE_TEXT = 'Swim with me in Raywake';

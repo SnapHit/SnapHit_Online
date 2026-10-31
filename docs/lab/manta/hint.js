@@ -29,9 +29,11 @@ export function createHint ({ touch = isTouchDevice(), now = () => performance.n
   el.id = 'hint';
   el.setAttribute('aria-live', 'polite');
   el.style.cssText = 'position:fixed;left:50%;top:calc(50% + 118px);transform:translate(-50%,0);z-index:4;' +
-    'max-width:calc(100vw - 32px);padding:9px 16px;border-radius:999px;pointer-events:none;' +
+    'max-width:calc(100vw - 32px);width:max-content;box-sizing:border-box;padding:9px 16px;border-radius:20px;pointer-events:none;' +
     'font:600 15px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;letter-spacing:0.01em;' +
-    'color:#eaf6ff;text-align:center;white-space:nowrap;background:rgba(4,9,18,.6);' +
+    /* 4D: it wraps, in balanced lines, wherever it does not fit on one
+       (a narrow window with a mouse cut it off at the right edge). */
+    'color:#eaf6ff;text-align:center;white-space:normal;text-wrap:balance;overflow-wrap:break-word;background:rgba(4,9,18,.6);' +
     'border:1px solid rgba(120,190,210,.35);box-shadow:0 2px 14px rgba(0,0,0,.35);' +
     'opacity:0;transition:opacity ' + FADE_MS + 'ms ease;display:none';
   el.textContent = touch ? HINT_TOUCH : HINT_KEYS;
