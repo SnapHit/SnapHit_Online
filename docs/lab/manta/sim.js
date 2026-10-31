@@ -405,6 +405,8 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   }
   const ruleCtx = { p, next, groupCount: () => GROUPS, wild, scratch, hash, trains, you, blooms, events, now: () => time, pastOf };
   const { scatter, crash, cutAt, resolveTouches, payForBurst, steerRival } = createRules(ruleCtx);
+  /* A dead train held on the death card (4D) sits at this, just above zero. */
+  const HELD = 1e-6;
   /* THE WHALE SHARK (4A stage 5, shark.js): its touches go through these
      rules, so a cut by it and a crash into it are events like any other. */
   const sharkRun = createShark({ p, next, trains, rules: { crash, cutAt }, get events () { return events; }, now: () => time });
@@ -452,7 +454,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     t.s = 0; t.followers.length = 0; t.bursting = false; t.burstOwed = 0;
     t.lastPeak = t.peak; t.peak = 0; t.runs++;
     t.dead = 0; t.crashed = 0; t.cut = 0; t.rebuild = 10;
-    t.guard = null; t.guarded = false; t.first = null; t.crossing = null;
+    t.go = false; t.guard = null; t.guarded = false; t.first = null; t.crossing = null;
     seedTrail(t);
   }
 
@@ -495,7 +497,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
       t.head = Math.atan2(-(at.x - t.x), -(at.z - t.z));     // facing the group: forward is (-sin, -cos)
       t.s = 0; t.followers.length = 0; t.bursting = false; t.burstOwed = 0;
       t.lastPeak = t.peak; t.peak = 0; t.runs++;
-      t.dead = 0; t.crashed = 0; t.cut = 0; t.rebuild = 10; t.crossing = null;
+      t.dead = 0; t.crashed = 0; t.cut = 0; t.rebuild = 10; t.go = false; t.crossing = null;
       seedTrail(t);
     }
     t.guard = { at: time }; t.guarded = true;
@@ -579,7 +581,10 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     for (const t of trains) {
       if (t.dead <= 0) continue;
       t.dead -= dt;
-      if (t.dead <= 0) restart(t);
+      /* HELD ON THE CARD (4D, design doc 10.8): a train whose page shows the
+         death card (t.holdDeath) waits after the beat for the player's tap
+         (t.go), as in slither; everyone else comes back as before. */
+      if (t.dead <= 0) { if (t.holdDeath && !t.go) t.dead = HELD; else { t.go = false; restart(t); } }
     }
     /* THE PROTECTED FIRST RUN (4D): a guard lasts firstFor seconds of its
        run or until the train is firstLen long, and never comes back. Bots

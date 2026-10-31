@@ -50,7 +50,9 @@
  *     slot both gone and in a record has a new manta in it: gone first)
  *   a player's own (flag 8): u8 f (1 dead, 2 bursting, 4 peak, 8 early,
  *     16 late, 32 ack), f32 x, f32 z, f32 h, i32 s, u16 len, u16 runs; if
- *     dead f32 seconds left, i16 crashX, i16 crashZ; if peak u16; if early
+ *     dead f32 seconds left, i16 crashX, i16 crashZ, u8 into (the train
+ *     it hit, 255 none), u8 how (0 reef, 1 head-on, 2 leader, 3 body,
+ *     4 the whale shark; 4D, the death card); if peak u16; if early
  *     i16 steps x10, u32 seq; if late u16; if ack u32
  *   a wild record: u16 slot, i16 x, i16 z, u8 h, u8 flags (1 loose,
  *     2 sinking), u8 colour it glows in (255 none)
@@ -65,7 +67,7 @@
  */
 import { createMotion } from './motion.js';
 
-export const PROTOCOL = 5;             // 3: the pink manta (4A stage 4): flag 32, event kinds 2 to 4; 4: the whale shark (stage 5): flag 64, kinds 5 and 6; 5: your rank (4C), flag 128
+export const PROTOCOL = 6;             // 3: the pink manta (4A stage 4): flag 32, event kinds 2 to 4; 4: the whale shark (stage 5): flag 64, kinds 5 and 6; 5: your rank (4C), flag 128; 6: what got you (4D), two bytes with a dead player's wreck
 export const SNAP_HZ = 20;
 export const WILD_EVERY = 4;             // snapshots between full wild lists: 5 a second
 export const MARGIN = 400;               // units beyond the view a phone is sent
@@ -74,6 +76,7 @@ export const WILD_TOL = 1;               // units a wild manta may stray from wh
 
 const TAU = Math.PI * 2;
 const KINDS = ['bot', 'timid', 'greedy', 'bully', 'strawman'];
+const HOW = ['reef', 'head-on', 'leader', 'body', 'shark'];   // what got a crashed player (4D)
 const i16 = v => Math.max(-32768, Math.min(32767, Math.round(v)));
 const ang = h => ((Math.round(h / TAU * 256) % 256) + 256) % 256;
 const unang = a => (a > 128 ? a - 256 : a) * TAU / 256;
@@ -275,7 +278,8 @@ export function snapFor (sim, phone, n, events, step = 0) {
     flags |= 8;
     w.u8((t.dead > 0 ? 1 : 0) | (t.bursting ? 2 : 0) | (peak ? 4 : 0) | (early ? 8 : 0) | (q.late ? 16 : 0) | (phone.debug ? 32 : 0));
     w.f32(t.x); w.f32(t.z); w.f32(t.head); w.i32(s16(t.s)); w.u16(t.followers.length); w.u16(t.runs);
-    if (t.dead > 0) { w.f32(t.dead); w.i16(t.crashX - cx); w.i16(t.crashZ - cz); }
+    if (t.dead > 0) { w.f32(t.dead); w.i16(t.crashX - cx); w.i16(t.crashZ - cz);
+      const into = t.crashInto; w.u8(Number.isInteger(into) && into >= 0 && into < 255 ? into : 255); w.u8(Math.max(0, HOW.indexOf(t.crashHow))); }
     if (peak) { w.u16(t.peak); phone.mePeak = t.peak; }
     if (early) { w.i16(Math.round(q.early * 10)); w.u32(q.earlySeq); q.early = null; }
     if (q.late) { w.u16(q.late); q.late = 0; }
@@ -334,7 +338,7 @@ export function decodeSnap (buf) {
   if (flags & 8) {
     const f32 = () => { const v = dv.getFloat32(o, true); o += 4; return v; };
     const f = u8(), me = { x: f32(), z: f32(), h: f32(), s: i32() / 16, len: u16(), runs: u16() };
-    if (f & 1) { me.dead = f32(); me.crashX = cx + i16(); me.crashZ = cz + i16(); }
+    if (f & 1) { me.dead = f32(); me.crashX = cx + i16(); me.crashZ = cz + i16(); const into = u8(); me.into = into === 255 ? -1 : into; me.how = HOW[u8()] || 'reef'; }
     if (f & 2) me.b = 1;
     if (f & 4) me.peak = u16();
     if (f & 8) { m.e = i16() / 10; m.eq = u32(); }

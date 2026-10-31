@@ -216,9 +216,45 @@
     letter-spacing: 0.02em;
   }
   #beat.on { display: flex; }
-  /* Your best under the run's peak (4D): kept on the device on the feedback page and in the portal package. */
-  #beat { flex-direction: column; gap: 10px; }
-  #beat .best { font: 600 18px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; letter-spacing: 0.04em; color: #cfe6f5; text-shadow: 0 1px 6px #000c; }
+  /* THE DEATH CARD (4D, card.js): what got you, the peak counting up, a new
+     best, your best, time alive, cuts and best rank, and on the feedback
+     page the prompt for the next run. A dark panel so it reads over any
+     water; #beat's own font size is the peak's. */
+  #beat .panel { display: flex; flex-direction: column; align-items: center; gap: 6px;
+    max-width: calc(100vw - 24px); max-height: calc(100vh - 16px); padding: 14px 22px 16px; border-radius: 18px;
+    background: rgba(3, 8, 16, .7); box-shadow: 0 6px 30px rgba(0, 0, 0, .45); border: 1px solid rgba(120, 190, 210, .22); }
+  #beat .cause { font: 600 16px/1.25 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #ffd2c4; text-align: center; letter-spacing: .01em; }
+  #beat .cause[hidden] { display: none; }
+  #beat .num { font-size: 1em; line-height: .95; font-variant-numeric: tabular-nums; }
+  #beat .peakLabel { margin-top: -2px; font: 600 13px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: #9fc4d8; }
+  #beat .nb { display: none; font: 800 38px/1.05 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #ffe27a;
+    text-shadow: 0 0 18px rgba(255, 196, 70, .85), 0 0 46px rgba(255, 160, 40, .55), 0 2px 4px #000c; letter-spacing: .01em; }
+  #beat.newbest .nb { display: block; animation: nbPop .55s cubic-bezier(.2, 1.6, .4, 1) both, nbGlow 1.6s ease-in-out .55s infinite alternate; }
+  #beat.newbest .num { color: #fff3c4; text-shadow: 0 2px 20px #000c, 0 0 46px rgba(255, 200, 90, .75); }
+  #beat.calm.newbest .nb { animation: none; }
+  @keyframes nbPop { 0% { transform: scale(.35); opacity: 0; } 60% { opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes nbGlow { from { text-shadow: 0 0 14px rgba(255, 196, 70, .7), 0 0 34px rgba(255, 160, 40, .4), 0 2px 4px #000c; }
+                      to { text-shadow: 0 0 24px rgba(255, 210, 90, 1), 0 0 60px rgba(255, 170, 50, .7), 0 2px 4px #000c; } }
+  #beat .best { font: 600 16px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; letter-spacing: .04em; color: #cfe6f5; }
+  #beat .facts { display: flex; gap: 22px; margin-top: 4px; }
+  #beat .fact { display: flex; flex-direction: column; align-items: center; min-width: 52px; }
+  #beat .fact .v { font: 700 22px/1.1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #eaf6ff; font-variant-numeric: tabular-nums; }
+  #beat .fact .l { font: 500 13px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #9fc4d8; white-space: nowrap; }
+  #beat .next { display: none; margin-top: 6px; padding: 7px 16px; border-radius: 999px; font: 700 15px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: #04121a; background: #7fe3d0; }
+  #beat.ready .next { display: block; }
+  #beat.ready:not(.calm) .next { animation: nextIn .3s ease-out both; }
+  @keyframes nextIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  /* A tall portrait phone: centred lower, clear of the board at the top right. */
+  @media (orientation: portrait) and (min-height: 700px) { #beat { padding-top: 120px; } }
+  /* Short frames (a portal's 800x450, a phone on its side): smaller, so the whole card fits. */
+  @media (max-height: 520px) {
+    #beat { font-size: 60px; }
+    #beat .panel { gap: 3px; padding: 10px 18px 12px; }
+    #beat .nb { font-size: 30px; }
+    #beat .fact .v { font-size: 19px; }
+    #beat .facts { margin-top: 2px; }
+  }
   /* The board: top ten by current length, top right, clear of the chip on
      the left and the bar below. Small, and it never takes a touch. */
   #board {

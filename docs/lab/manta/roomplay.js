@@ -75,7 +75,7 @@ const LEAD_MAX = 45;
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 const r4 = v => Math.round(v * 1e4) / 1e4;
 
-export function createPlay ({ room, params, core, you, input, send: wire, rtt, view, viewNow = null, now = () => performance.now() }) {
+export function createPlay ({ room, params, core, you, input, send: wire, rtt, view, viewNow = null, now = () => performance.now(), hold = false }) {
   const motion = createMotion(params);
   /* 3G: tokens became twelve hex digits, so the key changed with them and
      a stale 32-digit token cannot stick. */
@@ -139,7 +139,9 @@ export function createPlay ({ room, params, core, you, input, send: wire, rtt, v
   function keepToken (t) { try { if (t) sessionStorage.setItem(KEY, t); } catch (_) { /* play on without it */ } }
 
   /* ------------------------------------------------------------ the wire */
-  const hello = () => { const h = { p: 1 }, t = readToken(); if (t) h.k = t; return h; };
+  /* 4D: h:1, this page holds your train on the death card until a tap
+     ({t:'go'}). */
+  const hello = () => { const h = { p: 1 }, t = readToken(); if (t) h.k = t; if (hold) h.h = 1; return h; };
 
   function onInit (m) {
     /* A new connection resends every path and may be a new room clock, so
@@ -264,6 +266,8 @@ export function createPlay ({ room, params, core, you, input, send: wire, rtt, v
       if (!(you.dead > 0)) you.dead = m.dead > 0 && m.dead <= params.deathBeat ? m.dead : params.deathBeat;
       you.crashX = typeof m.crashX === 'number' ? m.crashX : m.x;
       you.crashZ = typeof m.crashZ === 'number' ? m.crashZ : m.z;
+      /* What got you (4D, the death card): the room says, with the wreck. */
+      you.crashInto = Number.isInteger(m.into) ? m.into : -1; you.crashHow = m.how || null;
       you.followers.length = 0; pred.followers.length = 0;
       live = false; fresh = true; shown = false;
       return;
@@ -391,9 +395,12 @@ export function createPlay ({ room, params, core, you, input, send: wire, rtt, v
 
   /* If the room is full the page falls back to watching: no inputs sent. */
   function stop () { live = false; shown = false; me = null; myId = -1; }
+  /* The next run (4D): a tap on the death card, sent once the room says
+     your train is down. */
+  function go () { if (myId >= 0 && me && me.dead) { send({ t: 'go' }); return true; } return false; }
 
   return {
-    hello, onInit, onSnap, frame, tick, stop, setExtra,
+    hello, onInit, onSnap, frame, tick, stop, setExtra, go,
     get id () { return myId; }, get name () { return name; }, get me () { return me; },
     get corrections () { return corrections; }, get seq () { return seq; }, get ack () { return ack; },
     /* The clock, for the panel and the tests: steps ahead of the room, the

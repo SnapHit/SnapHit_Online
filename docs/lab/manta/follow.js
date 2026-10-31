@@ -12,6 +12,8 @@ import { createLabels, savedName, PALE } from './labels.js';
 import { createRadar, createRadarModel } from './radar.js';
 import { PINK_SLOT } from './mantas.js';
 import { createBest } from './best.js';
+import { createCard } from './card.js';
+import { isTouchDevice } from './hint.js';
 
 export function createFollow (ctx) {
   const { mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS, PARKED,
@@ -29,11 +31,11 @@ export function createFollow (ctx) {
   /* THE CRASH READS AS THE END (4A stage 3, change 2). Through the death
      beat the vignette deepens from its setting to VIG_DEEP over VIG_IN
      seconds and holds, then comes back over VIG_OUT at the restart; the
-     card's number counts up from the length the crash took to the run's
-     peak over COUNT_FOR seconds when they differ. One uniform write a
+     card (card.js, 4D) counts the run's peak up from 0 over COUNT_FOR
+     seconds. One uniform write a
      frame and a text change; nothing flashes or moves fast, so reduced
      flash and motion keep all of it. */
-  const VIG_DEEP = 0.42, VIG_IN = 0.4, VIG_OUT = 0.3, COUNT_FOR = 0.5;
+  const VIG_DEEP = 0.42, VIG_IN = 0.4, VIG_OUT = 0.3;   // the card's count-up: card.js (4D: from 0, over 0.8 s)
   /* THE RECRUIT POPS (4A stage 3, change 3). A follower that has just
      joined is drawn POP_BY larger for its first POP_HOLD seconds of scene
      time and settles to its size by POP_FOR, an overshoot of the drawn size
@@ -101,6 +103,9 @@ export function createFollow (ctx) {
      the lab keeps it for the visit only, as before. */
   const keep = ctx.keepBest ? createBest() : null;
   let bestPeak = keep ? keep.value : 0, beatShown = false, boardAt = 0, offScreen = 0, rankShown = 0;
+  const deathCard = createCard({ hold: !!ctx.holdDeath, touch: isTouchDevice() });
+  /* A train's name for the card: a player's in a room, else "bot N". */
+  const nameOf = id => (ctx.sim.room && ctx.sim.nameOf && ctx.sim.nameOf(id)) || 'bot ' + id;
   let zoomNow = null, wasDying = false, lastRuns = undefined;   // the eased camera (3L)
   let pinkBelly = null, pinkDrawn = false, pinkFlashAt = -1;    // the pink manta (4A stage 4)
   let sharkStamped = false;                                       // the whale shark (4A stage 5)
@@ -480,6 +485,7 @@ export function createFollow (ctx) {
     if (evs && evs.length) {
       const v = ctx.view, hw = v.w / 2 + 40, hh = v.h / 2 + 40;
       for (const e of evs.splice(0)) {
+        if (deathCard && e.kind === 'cut' && you.id >= 0 && e.by === you.id && !watching) deathCard.cut();
         if (Math.abs(e.x - at.x) > hw || Math.abs(e.z - at.z) > hh) { offScreen++; continue; }
         /* The pink manta's catch on screen: a pink light burst stamped for
            0.3 s where it was taken (the slash's slot, free at a catch). Its
@@ -525,22 +531,26 @@ export function createFollow (ctx) {
     drawBoard(ctx.sim.time);
     drawLabels();
     drawRadar();
-  const card = document.getElementById('beat');
-    if (card) {
-      if (dying && !beatShown) {
-        beatShown = true; beatT = 0;
-        countTo = Math.max(you.peak, you.lastPeak); countFrom = Math.min(countTo, aliveLen);
-        cardNum(card).textContent = String(countFrom);
-        cardBest(card).textContent = 'best ' + bestPeak;
-        card.className = 'on';
-      } else if (!dying && beatShown) { beatShown = false; card.className = ''; }
-      if (!dying) aliveLen = you.followers.length;   // the length the crash took, for the count-up
-      if (beatShown) {
-        beatT += Math.max(0, dt);
-        const n = countFrom + Math.round((countTo - countFrom) * Math.min(1, beatT / COUNT_FOR));
-        const el = cardNum(card);
-        if (String(n) !== el.textContent) el.textContent = String(n);
+    /* THE DEATH CARD (4D, card.js): the run tracked while you swim (time
+       alive, cuts landed, your best rank), and at the crash what got you,
+       the peak counting up, a new best, and with the page holding (the
+       feedback page, the portal) the prompt for the next run. */
+    if (deathCard && !watching) {
+      deathCard.run(!dying, dt, bestPeak);
+      if (!dying) {
+        const sim = ctx.sim, len = you.followers.length;
+        let r = sim.room ? sim.rank : 1;
+        if (!sim.room) for (const t of sim.trains) if (t !== you && !(t.dead > 0) && t.followers.length > len) r++;
+        deathCard.rankNow(r || 0);
       }
+      if (dying && !beatShown) {
+        beatShown = true;
+        countTo = Math.max(you.peak, you.lastPeak); countFrom = 0;
+        const into = you.crashInto, name = into >= 0 ? nameOf(into) : '';
+        deathCard.show(countTo, bestPeak, you.crashHow, name, !!(cut && cut.reduced));
+      } else if (!dying && beatShown) { beatShown = false; deathCard.hide(); }
+      if (beatShown) { beatT += Math.max(0, dt); deathCard.frame(dt, ctx.sim.params.deathBeat || 1.5); }
+      if (!dying) beatT = 0;
     }
     /* The vignette through the beat (post.js owns the uniform; ctx.post is read at call time). */
     if (ctx.post) {
@@ -555,18 +565,11 @@ export function createFollow (ctx) {
   }
 
 
-  /* The card's number and its best line, made once inside #beat. */
-  function cardPart (card, cls) {
-    let el = card.querySelector('.' + cls);
-    if (!el) { el = document.createElement('span'); el.className = cls; card.appendChild(el); }
-    return el;
-  }
-  const cardNum = card => cardPart(card, 'num'), cardBest = card => cardPart(card, 'best');
-
   return { followCamera, get peak () { return peakLength; }, get best () { return bestPeak; }, get offScreen () { return offScreen; }, get zoom () { return zoomNow; },
            get zoomDrawn () { return zoomDrawn; }, get burstMix () { return burstMix; },
            get kick () { return kickNow(); }, get slashing () { return slashOn; }, get rankShown () { return rankShown; },
            get vignette () { return vigNow; }, get card () { return { from: countFrom, to: countTo, t: beatT }; },
+           deathCard,
            get introMix () { return introMix; },
            get recruitBoost () { return lastRecruitAt >= 0 && ctx.sim.time - lastRecruitAt < BOOST_FOR ? BOOST_BY : 1; }, popAt,
            /* THE VIEW THE ROOM IS TOLD is the base one, without the burst's

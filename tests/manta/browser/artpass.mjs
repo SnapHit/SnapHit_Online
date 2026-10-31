@@ -89,9 +89,10 @@ if (WANT.includes('2')) {
     const at = k => r.out.find(o => o.k === k) || {};
     const near = (a, b, t = 0.012) => a !== null && Math.abs(a - b) < t;
     {
-      const vigWant = t => 0.15 + 0.27 * Math.min(1, t / 0.4), cardWant = t => r.len + Math.round((r.peak - r.len) * Math.min(1, t / 0.5));
+      /* 4D (card.js): the count runs from 0, not from the length the crash took, over 0.8 s. */
+      const vigWant = t => 0.15 + 0.27 * Math.min(1, t / 0.4), cardWant = t => Math.round(r.peak * Math.min(1, t / 0.8));
       ok(look + ': the vignette deepens 0.15 to 0.42 over 0.4 s of scene time and holds (' + r.out.map(o => o.t.toFixed(2) + 's:' + (o.vig === null ? 'null' : o.vig.toFixed(3))).join(' ') + ')', r.out.every(o => near(o.vig, vigWant(o.t))) && r.out.some(o => o.t >= 0.4) && near(at(83).vig, 0.42));
-      ok(look + ': the card counts up from the length the crash took (' + r.len + ') to the peak (' + r.peak + ') over 0.5 s of scene time (' + r.out.map(o => o.t.toFixed(2) + 's:' + o.card).join(' ') + ')', r.len < r.peak && r.out.every(o => Math.abs(+o.card - cardWant(o.t)) <= 1) && r.out.some(o => o.t >= 0.55 && o.card === String(r.peak)));   // the card's clock starts on the beat's first frame, one frame behind t0
+      ok(look + ': the card counts up from 0 to the peak (' + r.peak + ') over 0.8 s of scene time (' + r.out.map(o => o.t.toFixed(2) + 's:' + o.card).join(' ') + ')', r.len < r.peak && r.out.every(o => Math.abs(+o.card - cardWant(o.t)) <= 1) && r.out.some(o => o.t >= 0.85 && o.card === String(r.peak)));   // the card's clock starts on the beat's first frame, one frame behind t0
     }
     /* Through the restart: the vignette is back at 0.15 within 0.3 s. */
     const back = await p.evaluate(() => { const S = window.__sim, P0 = window.__lab.post(); let restartK = -1; for (let k = 0; k < 120; k++) { window.__lab.step(1 / 60); if (restartK < 0 && !(S.you.dead > 0)) restartK = k; } const atRestart = P0.vignette; for (let k = 0; k < 20; k++) window.__lab.step(1 / 60); return { restartK, atRestart, after: P0.vignette, dead: S.you.dead }; });

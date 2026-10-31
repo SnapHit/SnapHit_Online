@@ -100,6 +100,8 @@ export function createRules (ctx) {
     record({ kind: 'crash', id: t.id, into: into ? into.id : -1, how,
              intoLen: into ? into.followers.length : -1, len: had, x: t.x, z: t.z, at: ctx.now ? ctx.now() : 0 });
     t.crashX = t.x; t.crashZ = t.z;
+    /* What got it (4D, the death card): the train it hit, or -1, and how. */
+    t.crashInto = into ? into.id : -1; t.crashHow = how;
     scatter(t, 0);
     /* The leader itself, at the point of the crash, glowing like the rest. */
     scatterOne(t, { x: t.x, z: t.z, head: t.head, from: 0 }, t);

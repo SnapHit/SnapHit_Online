@@ -34,7 +34,7 @@ const lerp = (a, b, f) => a + (b - a) * f;
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 const JUMP = 300;                          // further than this in one snapshot is a teleport, not a swim
 
-export function createRoomView ({ room, build, params: start, view, name: nameNow = () => null, play: playing = false }) {
+export function createRoomView ({ room, build, params: start, view, name: nameNow = () => null, play: playing = false, hold = false }) {
   /* The room's numbers, never the drawer's: spacing decides where every
      follower sits, so it has to be the one the room placed them with. Filled
      in by init; one object, so the mirror's motion sees the update. */
@@ -189,7 +189,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   /* The step the other trains are drawn at, on the room's count: what an
      input tells the room this phone was looking at, for lag compensation. */
   const viewStep = () => offset === null || !snaps.length ? null : (performance.now() / 1000 - offset - delay) * 60;
-  if (playing) play = createPlay({ room, params, core, you, input, send, rtt: () => rtt, view: viewStep, viewNow });
+  if (playing) play = createPlay({ room, params, core, you, input, send, rtt: () => rtt, view: viewStep, viewNow, hold });
   /* For tests against a local room only (the room ignores both elsewhere):
      ?lagcomp=0 turns lag compensation off, ?truth=1 asks for the true state. */
   const q = new URLSearchParams(location.search);
@@ -578,6 +578,8 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     debrisWild: () => wild.filter(w => w.alive && w.loose),
     /* Labels (3J): a player's name by train id, and your own. */
     nameOf: id => names.get(id) || null,
+    /* The death card's tap for the next run (4D): told to the room. */
+    go: () => !!play && play.go(),
     /* Your place among every train in the room (4C), for the line under the board. */
     get rank () { return play ? rank : null; },
     youName: () => myName(),
@@ -625,7 +627,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     if (play || stopped) return false;
     playing = true;
     if (publicGame && !seatRoom) seatRoom = room;   // seated in place on the lobby connection; full there, it asks
-    play = createPlay({ room, params, core, you, input, send, rtt: () => rtt, view: viewStep, viewNow });
+    play = createPlay({ room, params, core, you, input, send, rtt: () => rtt, view: viewStep, viewNow, hold });
     pickups = createPickups(); hits = createHits();
     if (!pencil) makePencil();
     mirror.watching = false; watched = -1; you.watched = -1; you.followers.length = 0; you.dead = 0;

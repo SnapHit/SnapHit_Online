@@ -232,7 +232,9 @@ if (want('frames')) for (const [vw, vh, touch] of [[800, 450, false], [1080, 607
        those 1.6 s (360x800 once in 4C's fifth full pass: the death beat on
        screen, so no name over a leader). Stepped on past the beat, a restart
        is still off the ten, so the rank line still shows. */
-    window.__framesCrashed = 0; for (let k = 0; k < 40 && S.you.dead > 0; k++) { if (!k) window.__framesCrashed = 1; L.step(0.2); } });
+    window.__framesCrashed = 0; for (let k = 0; k < 40 && S.you.dead > 0; k++) { if (!k) window.__framesCrashed = 1; L.step(0.2);
+      /* 4D: past the beat the package holds your train on the card until a tap: the tap, as the card's own does. */
+      if (S.you.holdDeath && S.you.dead > 0 && S.you.dead < 1e-4) S.you.go = true; } });
   await settle(p);
   const r = await rectsOf(p), crashed = await p.evaluate(() => window.__framesCrashed);
   await p.screenshot({ path: OUTD + '/portal-' + tag + '.png' });

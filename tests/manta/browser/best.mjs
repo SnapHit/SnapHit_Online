@@ -2,7 +2,8 @@
    On the feedback page in solo (the portal package runs the same page; the
    portal test checks it there): a fresh device shows a best of 0; a run to
    a peak of 37 that crashes writes 37 under manta:best and shows it on the
-   death card; a new visit starts with "best peak 37" on the stats line and
+   death card (from part 2, as "your first best"; "best 37" after a lower
+   run); a new visit starts with "best peak 37" on the stats line and
    "best 37" on the score line; a lower run does not lower it; the lab page,
    whose tests lay long trains, never writes it; and with storage blocked
    the page plays and crashes as normal. Run with lib/serve.sh. */
@@ -31,7 +32,8 @@ const runTo = (p, n) => p.evaluate(n => {
   const card = document.getElementById('beat');
   return { stored, card: card.className, best: (card.querySelector('.best') || {}).textContent || null, peak: S.you.peak };
 }, n);
-const PLAY = '/lab/manta/play/?solo=1&tier=low&backend=webgl2&fx=off&hint=0';
+let P1 = 37;
+const PLAY = '/lab/manta/play/?solo=1&tier=low&backend=webgl2&fx=off&hint=0&paused=1';   // held at its first frame: nothing recruited before the first read
 const phone = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
 {
   const p = await open(phone, PLAY);
@@ -39,22 +41,24 @@ const phone = await b.newContext({ viewport: { width: 412, height: 915 }, device
   await p.waitForTimeout(300);
   ok('a fresh device: nothing under manta:best, and the stats line says best peak 0', a.s === null && /best peak 0/.test(a.stats), JSON.stringify(a));
   const r = await runTo(p, 37);
-  ok('a run to 37 that crashes keeps 37 under manta:best and shows "best 37" on the death card', r.stored === '37' && r.card === 'on' && r.best === 'best 37', JSON.stringify(r));
+  /* 4D part 2: the card calls a first best "your first best" (card.js), and says "best N" when the run is not a new best. */
+  P1 = r.peak;   // 37, or one more if a wild manta joined while it was laid
+  ok('a run to 37 that crashes keeps its peak under manta:best, and the death card calls it your first best', P1 >= 37 && P1 <= 40 && r.stored === String(P1) && /\bon\b/.test(r.card) && r.best === 'your first best', JSON.stringify(r));
   await p.close();
 }
 {
   const p = await open(phone, PLAY);
   await p.waitForTimeout(400);
   const a = await p.evaluate(() => { window.__lab.step(1 / 60); return { stats: document.getElementById('stats').textContent, len: document.getElementById('len').textContent }; });
-  ok('a new visit starts with it: "best peak 37" on the stats line, "best 37" on the score line', /best peak 37\b/.test(a.stats) && /best 37\b/.test(a.len), JSON.stringify(a));
+  ok('a new visit starts with it: "best peak ' + P1 + '" on the stats line, "best ' + P1 + '" on the score line', a.stats.includes('best peak ' + P1 + ' ') && new RegExp('best ' + P1 + '$').test(a.len), JSON.stringify(a));
   const r = await runTo(p, 12);
-  ok('a lower run does not lower it (12 crashes, 37 kept, the card says best 37)', r.stored === '37' && r.best === 'best 37', JSON.stringify(r));
+  ok('a lower run does not lower it (12 crashes, ' + P1 + ' kept, the card says best ' + P1 + ')', r.stored === String(P1) && r.best === 'best ' + P1, JSON.stringify(r));
   await p.close();
 }
 {
   const p = await open(phone, '/lab/manta/?tier=low&backend=webgl2&fx=off&hint=0');
   const r = await runTo(p, 200);
-  ok('the lab page never writes it (a 200 laid there, 37 kept)', r.stored === '37', JSON.stringify(r));
+  ok('the lab page never writes it (a 200 laid there, ' + P1 + ' kept)', r.stored === String(P1), JSON.stringify(r));
   await p.close();
 }
 {
@@ -64,7 +68,7 @@ const phone = await b.newContext({ viewport: { width: 412, height: 915 }, device
   const p = await open(blocked, PLAY);
   const r = await runTo(p, 21);
   const drew = await p.evaluate(() => window.__labDrew === true);
-  ok('storage blocked: the page draws, plays and crashes as normal, the card says best 21 for this visit, no page errors', drew && r.stored === 'blocked' && r.card === 'on' && r.best === 'best 21' && errs.length === before, JSON.stringify({ r, errs: errs.slice(before, before + 3) }));
+  ok('storage blocked: the page draws, plays and crashes as normal, the card shows it as a best for this visit, no page errors', drew && r.stored === 'blocked' && /\bon\b/.test(r.card) && r.best === 'your first best' && errs.length === before, JSON.stringify({ r, errs: errs.slice(before, before + 3) }));
   await blocked.close();
 }
 ok('no console errors', errs.length === 0, JSON.stringify(errs.slice(0, 3)));

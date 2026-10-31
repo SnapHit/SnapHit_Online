@@ -73,6 +73,11 @@ const ROOM = /^[a-z0-9-]{1,32}$/.test(query.get('room') || '') ? query.get('room
    own manta, steered with the lab's touch controls and predicted on this
    phone (roomplay.js). ?room alone is watch mode exactly as before. */
 const PLAY = !!ROOM && query.get('play') === '1';
+/* THE DEATH CARD HOLDS (4D, card.js): on the feedback page and in the
+   portal package your train waits on the card after the beat for a tap,
+   as in slither; ?hold=0 (tests) and the lab page come back by themselves
+   as before. */
+const HOLD = typeof window.MANTA_QUERY === 'string' && query.get('hold') !== '0';
 
 /* Before anything else builds: a complaint during init is the one most worth
    catching, and console.error is where three makes most of them. */
@@ -151,7 +156,7 @@ if (!ROOM && query.get('bots') !== null) P.bots = Math.max(0, Math.min(20, +quer
    call time, because the camera is built further down. */
 let follower = null;
 const roomView = { get w () { return follower ? follower.baseView.w : view.w; }, get h () { return follower ? follower.baseView.h : view.h; } };
-const sim = SPIKE ? null : ROOM ? createRoomView({ room: ROOM, build: panel.BUILD, view: roomView, play: PLAY, name: () => window.MANTA_NAME || savedName() }) : createSim({ seed: mantas.seed, params: {
+const sim = SPIKE ? null : ROOM ? createRoomView({ room: ROOM, build: panel.BUILD, view: roomView, play: PLAY, name: () => window.MANTA_NAME || savedName(), hold: HOLD }) : createSim({ seed: mantas.seed, params: {
   cruise: P.cruise, burst: P.burstSpeed, turnCruise: P.turnCruise, turnBurst: P.turnBurst,
   recruitR: P.recruitR, spacing: P.spacing, wildCount: P.wildCount, regrow: P.regrow,
   wildSize: P.wildSize, bloomPull: P.bloomPull, trainScale: P.trainScale,
@@ -306,8 +311,16 @@ follower = createFollow({ mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, W
                                 get lm () { return lm; }, get lmSlow () { return lmSlow; }, get post () { return post; },
                                 get shadows () { return shadows; },
                                 /* The feedback page and the portal keep your best on the device (4D). */
-                                keepBest: typeof window.MANTA_QUERY === 'string' });
+                                keepBest: typeof window.MANTA_QUERY === 'string', holdDeath: HOLD });
 const followCamera = dt => follower.followCamera(dt);
+/* The card's taps (4D): solo, a skip ends the simulation's beat now and
+   the next tap lets your train restart; in a room the room is told. */
+if (sim && HOLD && !ROOM) sim.you.holdDeath = true;
+if (follower.deathCard && HOLD) {
+  follower.deathCard.onSkip = () => { if (!ROOM && sim.you.dead > 1e-5) sim.you.dead = 1e-6; };
+  follower.deathCard.onGo = () => { if (ROOM) { if (sim.go) sim.go(); } else { sim.you.go = true; if (sim.you.dead > 1e-5) sim.you.dead = 1e-6; } };
+}
+window.__lab.card = follower.deathCard;
 window.__lab.zoom = () => follower.zoom;   // the eased camera zoom (3L), for the tests
 window.__lab.zoomDrawn = () => follower.zoomDrawn;   // with the burst zoom (4A) applied
 window.__lab.roomView = roomView;                // the view the room is told (4A tests)

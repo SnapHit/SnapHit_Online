@@ -110,7 +110,8 @@ const inOk = (m, steps) => Number.isSafeInteger(m.seq) && m.seq > 0 &&
   opt(m.c, c => num(c, 0, 1e12));
 const viewOk = m => num(m.x, -1e6, 1e6) && num(m.z, -1e6, 1e6) && num(m.w, 0, 1e5) && num(m.h, 0, 1e5) && opt(m.a, watchOk);
 const hiOk = m => typeof m.b === 'string' && m.b.length <= 24 && opt(m.k, k => typeof k === 'string' && /^[0-9a-f]{12}$/.test(k)) &&
-  opt(m.p, p => p === 0 || p === 1) && opt(m.a, watchOk) && opt(m.l, l => l === 0) && opt(m.g, g => g === 1);
+  opt(m.p, p => p === 0 || p === 1) && opt(m.a, watchOk) && opt(m.l, l => l === 0) && opt(m.g, g => g === 1) &&
+  opt(m.h, h => h === 1);
 const viewOf = m => ({ x: clamp(m && m.x, -1e5, 1e5), z: clamp(m && m.z, -1e5, 1e5),
                        w: clamp(m && m.w, 100, 6000), h: clamp(m && m.h, 100, 6000) });
 
@@ -177,6 +178,7 @@ export function createOcean (env, url, opts = {}) {
     if (env && env.SHARK_ON === '1') sim.params.sharkOn = 1;
     if (env && env.SHARK_EVERY > 0) sim.params.sharkEvery = +env.SHARK_EVERY;
     sim.you.dead = 1e9; sim.you.followers.length = 0;   // no human manta yet
+
     if (staged) stage();
   });
 
@@ -229,6 +231,10 @@ export function createOcean (env, url, opts = {}) {
     }
     const t = trainOf(id);
     t.human = { want: null, burst: false, rewind: 0 };
+    /* THE DEATH CARD HOLDS (4D, h:1): after the beat this train waits,
+       dead, for the phone's {t:'go'}; a bot holding it never waits. */
+    t.holdDeath = m.h === 1; t.go = false;
+
     phone.player = { id, name, token, ack: 0, seqIn: 0, queue: [], early: null, earlySeq: 0, late: 0, wish: 0, lastIn: now,
                      lagComp: !(phone.local && m.l === 0) };
     phone.me = phone.player;          // snapFor reads {id, ack} from here
@@ -297,7 +303,7 @@ export function createOcean (env, url, opts = {}) {
     if (!q) return;
     phone.player = null; phone.me = null;
     const t = sim && trainOf(q.id);
-    if (t) t.human = null;
+    if (t) { t.human = null; t.holdDeath = false; t.go = false; }
     held.set(q.token, { id: q.id, name: q.name, until: Date.now() + HOLD_MS });
     renameAll();
   }
@@ -448,6 +454,8 @@ export function createOcean (env, url, opts = {}) {
       /* A ping may ride on an input (4B): answered as a ping is. */
       if (m.t === 'in') { if (inOk(m, steps)) { input(phone, m); if (m.c !== undefined) ws.send(JSON.stringify({ t: 'pong', c: m.c })); } return; }
       if (m.t === 'away') { if (phone.player) bench(ws, phone); return; }
+      /* The death card's tap (4D): this player's train, if it is down, comes back. */
+      if (m.t === 'go') { const t = phone.player && trainOf(phone.player.id); if (t && t.dead > 0) t.go = true; return; }
       if (m.t === 'nm') { if (typeof m.n === 'string') nameIt(phone, m.n); return; }
       if (m.t === 'ping') { if (num(m.c, 0, 1e12)) ws.send(JSON.stringify({ t: 'pong', c: m.c })); return; }
       if (m.t === 'view') { if (viewOk(m)) { phone.view = viewOf(m); phone.watch = m.a === undefined ? -1 : m.a; } return; }
