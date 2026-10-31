@@ -459,26 +459,26 @@ export function createSim ({ seed = 1, params = {} } = {}) {
   }
 
   /* THE PROTECTED FIRST RUN (4D, design doc 10.8). Train t starts a new
-     run beside a group of at least three wild mantas, firstNear units from
+     run beside a knot of at least three wild mantas, firstNear units from
      its middle and facing it, with no other train within firstClear (the
-     group most clear of trains if none is); its followers, if any (a room's
+     knot most clear of trains if none is); its followers, if any (a room's
      seat taken from a bot), go into the water first, and nothing records a
      crash. Then it is guarded (bots.js) and, at crossAt, crossed. Only ever
      called for a player's first run of a visit: every other run, and every
      suite, draws exactly the random numbers it did before. */
   function protect (t) {
     if (t.followers.length) scatter(t, 0);
-    const count = new Map(), sumX = new Map(), sumZ = new Map();
-    for (const m of wild) {
-      if (!m || !m.alive || m.loose || m.sinking > 0 || m.group === undefined) continue;
-      count.set(m.group, (count.get(m.group) || 0) + 1);
-      sumX.set(m.group, (sumX.get(m.group) || 0) + m.x); sumZ.set(m.group, (sumZ.get(m.group) || 0) + m.z);
-    }
+    /* A knot of wild mantas: at least three within 120 units of one of
+       them (a group's members can be spread over hundreds of units, so a
+       group's middle may be empty water), clear of the reef; the spot is
+       their middle. */
+    const pool = wild.filter(m => m && m.alive && !m.loose && !(m.sinking > 0) && Math.hypot(m.x, m.z) <= p.arenaR - 450);
     const spots = [];
-    for (const [g, c] of count) {
-      if (c < 3) continue;
-      const x = sumX.get(g) / c, z = sumZ.get(g) / c;
-      if (Math.hypot(x, z) > p.arenaR - 450) continue;
+    for (const m of pool) {
+      let n = 0, sx = 0, sz = 0;
+      for (const q of pool) if (Math.abs(q.x - m.x) <= 120 && Math.abs(q.z - m.z) <= 120 && Math.hypot(q.x - m.x, q.z - m.z) <= 120) { n++; sx += q.x; sz += q.z; }
+      if (n < 3) continue;
+      const x = sx / n, z = sz / n;
       let clear = Infinity;
       for (const o of trains) {
         if (o === t || o.dead > 0) continue;
@@ -504,7 +504,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     t.first = { at: time, crossed: false, crosser: null };
     return { x: t.x, z: t.z };
   }
-  /* The crossing (4D): a bot nobody drives, out of sight (more than 900
+  /* The crossing (4D): a bot nobody drives or holds for a player (t.keep), out of sight (more than 900
      units from t, and, in a room, outside every phone's view: sim.hidden),
      shortest first, is brought in as a new run of crossLen on a straight
      course across t's bow, crossAhead in front of it, starting crossFrom to
@@ -520,7 +520,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
       if (Math.hypot(sx, sz) > p.arenaR - 350 || (hidden && !hidden(sx, sz))) continue;
       let o = null;
       for (const r of rivals) {
-        if (r === t || r.human || r.dead > 0 || r.guard || r.first || r.crossing) continue;
+        if (r === t || r.human || r.keep || r.dead > 0 || r.guard || r.first || r.crossing) continue;
         if (Math.hypot(r.x - t.x, r.z - t.z) < 900 || (hidden && !hidden(r.x, r.z))) continue;
         if (!o || r.followers.length < o.followers.length) o = r;
       }

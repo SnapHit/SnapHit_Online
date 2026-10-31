@@ -267,11 +267,14 @@ if (want('rules')) {
     const shown = [...document.querySelectorAll('button, a, [role=button], input, textarea, select')].filter(vis);
     const words = [...document.body.querySelectorAll('*')].filter(e => vis(e) && e.children.length === 0).map(e => e.textContent.trim()).filter(Boolean);
     return { name: window.MANTA_NAME, me: document.getElementById('meNameText').textContent, swimming: !!window.__sim && window.__sim.you && !(window.__sim.you.dead > 0) && window.__labDrew === true,
+      first: !!(window.__sim && window.__sim.you.first), hold: !!(window.__sim && window.__sim.you.holdDeath),
       panel: vis(document.getElementById('namePanel')), controls: shown.map(e => e.id || e.tagName), links: [...document.querySelectorAll('a')].filter(vis).map(e => e.href),
       full: shown.filter(e => /full ?screen/i.test(e.textContent + ' ' + (e.getAttribute('aria-label') || '') + ' ' + (e.title || ''))).length,
       friends: vis(document.getElementById('friends')), fbOpen: vis(document.getElementById('fbOpen')), fbBox: vis(document.getElementById('fbBox')), counter: typeof window.__count,
       lang: document.documentElement.lang, words, privacyLinks: document.querySelectorAll('#privacyPortal a').length }; });
   ok('straight into a swim under a generated name: no name box, swimming, the name over your leader and top left with its pencil', st.swimming && !st.panel && /^[a-z]+ [a-z]+$/.test(st.name) && st.me === st.name, JSON.stringify({ name: st.name, me: st.me, panel: st.panel }));
+  /* 4D (design doc 10.8): the package's first run is a protected one, and the death card holds for a tap. */
+  ok('the first swim is a protected first run, and the death card holds for a tap', st.first && st.hold, JSON.stringify({ first: st.first, hold: st.hold }));
   /* The pencil: a new name, cleaned as a room cleans it (16 characters at most). */
   await p.click('#meName');
   await p.fill('#meEdit input', '  Reef  Rider of the North Sea  ');

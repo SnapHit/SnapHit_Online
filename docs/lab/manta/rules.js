@@ -188,7 +188,12 @@ export function createRules (ctx) {
        order let the first leader crash on its own and the second then read
        the pair as mutual, so one head-on was scored twice and the other side
        not at all. */
-    const hits = ctx.trains.map(t => t.dead > 0 ? null : contacts(t));
+    /* THE FIRST RUN'S SHIELD (4D, p.firstShield): a guarded leader that is
+       not bursting slips under a bot's train instead of crashing into it.
+       Never another player's train, and the reef still counts; bursting,
+       it cuts as anyone does. */
+    const shielded = (t, h) => h && p.firstShield && t.guarded && !t.bursting && !h.train.human;
+    const hits = ctx.trains.map(t => { if (t.dead > 0) return null; const h = contacts(t); return shielded(t, h) ? null : h; });
     const done = new Set();
     for (let i = 0; i < ctx.trains.length; i++) {
       const t = ctx.trains[i], h = hits[i];

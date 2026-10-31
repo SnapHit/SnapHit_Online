@@ -78,6 +78,12 @@ const PLAY = !!ROOM && query.get('play') === '1';
    as in slither; ?hold=0 (tests) and the lab page come back by themselves
    as before. */
 const HOLD = typeof window.MANTA_QUERY === 'string' && query.get('hold') !== '0';
+/* A PROTECTED FIRST RUN (4D, design doc 10.8, sim.js protect): the first
+   run of each visit to the feedback page or the portal package starts
+   beside a group of wild mantas, unhunted, with a short train crossing at
+   30 s; solo here, in a room by the hello's f:1. ?first=0 (tests) and the
+   lab page start as before. */
+const FIRST = typeof window.MANTA_QUERY === 'string' && query.get('first') !== '0';
 
 /* Before anything else builds: a complaint during init is the one most worth
    catching, and console.error is where three makes most of them. */
@@ -156,12 +162,13 @@ if (!ROOM && query.get('bots') !== null) P.bots = Math.max(0, Math.min(20, +quer
    call time, because the camera is built further down. */
 let follower = null;
 const roomView = { get w () { return follower ? follower.baseView.w : view.w; }, get h () { return follower ? follower.baseView.h : view.h; } };
-const sim = SPIKE ? null : ROOM ? createRoomView({ room: ROOM, build: panel.BUILD, view: roomView, play: PLAY, name: () => window.MANTA_NAME || savedName(), hold: HOLD }) : createSim({ seed: mantas.seed, params: {
+const sim = SPIKE ? null : ROOM ? createRoomView({ room: ROOM, build: panel.BUILD, view: roomView, play: PLAY, name: () => window.MANTA_NAME || savedName(), hold: HOLD, first: FIRST }) : createSim({ seed: mantas.seed, params: {
   cruise: P.cruise, burst: P.burstSpeed, turnCruise: P.turnCruise, turnBurst: P.turnBurst,
   recruitR: P.recruitR, spacing: P.spacing, wildCount: P.wildCount, regrow: P.regrow,
   wildSize: P.wildSize, bloomPull: P.bloomPull, trainScale: P.trainScale,
   arenaR: P.arenaR, arenaRWanted: P.arenaR, bots: P.bots,
   burstCost: P.burstCost, scatterGlow: P.scatterGlow } });
+if (sim && !ROOM && FIRST) sim.protect(sim.you);
 const dbg = createDebug({ sim, seed: mantas.seed, step: STEP, scene });
 let controls = null;
 /* A fixed 60 steps a second whatever the display does, with an accumulator,

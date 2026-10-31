@@ -75,7 +75,7 @@ const LEAD_MAX = 45;
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 const r4 = v => Math.round(v * 1e4) / 1e4;
 
-export function createPlay ({ room, params, core, you, input, send: wire, rtt, view, viewNow = null, now = () => performance.now(), hold = false }) {
+export function createPlay ({ room, params, core, you, input, send: wire, rtt, view, viewNow = null, now = () => performance.now(), hold = false, first = false }) {
   const motion = createMotion(params);
   /* 3G: tokens became twelve hex digits, so the key changed with them and
      a stale 32-digit token cannot stick. */
@@ -140,8 +140,10 @@ export function createPlay ({ room, params, core, you, input, send: wire, rtt, v
 
   /* ------------------------------------------------------------ the wire */
   /* 4D: h:1, this page holds your train on the death card until a tap
-     ({t:'go'}). */
-  const hello = () => { const h = { p: 1 }, t = readToken(); if (t) h.k = t; if (hold) h.h = 1; return h; };
+     ({t:'go'}); f:1, until the room has seated this phone once, this is
+     your first run of the visit, a protected one (sim.js protect). */
+  let seated = false;
+  const hello = () => { const h = { p: 1 }, t = readToken(); if (t) h.k = t; if (hold) h.h = 1; if (first && !seated) h.f = 1; return h; };
 
   function onInit (m) {
     /* A new connection resends every path and may be a new room clock, so
@@ -153,7 +155,7 @@ export function createPlay ({ room, params, core, you, input, send: wire, rtt, v
        once rather than at the next beat. */
     sentWant = null; sentBurst = false; sentAt = -1e9;
     if (!m.me) return;
-    myId = m.me.id; name = m.me.name || null; keepToken(m.me.token);
+    myId = m.me.id; name = m.me.name || null; keepToken(m.me.token); seated = true;
     you.id = myId; you.watched = myId;
   }
 

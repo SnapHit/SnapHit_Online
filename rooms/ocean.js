@@ -111,7 +111,7 @@ const inOk = (m, steps) => Number.isSafeInteger(m.seq) && m.seq > 0 &&
 const viewOk = m => num(m.x, -1e6, 1e6) && num(m.z, -1e6, 1e6) && num(m.w, 0, 1e5) && num(m.h, 0, 1e5) && opt(m.a, watchOk);
 const hiOk = m => typeof m.b === 'string' && m.b.length <= 24 && opt(m.k, k => typeof k === 'string' && /^[0-9a-f]{12}$/.test(k)) &&
   opt(m.p, p => p === 0 || p === 1) && opt(m.a, watchOk) && opt(m.l, l => l === 0) && opt(m.g, g => g === 1) &&
-  opt(m.h, h => h === 1);
+  opt(m.h, h => h === 1) && opt(m.f, f => f === 1);
 const viewOf = m => ({ x: clamp(m && m.x, -1e5, 1e5), z: clamp(m && m.z, -1e5, 1e5),
                        w: clamp(m && m.w, 100, 6000), h: clamp(m && m.h, 100, 6000) });
 
@@ -178,6 +178,10 @@ export function createOcean (env, url, opts = {}) {
     if (env && env.SHARK_ON === '1') sim.params.sharkOn = 1;
     if (env && env.SHARK_EVERY > 0) sim.params.sharkEvery = +env.SHARK_EVERY;
     sim.you.dead = 1e9; sim.you.followers.length = 0;   // no human manta yet
+    /* The first run's crossing train (4D) comes in out of every phone's
+       sight: off every screen (the view a phone reports, plus a manta's
+       width), though it may be inside the margin phones are sent. */
+    sim.hidden = (x, z) => { for (const p of phones.values()) if (p.ready && Math.abs(x - p.view.x) <= p.view.w / 2 + 80 && Math.abs(z - p.view.z) <= p.view.h / 2 + 80) return false; return true; };
 
     if (staged) stage();
   });
@@ -189,7 +193,7 @@ export function createOcean (env, url, opts = {}) {
   const players = () => { const a = []; for (const p of phones.values()) if (p.player) a.push(p.player); return a; };
   let names = [];                     // [[id, name], ...] for every train a player drives
   function renameAll () { names = players().map(q => [q.id, q.name]).sort((a, b) => a[0] - b[0]); }
-  function forgetHeld (now) { for (const [tok, h] of held) if (h.until <= now) held.delete(tok); }
+  function forgetHeld (now) { for (const [tok, h] of held) if (h.until <= now) { held.delete(tok); const t = trainOf(h.id); if (t) t.keep = false; } }
   function newName () {
     const taken = new Set([...players().map(q => q.name), ...[...held.values()].map(h => h.name)]);
     for (let k = 0; k < 200; k++) {
@@ -207,7 +211,7 @@ export function createOcean (env, url, opts = {}) {
     forgetHeld(now);
     const driven = new Set(players().map(q => q.id));
     const tok = typeof m.k === 'string' ? m.k : '';
-    let id = -1, name = '', token = '';
+    let id = -1, name = '', token = '', fresh = true;
     if (tok) {
       /* A TOKEN IS ONE LIVE CONNECTION'S (3G). Only a manta the room is
          holding for it (a drop, or a player benched as away) can be taken
@@ -215,7 +219,7 @@ export function createOcean (env, url, opts = {}) {
          tab, gets a manta and a token of its own and never takes the
          first one's train. */
       const h = held.get(tok);
-      if (h && trainOf(h.id) && !driven.has(h.id)) { id = h.id; name = phone.wantName || h.name; token = tok; held.delete(tok); }
+      if (h && trainOf(h.id) && !driven.has(h.id)) { id = h.id; name = phone.wantName || h.name; token = tok; held.delete(tok); fresh = false; }
     }
     if (id < 0) {
       if (driven.size >= MAX_PLAYERS) return null;
@@ -233,7 +237,11 @@ export function createOcean (env, url, opts = {}) {
     t.human = { want: null, burst: false, rewind: 0 };
     /* THE DEATH CARD HOLDS (4D, h:1): after the beat this train waits,
        dead, for the phone's {t:'go'}; a bot holding it never waits. */
-    t.holdDeath = m.h === 1; t.go = false;
+    t.holdDeath = m.h === 1; t.go = false; t.keep = false;
+    /* A PROTECTED FIRST RUN (4D, f:1, design doc 10.8): a new seat, not a
+       train taken back, starts afresh beside a group of wild mantas, out
+       of everyone's way, unhunted (sim.js protect). Never in a staged room. */
+    if (m.f === 1 && fresh && !staged) sim.protect(t);
 
     phone.player = { id, name, token, ack: 0, seqIn: 0, queue: [], early: null, earlySeq: 0, late: 0, wish: 0, lastIn: now,
                      lagComp: !(phone.local && m.l === 0) };
@@ -303,7 +311,8 @@ export function createOcean (env, url, opts = {}) {
     if (!q) return;
     phone.player = null; phone.me = null;
     const t = sim && trainOf(q.id);
-    if (t) { t.human = null; t.holdDeath = false; t.go = false; }
+    /* keep: held for its player, so never the first run's crossing train (sim.js). */
+    if (t) { t.human = null; t.holdDeath = false; t.go = false; t.keep = true; }
     held.set(q.token, { id: q.id, name: q.name, until: Date.now() + HOLD_MS });
     renameAll();
   }
