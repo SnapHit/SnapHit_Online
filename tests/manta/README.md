@@ -269,6 +269,20 @@ One line each: what it checks, how to run it, roughly how long.
 
 - `firstrun.mjs` (4D part 3, design doc 10.8): a scripted new player (steers at the nearest wild manta with a sway and a drift, bursts about once every five seconds for 0.3 to 0.8 s once it has three, and turns away from a train ahead on a coin toss once per encounter) swims first runs in the room's full ocean of 21 trains (arena 2760, 570 wild, 8 blooms, 20 bots), with the simulation's own code. Per run: seconds to the first recruit, to the first crash, cuts landed in the first minute, and how it crashed. `MODE=before` starts every run as a restart does; `MODE=after` as a protected first run; `MODE=later` measures the ordinary run after each protected one. `CAP` (90) ends a run; `SET='{"firstFor":45}'` overrides simulation values for tuning. One process per core: `OUT=dir MODE=after RUNS=50 CAP=60 SEEDS="1 2" tests/manta/firstrun/run.sh` took about 9 minutes on 2 cores (4D), which is why a full measurement is many chunks, each with its own seeds; `node tests/manta/firstrun/firstrun.mjs sum dir/*.json` prints the table. A step of the full ocean costs about 2 ms in Node here; the output is JSON, kept outside the repo.
 
+What 4D measured with it (CAP 60 unless said; the chosen values are in simcore.js DEF):
+
+| | before (restart), 960 runs | after (protected), 2,000 runs | the ordinary run after a protected one, 56 runs |
+|---|---|---|---|
+| first recruit, median / 95th percentile | 0.72 / 2.63 s | 0.12 / 0.42 s | 0.68 / 2.12 s |
+| first recruit within 3 s | 96.9% | 100% | 100% |
+| first crash, median | 27.2 s | none inside 60 s | 28.8 s |
+| runs past 60 s | 18.8% | 99.8% (4 crashed at 60.000 s, the step the guard lifted) | 19.6% |
+| cuts landed in the first minute, mean | 0.18 | 0.32 | 0.27 |
+| runs with a cut | 16.4% | 25.7% | 21.4% |
+| the crossing train brought in | | 1,917 of 2,000 | |
+
+The same protected runs on to 90 s (60 runs, `CAP=90`): 33 crashed by 90 s, 14 of them inside 10 s of the guard lifting at 60 s; first crash median 85.4 s. The guard moves the first-minute cliff to the 60 s mark; it does not teach the scripted player to avoid bodies.
+
 ### Room cost in plain Node, `room-size/` (no browser, no server)
 
 - `cost.mjs` (4B): a room's step cost and bytes per phone, with the room's own `rooms/ocean.js` loaded in Node (a copy in `MANTA_OUT`, patched in memory only: imports pointed at `docs/lab/manta/`, the seat count raised to n-1 when it is lower, and timing hooks), on a clock the harness moves 50 ms a tick and a seeded `crypto`. n-1 phones are seated; each step is timed on its own and given an equal share of its tick's snapshots. `SIZE=scaled` (default) sizes the ocean for n mantas (n-1 trains swim: the room's own solo manta is parked out of the water; arena 2000 x sqrt(n/11), 300 x n/11 wild, each to the nearest 10) by serving the room a params.js with those defaults; `SIZE=room` takes the room as it is. `PLAYERS=bot` steers each player as the bot brain would, so trains grow as bots' do; `PLAYERS=brain` sends no inputs, so the room benches every player and the brain drives all n-1 trains inside the timed steps while every phone is still sent its snapshots (the dearest room there is: the step-cost bar is judged on it). `BYTES=1 ZOOM=near|mid|far|burst` counts what each phone is sent and sends, with WebSocket framing (near 257x570, mid 363x806, far 962x2137, burst 1078x2394 on a 412x915 screen); `BREAKDOWN=1` splits the snapshots' bytes by section, over every second and over the dearest 5%. The step cost is only clean with nothing else running: give it the machine. `N=11,21 PLAYERS=bot WARM_S=300 MEASURE_S=120 node tests/manta/room-size/cost.mjs`: about 2 min for those two; n=51 alone takes about 8 min, so give it its own run. Rows go to `MANTA_OUT/room-cost.json` as each n finishes.
