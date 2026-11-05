@@ -72,8 +72,15 @@ const PLAY = '/lab/manta/play/?solo=1&tier=low&backend=webgl2&fx=off&hint=0';
   const s3 = await state(p);
   ok('one tap after the beat starts the next run: alive, the card gone', !(s3.dead > 0) && s3.runs === s2.runs + 1 && !/\bon\b/.test(s3.cls), JSON.stringify({ dead: s3.dead, runs: s3.runs, cls: s3.cls }));
   /* Again, tapping during the beat. */
-  await p.evaluate(() => { const L = window.__lab, S = window.__sim; S.lay(8); L.step(0.1); S.crash(S.you, null, 'reef'); L.step(1 / 60); });
-  await p.touchscreen.tap(206, 600);                 // inside 0.35 s: nothing
+  /* The tap inside 0.35 s is dispatched in the same task as the crash's
+     step (4E). A real one waits for the page's next frame, and a paused
+     page that has nothing to redraw may not draw one for a long time:
+     here a tap at this point took 63 ms in one run and 67 to 70 s in
+     others, on the 4D code and the 4E code alike, and then landed long
+     after 0.35 s and skipped the beat. The later taps are real. */
+  await p.evaluate(() => { const L = window.__lab, S = window.__sim; S.lay(8); L.step(0.1); S.crash(S.you, null, 'reef'); L.step(1 / 60);
+    const cv = document.querySelector('canvas'), ev = type => cv.dispatchEvent(new PointerEvent(type, { pointerId: 21, pointerType: 'touch', isPrimary: true, clientX: 206, clientY: 600, bubbles: true, cancelable: true, buttons: type === 'pointerup' ? 0 : 1 }));
+    ev('pointerdown'); ev('pointerup'); });   // inside 0.35 s: nothing
   const s4 = await state(p);
   await p.waitForTimeout(450);
   await p.touchscreen.tap(206, 600);                 // skips the beat
