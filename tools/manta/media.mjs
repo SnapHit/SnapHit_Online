@@ -20,6 +20,12 @@
        each at a thumbnail's width, to judge them as a portal shows them
      node tools/manta/media.mjs brightstill <name> [output directory]
        one bright cover without its title, at half size, while tuning
+     node tools/manta/media.mjs brightvideo16 | brightvideo23 [output directory]
+       raywake-preview-1920x1080.mp4 and raywake-preview-1080x1620.mp4 (4E):
+       opening on the bright cover's frame (1920x1080, and 800x1200's at
+       1080x1620), then 18 s of play at real speed. Resumable in pieces of
+       MAX_S seconds (480): run it again until it encodes. PREVIEW=1 plays
+       the whole video small and writes every tenth frame, to look at first
      node tools/manta/media.mjs plan [output directory]
        the video's steering run without frames: your length, deaths, and
        every crash and cut, to check a change to the staging or steering
@@ -197,7 +203,7 @@ const PLAN = [[0, []]];
 const AUTO_AT = 2.0;
 const BURSTS = [[0, false], [1.0, true], [2.0, false], [11.0, true], [12.2, false]];
 const FREE_AT = +(process.env.FREE_AT || 3);
-async function steer (p, t) {
+async function steer (p, t, which = WHICH, freeAt = FREE_AT, autoAt = AUTO_AT, bursts = BURSTS) {
   await p.evaluate(({ t, plan, bursts, which, freeAt, autoAt }) => {
     const S = window.__sim, P = S.params, you = S.you;
     const key = (k, down) => window.dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { key: k, bubbles: true }));
@@ -246,7 +252,7 @@ async function steer (p, t) {
     for (const k of want) if (!st.held.includes(k)) key(k, true);
     st.held = want.slice();
     if (b !== st.b) { key(' ', b); st.b = b; }
-  }, { t, plan: PLAN, bursts: BURSTS, which: WHICH, freeAt: FREE_AT, autoAt: AUTO_AT });
+  }, { t, plan: PLAN, bursts, which, freeAt, autoAt });
 }
 /* The title over a frame: "Raywake", centred near the top, white with a
    soft glow, in the cleanest bold face here. */
@@ -297,6 +303,12 @@ async function scaled (png, rw, rh, w, h) {
    draws. Positions are fractions of the frame (u right, v down), your
    leader at the middle, where the camera sits. */
 const BRIGHT_AT = +(process.env.BRIGHT_AT || 0.13);
+/* The bright videos (4E): the cover's rivals are laid across your path for one frame, so from the next the
+   autopilot steers (BRIGHT_AUTO); the bots laid far off go back to their brain at BRIGHT_FREE (by shape, chosen
+   from previews: at 0.5 s the 2:3 video's bots cut your 52 to 5 at about 8 s, at 1.5 s they do not), the cover's own rivals
+   only at BRIGHT_NEAR, swimming straight on until then (freed at once, the bots' brain went straight for your long
+   train and cut it to 10 within the second); and the one burst is late. */
+const BRIGHT_FREE = process.env.BRIGHT_FREE ? { '1920x1080': +process.env.BRIGHT_FREE, '800x1200': +process.env.BRIGHT_FREE } : { '1920x1080': 0.5, '800x1200': 1.5 }, BRIGHT_NEAR = +(process.env.BRIGHT_NEAR || 4), BRIGHT_AUTO = +(process.env.BRIGHT_AUTO || 0.03), BRIGHT_BURSTS = [[0, false], [11.0, true], [12.2, false]];
 const BRIGHT = {
   /* cover w, h, title size and top; the zoom; lead: where your leader (the camera's centre) sits on the cover, as a
      fraction of its height, the frame drawn taller and cropped so the action sits under the title; your curl
@@ -317,9 +329,9 @@ function brightPage (B) {
   const [cw, ch] = B.cover, pw = cw / 2, ph = Math.ceil(Math.max(ch / 2, B.lead * ch));
   return { pw, ph, zoom: B.zoom * Math.sqrt(ph / (ch / 2)), y0: ph - Math.round(B.lead * ch) };
 }
-async function stageBright (name) {
-  const B = BRIGHT[name], G = brightPage(B), w = G.pw, h = G.ph;
-  const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1, hasTouch: false });
+async function stageBright (name, B = BRIGHT[name], small = 1) {
+  const G = brightPage(B), w = G.pw, h = G.ph;
+  const ctx = await browser.newContext({ viewport: { width: Math.round(w * small), height: Math.round(h * small) }, deviceScaleFactor: 1, hasTouch: false });
   const p = await ctx.newPage(); p.setDefaultTimeout(180000); p.setDefaultNavigationTimeout(60000);
   const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', c => { if (c.type() === 'error' && !/popErrorScope/.test(c.text())) errs.push(c.text()); });
   await p.addInitScript(() => { document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); s.textContent = '#chip,#panel,#bar,#board,#len,#radar,#labels,#hint,#signal,#beat,#stats,#plain{display:none!important}html,body{cursor:none}'; document.head.appendChild(s); }); });
@@ -329,6 +341,8 @@ async function stageBright (name) {
     const L = window.__lab, S = window.__sim, P = S.params, U = L.params.P, TAU = Math.PI * 2;
     /* The script's clock in place of the page's real one. */
     let now = performance.now(); performance.now = () => now; window.__tick = ms => { now += ms; };
+    /* What this replaces, for a video to hand back once the cover's frame is drawn (4E). */
+    window.__brightWas = { apply: L.controls ? L.controls.apply : null, zoomNear: U.zoomNear, zoomHalf: U.zoomHalf, zoomFar: U.zoomFar, burstZoom: U.burstZoom };
     /* Closer in, held there: the zoom at length 0, whatever the length; no burst zoom. */
     U.zoomNear = G.zoom; U.zoomHalf = 1e6; U.zoomFar = 0.25; U.burstZoom = 0;
     /* A train laid along a path ending at (x, z) heading h, turning at
@@ -470,6 +484,92 @@ if (MODE === 'covers') {
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', join(dir, 'f%05d.png'), '-c:v', 'libx264', '-preset', 'slow', '-crf', process.env.CRF || '20',
     '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-movflags', '+faststart', '-an', f]);
   report.files.push({ file: f, w, h, frames: n, fps: FPS, bytes: statSync(f).size, seconds: (Date.now() - t0) / 1000 });
+} else if (MODE === 'brightvideo16' || MODE === 'brightvideo23') {
+  /* THE PREVIEW VIDEOS ON THE BRIGHT COVERS (4E, design doc 10.7: opening on
+     the cover's frame). Frame 0 is the bright cover's frame without its
+     title: 16:9 the 1920x1080 cover's staging, drawn exactly as the cover
+     is; 2:3 the 800x1200 cover's staging at 1080x1620 (the same moment
+     and the same water, the view being the same area at any size, drawn
+     at the video's own resolution). From frame 1 the game plays on at
+     real speed on the script's clock: the zoom and the controls the cover
+     held are handed back (the zoom scaled as the taller page is, so the
+     video shows as much ocean as a player's screen of its shape), so the
+     close-up camera eases out by itself; the rivals go back to the bots'
+     brain at BRIGHT_FREE seconds; your train is steered as the 4C videos
+     are (steer above). Each frame is drawn taller than the video, as the
+     cover is, and cropped by ffmpeg.
+
+     Resumable, because a video is longer than one ten-minute command
+     here: frames already on disk are kept, the game is played again up to
+     the first missing one (stepped and drawn, not read back), the frame
+     before it is drawn again and must match the one on disk byte for byte
+     (or it stops), and new frames are written until MAX_S seconds (480)
+     have gone. Run it again until it says every frame is there; then it
+     encodes. */
+  const [name, w, h] = MODE === 'brightvideo16' ? ['1920x1080', 1920, 1080] : ['800x1200', 1080, 1620];
+  const B = { ...BRIGHT[name], cover: [w, h] }, G = brightPage(B), n = VIDEO_S * FPS, MAX_S = +(process.env.MAX_S || 480);
+  /* PREVIEW=1: the whole video played at SMALL, every tenth frame written at that size to preview-bright-*, to see what happens in it before the long render. */
+  const PREVIEW = !!process.env.PREVIEW;
+  const dir = join(OUT, (PREVIEW ? 'preview-bright-' : 'frames-bright-') + w + 'x' + h); mkdirSync(dir, { recursive: true });
+  const fileOf = i => join(dir, 'f' + String(i).padStart(5, '0') + '.png');
+  let start = 0; if (!PREVIEW) while (start < n && existsSync(fileOf(start))) start++;
+  const t0 = Date.now(), rec = { file: null, w, h, frames: n, fps: FPS, drawn: [G.pw * 2, G.ph * 2], crop: [0, G.y0 * 2], from: start, small: start > 1 ? +(process.env.SMALL || 0.2) : 1 };
+  if (start < n) {
+    /* Played at SMALL (0.2) of the page's size up to the first frame read
+       back, then the page set to its full size: the view is the same area
+       of ocean at any size of one shape, and the light memory the same 512
+       texels, so the game and its wakes are the same, and a step costs a
+       fraction. The frame drawn again before the first new one, compared
+       byte for byte with the one on disk, is the check. */
+    const SMALL = +(process.env.SMALL || 0.2), small = start > 1 || PREVIEW ? SMALL : 1;
+    const s = await stageBright(name, B, small), k = Math.sqrt(G.ph / (h / 2));
+    const near = [0, ...B.others.map(o => o[0])], far = [...Array(10).keys()].filter(j => !near.includes(j));
+    let full = small === 1;
+    /* A resize sets the backing store to the device's ratio (renderer.js resize), so the high tier's 2 is put back, as applyQuality set it. */
+    const grow = async () => { if (full) return; await s.p.setViewportSize({ width: G.pw, height: G.ph });
+      await s.p.evaluate(() => new Promise(r => requestAnimationFrame(() => { window.__lab.lab.setPixelRatio(2); requestAnimationFrame(() => r()); }))); full = true; };
+    const stepOnly = async dt => {
+      await s.p.evaluate(() => new Promise(r => requestAnimationFrame(() => r())));
+      await s.p.evaluate(dt => { const L = window.__lab; if (L.shadows) L.shadows.render(L.renderer); L.step(dt); }, dt);
+    };
+    let i = 0;
+    for (; i < n; i++) {
+      const t = i / FPS;
+      if (i === 1) await s.p.evaluate(k => {
+        const L = window.__lab, U = L.params.P, was = window.__brightWas;
+        U.zoomNear = was.zoomNear * k; U.zoomFar = was.zoomFar * k; U.zoomHalf = was.zoomHalf; U.burstZoom = was.burstZoom;
+        window.__steerBright.burst = false; if (L.controls && was.apply) L.controls.apply = was.apply;
+      }, k);
+      if (i === Math.round(BRIGHT_FREE[name] * FPS)) await s.p.evaluate(far => { for (const j of far) if (window.__sim.rivals[j]) window.__sim.rivals[j].human = null; }, far);
+      if (i) { await steer(s.p, t, near, BRIGHT_NEAR, BRIGHT_AUTO, BRIGHT_BURSTS); await s.p.evaluate(ms => window.__tick(ms), 1000 / FPS); }
+      if (PREVIEW) {
+        if (i % 10) { await stepOnly(i ? 1 / FPS : 0); continue; }
+        writeFileSync(fileOf(i), await frame(s.p, i ? 1 / FPS : 0));
+        if (i % 90 === 0) console.log('preview ' + i + ' ' + JSON.stringify(await s.p.evaluate(() => { const S = window.__sim, y = S.you; return { len: y.followers.length, dead: y.dead > 0, r: Math.round(Math.hypot(y.x, y.z)) }; })));
+        continue;
+      }
+      if (i < start - 1) { const q = Date.now(); await stepOnly(i ? 1 / FPS : 0); if (process.env.TIMING) console.log('step ' + i + ' ' + (Date.now() - q) + ' ms'); continue; }
+      await grow();
+      const q = Date.now(), png = await frame(s.p, i ? 1 / FPS : 0, G.pw * 2, G.ph * 2);
+      if (process.env.TIMING) console.log('frame ' + i + ' ' + (Date.now() - q) + ' ms');
+      if (i === start - 1) { if (!readFileSync(fileOf(i)).equals(png)) throw new Error('frame ' + i + ' drawn again does not match the one on disk: not resuming'); rec.matched = i; continue; }
+      writeFileSync(fileOf(i), png);
+      if (i % 30 === 0) console.log('frame ' + i + ' of ' + n + ', ' + ((Date.now() - t0) / 1000).toFixed(0) + ' s');
+      if ((Date.now() - t0) / 1000 > MAX_S) { i++; break; }
+    }
+    rec.to = i; rec.info = s.info;
+    if (s.errs.length) console.log('page errors: ' + JSON.stringify(s.errs.slice(0, 3)));
+    await s.ctx.close();
+  }
+  let have = 0; while (!PREVIEW && have < n && existsSync(fileOf(have))) have++;
+  if (have >= n) {
+    const f = join(OUT, 'raywake-preview-' + w + 'x' + h + '.mp4');
+    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', join(dir, 'f%05d.png'), '-vf', 'crop=' + w + ':' + h + ':0:' + G.y0 * 2,
+      '-c:v', 'libx264', '-preset', 'slow', '-crf', process.env.CRF || '20', '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-movflags', '+faststart', '-an', f]);
+    rec.file = f; rec.bytes = statSync(f).size;
+  } else if (!PREVIEW) console.log(have + ' of ' + n + ' frames on disk: run it again');
+  rec.seconds = (Date.now() - t0) / 1000;
+  report.files.push(rec);
 } else if (MODE === 'plan') {
   /* The video's steering run without drawing frames (a small page, steps
      only), to see where everyone goes: your length, whether anyone died,
@@ -492,6 +592,6 @@ if (MODE === 'covers') {
   const f = join(OUT, name + '.png'); writeFileSync(f, await frame(s.p, 0, +w, +h));
   report.files.push({ file: f, errors: s.errs.slice(0, 3), info: s.info });
   await s.ctx.close();
-} else throw new Error('mode: covers, bright, brightstill, video16, video23, plan or still');
+} else throw new Error('mode: covers, bright, brightstill, video16, video23, brightvideo16, brightvideo23, plan or still');
 await browser.close(); server.close();
 console.log(JSON.stringify(report, null, 1));
