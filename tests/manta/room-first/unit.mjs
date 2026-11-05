@@ -20,7 +20,7 @@ const { createOcean } = await import(TREE + '/rooms/ocean.js');
 const { decodeSnap } = await import(TREE + '/docs/lab/manta/roomcore.js');
 const BUILD = readFileSync(TREE + '/docs/lab/manta/panel.js', 'utf8').match(/export const BUILD = '([^']+)'/)[1];
 const env = { ASSETS: { async fetch (req) { return new Response(readFileSync(TREE + '/docs' + new URL(req.url).pathname, 'utf8')); } } };
-const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 160000 * (+process.env.WATCHDOG_X || 1));
+const die = setTimeout(() => { console.log('WATCHDOG'); process.exit(3); }, 200000 * (+process.env.WATCHDOG_X || 1));
 let bad = 0; const ok = (n, c, x = '') => { if (!c) bad++; console.log((c ? '  PASS  ' : '  FAIL  ') + n + (x ? '  [' + x + ']' : '')); };
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const digits = String(BUILD).replace(/\D/g, '').slice(2);
@@ -97,6 +97,19 @@ const cutEvents = W.ev.filter(e => e.k === 'cut' && e.at - t0 < 25000);
 ok('no bot cut it in its first 25 s: its length never fell' + (crashed ? ' before its crash' : ''), !drop, JSON.stringify({ drop, crashed, length: prev, cutsInTheRoom: cutEvents.length }));
 const crossers = [...seen].filter(([id, q]) => q.at >= 27000 && q.at <= 36000 && q.len >= 6 && q.len <= 10);
 ok('about 30 s in, a short train (8) comes into view and crosses', crossers.length >= 1 || (A.me && A.me.dead), JSON.stringify(crossers.slice(0, 3)) + (A.me && A.me.dead ? ' (A was down)' : ''));
+/* 4D ruling 1(b): the player's own record says while it is guarded
+   (flag 64), so the phone plays a slip, not a crash, and marks the end. */
+const g0 = A.snaps.find(m => m.me && !m.me.dead);
+ok('while guarded the player\'s own record says so (guarded flag)', !!g0 && g0.me.g === 1, JSON.stringify(g0 && g0.me.g));
+/* On past 60 s: the flag clears once the guard has ended (clear of every body). */
+const steer2 = setInterval(() => {
+  const m = A.me; let w = null;
+  if (m && !m.dead) { let best = null, bd = Infinity; for (const q of A.wild.values()) { const d = Math.hypot(q[1] - m.x, q[2] - m.z); if (d < bd) { bd = d; best = q; } } if (best) w = Math.atan2(-(best[1] - m.x), -(best[2] - m.z)); }
+  ocean.message(A, JSON.stringify({ t: 'in', seq: ++seq, w, d: 0 }));
+}, 100);
+const tEnd = await until(() => A.me && (A.me.dead || !A.me.g), 40000);
+clearInterval(steer2);
+ok('the flag clears when the guard ends, at 60 s or a moment after (' + ((Date.now() - t0) / 1000).toFixed(1) + ' s)' + (A.me && A.me.dead ? ', or with a crash' : ''), tEnd >= 0 && (Date.now() - t0) >= 59000);
 /* Without f, and with a held token, as before. */
 const tok = A.of('init').find(m => m.me).me.token;
 ocean.leave(A);

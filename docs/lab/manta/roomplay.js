@@ -260,6 +260,8 @@ export function createPlay ({ room, params, core, you, input, send: wire, rtt, v
     if (m.runs !== undefined) runs = m.runs;
     you.runs = runs;   // the radar (3L) starts a new line on a new run
     if (m.peak !== undefined) you.peak = m.peak;
+    /* A protected first run (4D): the room says while the guard lasts. */
+    you.guarded = !!m.g && !m.dead;
     /* DEAD: nothing to predict. The death beat counts down here from the
        moment the room said so; follow.js holds the wreck and shows the peak. */
     if (m.dead) {

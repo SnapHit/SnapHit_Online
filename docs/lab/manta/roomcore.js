@@ -49,7 +49,7 @@
  *   wild changes (flag 4): u16 count, records; u16 count, slots gone (a
  *     slot both gone and in a record has a new manta in it: gone first)
  *   a player's own (flag 8): u8 f (1 dead, 2 bursting, 4 peak, 8 early,
- *     16 late, 32 ack), f32 x, f32 z, f32 h, i32 s, u16 len, u16 runs; if
+ *     16 late, 32 ack, 64 guarded: a protected first run, 4D), f32 x, f32 z, f32 h, i32 s, u16 len, u16 runs; if
  *     dead f32 seconds left, i16 crashX, i16 crashZ, u8 into (the train
  *     it hit, 255 none), u8 how (0 reef, 1 head-on, 2 leader, 3 body,
  *     4 the whale shark; 4D, the death card); if peak u16; if early
@@ -276,7 +276,7 @@ export function snapFor (sim, phone, n, events, step = 0) {
   if (t) {
     const q = phone.me, peak = t.peak !== phone.mePeak, early = q.early !== null && q.early !== undefined;
     flags |= 8;
-    w.u8((t.dead > 0 ? 1 : 0) | (t.bursting ? 2 : 0) | (peak ? 4 : 0) | (early ? 8 : 0) | (q.late ? 16 : 0) | (phone.debug ? 32 : 0));
+    w.u8((t.dead > 0 ? 1 : 0) | (t.bursting ? 2 : 0) | (peak ? 4 : 0) | (early ? 8 : 0) | (q.late ? 16 : 0) | (phone.debug ? 32 : 0) | (t.guarded ? 64 : 0));
     w.f32(t.x); w.f32(t.z); w.f32(t.head); w.i32(s16(t.s)); w.u16(t.followers.length); w.u16(t.runs);
     if (t.dead > 0) { w.f32(t.dead); w.i16(t.crashX - cx); w.i16(t.crashZ - cz);
       const into = t.crashInto; w.u8(Number.isInteger(into) && into >= 0 && into < 255 ? into : 255); w.u8(Math.max(0, HOW.indexOf(t.crashHow))); }
@@ -344,6 +344,7 @@ export function decodeSnap (buf) {
     if (f & 8) { m.e = i16() / 10; m.eq = u32(); }
     if (f & 16) m.l = u16();
     if (f & 32) me.ack = u32();
+    if (f & 64) me.g = 1;   // guarded: a protected first run (4D)
     m.me = me;
   }
   if (flags & 128) m.rk = u8();   // your rank (4C)

@@ -14,6 +14,7 @@ import { PINK_SLOT } from './mantas.js';
 import { createBest } from './best.js';
 import { createCard } from './card.js';
 import { isTouchDevice } from './hint.js';
+import { createShieldCue } from './shieldcue.js';
 
 export function createFollow (ctx) {
   const { mantas, TRAIN_MAX, RIVAL_BASE, RIVAL_LEN, WILD_BASE, WILD_SLOTS, PARKED,
@@ -104,6 +105,9 @@ export function createFollow (ctx) {
   const keep = ctx.keepBest ? createBest() : null;
   let bestPeak = keep ? keep.value : 0, beatShown = false, boardAt = 0, offScreen = 0, rankShown = 0;
   const deathCard = createCard({ hold: !!ctx.holdDeath, touch: isTouchDevice() });
+  /* The shield, taught (4D ruling, shieldcue.js): a ring at each slip, the rule said the first time, and the end of the guard marked once. */
+  const shieldCue = createShieldCue();
+  let wasGuarded = false;
   /* A train's name for the card: a player's in a room, else "bot N". */
   const nameOf = id => (ctx.sim.room && ctx.sim.nameOf && ctx.sim.nameOf(id)) || 'bot ' + id;
   let zoomNow = null, wasDying = false, lastRuns = undefined;   // the eased camera (3L)
@@ -493,6 +497,8 @@ export function createFollow (ctx) {
       const v = ctx.view, hw = v.w / 2 + 40, hh = v.h / 2 + 40;
       for (const e of evs.splice(0)) {
         if (deathCard && e.kind === 'cut' && you.id >= 0 && e.by === you.id && !watching) deathCard.cut();
+        /* Your leader slipped under a train (4D): the ring; nothing else plays. Anyone else's: nothing. */
+        if (e.kind === 'slip') { if (!watching && e.id === you.id && !dying) shieldCue.slip(); continue; }
         /* Sound (4D): your own cut and crash wherever they are, anyone
            else's only on screen, and quieter. */
         const mineHit = !watching && you.id >= 0 && ((e.kind === 'cut' && e.by === you.id) || (e.kind === 'crash' && e.id === you.id));
@@ -544,6 +550,12 @@ export function createFollow (ctx) {
     /* The feedback page (window.MANTA_QUERY) shows players no lab wording (3K). */
     if (el) el.textContent = watching ? (typeof window.MANTA_QUERY === 'string' ? '' : 'watching bot ' + you.watched + '   length ' + you.len + '   tap for the next')
                                       : 'length ' + f.length + '   peak ' + peakLength + '   best ' + bestPeak;
+    /* The guard's end, in the water (not at a crash), and the cue placed on your leader as drawn. */
+    { const g = !watching && !dying && !!you.guarded;
+      if (wasGuarded && !g && !dying && !watching) shieldCue.end();
+      wasGuarded = g;
+      const v = ctx.view, ppu = v.pxPerUnit;
+      shieldCue.frame(v.w * ppu / 2 + (you.x - camera.position.x) * ppu, v.h * ppu / 2 + (you.z - camera.position.z) * ppu, !!(cut && cut.reduced), dying || watching); }
     drawBoard(ctx.sim.time);
     drawLabels();
     drawRadar();
@@ -585,7 +597,7 @@ export function createFollow (ctx) {
            get zoomDrawn () { return zoomDrawn; }, get burstMix () { return burstMix; },
            get kick () { return kickNow(); }, get slashing () { return slashOn; }, get rankShown () { return rankShown; },
            get vignette () { return vigNow; }, get card () { return { from: countFrom, to: countTo, t: beatT }; },
-           deathCard,
+           deathCard, shieldCue,
            get introMix () { return introMix; },
            get recruitBoost () { return lastRecruitAt >= 0 && ctx.sim.time - lastRecruitAt < BOOST_FOR ? BOOST_BY : 1; }, popAt,
            /* THE VIEW THE ROOM IS TOLD is the base one, without the burst's

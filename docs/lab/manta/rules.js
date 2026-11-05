@@ -193,7 +193,15 @@ export function createRules (ctx) {
        Never another player's train, and the reef still counts; bursting,
        it cuts as anyone does. */
     const shielded = (t, h) => h && p.firstShield && t.guarded && !t.bursting && !h.train.human;
-    const hits = ctx.trains.map(t => { if (t.dead > 0) return null; const h = contacts(t); return shielded(t, h) ? null : h; });
+    /* Each slip is an event (4D ruling: the page shows a ring, shieldcue.js),
+       once per train slipped under, as a cut is once per crossing. */
+    const slipped = (t, h) => {
+      const now = ctx.now ? ctx.now() : 0;
+      if (!(t.lastSlipOn === h.train.id && now - t.lastSlipAt < 0.6)) record({ kind: 'slip', id: t.id, on: h.train.id, x: t.x, z: t.z, at: now });
+      t.lastSlipOn = h.train.id; t.lastSlipAt = now;
+      return null;
+    };
+    const hits = ctx.trains.map(t => { if (t.dead > 0) return null; const h = contacts(t); return shielded(t, h) ? slipped(t, h) : h; });
     const done = new Set();
     for (let i = 0; i < ctx.trains.length; i++) {
       const t = ctx.trains[i], h = hits[i];

@@ -59,6 +59,7 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
   const sharkDist = (x, z) => { const t = sharkTail(), ax = shark.x, az = shark.z, dx = t.x - ax, dz = t.z - az, L2 = dx * dx + dz * dz || 1e-9; const u = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2)); return Math.hypot(x - (ax + dx * u), z - (az + dz * u)); };
   const you = { id: -1, x: 0, z: 0, head: 0, s: 0, followers: [], dead: 0, peak: 0, lastPeak: 0, len: 0, watched: -1 };
   const rivals = [], wild = [], events = [], board = [];
+  let slipOn = -1, slipAt = -1e9;          // the last slip predicted (4D)
   let rank = null;                         // your place among every train, as the room says (4C)
   const drawn = new Map();                 // train id -> what is drawn for it
   const kinds = new Map();                 // train id -> personality, for the board
@@ -524,8 +525,25 @@ export function createRoomView ({ room, build, params: start, view, name: nameNo
     if (hits && play && play.live && !paused) {
       const t = performance.now();
       hits.expire(t, (rtts5.length ? Math.max(...rtts5) : 300) + 150, !(you.dead > 0));
-      const h = hits.detect(you, rivals, params, t);
-      if (h) events.push({ kind: h.kind, x: h.x, z: h.z, by: play.id, id: h.kind === 'crash' ? you.id : undefined, predicted: true });
+      /* A protected first run (4D): while the room says you are guarded and
+         you are not bursting, a touch on a drawn train is a slip, not a
+         crash: the ring plays, nothing is predicted. (The guard ends only
+         when you are clear of every body, so the two cannot disagree at
+         its end for longer than a round trip.) */
+      if (you.guarded && !input.burst) {
+        const LR = params.leaderR || 14, FR = params.followerR || 10, k = params.trainScale || 1;
+        let on = null;
+        for (const r of rivals) {
+          if (!r || r.hole || r.dead > 0 || on) continue;
+          if (Math.hypot(r.x - you.x, r.z - you.z) <= 2 * LR * k) { on = r; break; }
+          for (const f of r.followers || []) if (Math.hypot(f.x - you.x, f.z - you.z) <= (LR + FR) * k) { on = r; break; }
+        }
+        if (on && !(slipOn === on.id && t - slipAt < 600)) events.push({ kind: 'slip', id: you.id, x: you.x, z: you.z, predicted: true });
+        if (on) { slipOn = on.id; slipAt = t; }
+      } else {
+        const h = hits.detect(you, rivals, params, t);
+        if (h) events.push({ kind: h.kind, x: h.x, z: h.z, by: play.id, id: h.kind === 'crash' ? you.id : undefined, predicted: true });
+      }
     }
 
     /* Events once each, at the render delay, so the burst lands where the
