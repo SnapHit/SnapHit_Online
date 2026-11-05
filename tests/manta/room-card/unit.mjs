@@ -25,7 +25,8 @@ const digits = String(BUILD).replace(/\D/g, '').slice(2);
 
 function sock () {
   const s = { got: [], closed: null, me: null };
-  s.send = d => { if (typeof d === 'string') s.got.push(JSON.parse(d)); else { const m = decodeSnap(d); if (m && m.me) s.me = m.me; if (m && m.rd) s.rd = m.rd; } };
+  s.tr = new Map(); s.board = null;
+  s.send = d => { if (typeof d === 'string') s.got.push(JSON.parse(d)); else { const m = decodeSnap(d); if (!m) return; if (m.me) s.me = m.me; if (m.rd) s.rd = m.rd; if (m.bd) s.board = m.bd; for (const t of m.tr) s.tr.set(t.id, t); } };
   s.close = code => { s.closed = code; };
   s.of = t => s.got.filter(m => m && m.t === t);
   return s;
@@ -58,6 +59,21 @@ await wait(4000);
 /* B swims for the reef again at once, so it may be down again by now: it came back if its run count moved on. */
 ok('4 s later the holding player is still down; the other came back by itself', A.me.dead > 0 && A.me.runs === runsA && B.me.runs > runsB,
    JSON.stringify({ A: { dead: A.me.dead, runs: A.me.runs }, B: { dead: B.me.dead || 0, runs: B.me.runs } }));
+/* 4D ruling 2: what everyone else sees of a train held on the card. A
+   watcher looking at the whole ocean, and B (a rival player), are sent
+   that train as dead: no length, off the radar, 0 on the board. The page
+   draws a dead train's leader and followers nowhere (follow.js parks a
+   crashed train's slots; labels and the radar skip it), so nothing frozen
+   sits in the water: the page's side is room-card/page.mjs. */
+const idA0 = A.of('init').find(m => m.me).me.id;
+const V = sock(); ocean.join(V, true); await ocean.message(V, JSON.stringify({ t: 'hi', b: digits }));
+await ocean.message(V, JSON.stringify({ t: 'view', x: 0, z: 0, w: 6000, h: 6000 }));
+await wait(1500);
+const vt = V.tr.get(idA0), vr = (V.rd || []).find(r => r[0] === idA0), vb = (V.board || []).find(r => r[0] === idA0), br = (B.rd || []).find(r => r[0] === idA0);
+ok('a watcher and a rival see the held train as dead: the snapshot\'s dead flag with length 0, off the radar, 0 on the board',
+   A.me.dead > 0 && !!vt && vt.dead === 1 && vt.len === 0 && !!vr && vr[5] === 0 && vr[3] === 0 && (!vb || vb[1] === 0) && !!br && br[5] === 0,
+   JSON.stringify({ watcherTrain: vt && { dead: vt.dead, len: vt.len }, watcherRadar: vr, board: vb, rivalRadar: br }));
+ocean.leave(V);
 await ocean.message(A, JSON.stringify({ t: 'go' }));
 const tg = await until(() => A.me && !A.me.dead, 2000);
 ok('{t:\'go\'} brings it back as a new run (' + tg + ' ms)', tg >= 0 && A.me.runs === runsA + 1, JSON.stringify({ runs: A.me.runs }));
@@ -76,12 +92,21 @@ await wait(800);
 const rA = (W.rd || []).find(r => r[0] === idA);
 ok('a go sent while alive did nothing (the next crash still counted from the same run), and a held train whose player is benched is brought back by the bot holding it',
    t2 >= 0 && benched === 1 && runs2 === runsA + 1 && !!rA && rA[5] === 1 && rA[4] === runs2 + 1, JSON.stringify({ t2, benched, runs2, radar: rA }));
+/* The away rule is the existing one (HOLD_MS, 15 s): the bot holds the
+   train for A's token, and A coming back inside 15 s with it takes the
+   same train back, held on the card again by its h:1. */
+const tokA = A.of('init').find(m => m.me).me.token;
+ocean.leave(A);
+const A2 = sock(); ocean.join(A2, true); await ocean.message(A2, JSON.stringify({ t: 'hi', b: digits, p: 1, h: 1, k: tokA }));
+const me2 = (A2.of('init').find(m => m.me) || {}).me;
+ok('back inside 15 s with its token, the player takes the same train back from the bot', !!me2 && me2.id === idA, JSON.stringify(me2 && { id: me2.id, was: idA }));
+ocean.leave(A2);
 /* A hello with h:2 is malformed and refused, as any bad field is. */
 const C = sock(); ocean.join(C, true); await ocean.message(C, JSON.stringify({ t: 'hi', b: digits, p: 1, h: 2 }));
 await wait(300);
 ok('a hello with h:2 is refused (not seated)', !seated(C), JSON.stringify(C.got.slice(0, 2)));
 clearInterval(B.timer);
-for (const s of [A, B, C, W]) ocean.leave(s);
+for (const s of [B, C, W]) ocean.leave(s);
 clearTimeout(die);
 console.log(bad ? 'FAILED ' + bad : 'ALL PASS');
 process.exit(bad ? 1 : 0);

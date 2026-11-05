@@ -143,6 +143,35 @@ for (const [vw, vh, touch] of [[800, 450, false], [1080, 607, false], [412, 915,
   ok(tag + ': clear of the board, radar, score and stats lines', over.length === 0, over.join(' ') || 'none');
   await ctx.close();
 }
+/* 6. What everyone else sees of a train held on the card (4D ruling 2): a
+   rival held dead past the beat draws nothing, no manta in its slots, no
+   label, no line on the radar. A room's mirror marks such a train dead
+   from the snapshot (roomview.js), and follow.js draws a mirror's trains
+   as it draws these. */
+{
+  const ctx = await b.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
+  const p = await open(ctx, '/lab/manta/?tier=low&backend=webgl2&fx=off&hint=0&paused=1');
+  const r = await p.evaluate(async () => {
+    const { RIVAL_BASE, RIVAL_LEN, PARKED } = await import('/lab/manta/mantas.js');
+    const L = window.__lab, S = window.__sim, M = L.mantas, y = S.you, r = S.rivals[0];
+    /* Laid in view, 80 units ahead of you, then crashed and held on its card for 4 s. */
+    r.x = y.x + 60; r.z = y.z - 80; S.seedTrail(r); for (let k = 0; k < 6; k++) r.followers.push({ x: r.x, z: r.z, head: r.head, born: -100, from: -1 });
+    for (let i = 0; i < 3; i++) L.step(1 / 60);
+    const drawnBefore = M.aPos.getX(RIVAL_BASE) !== PARKED;
+    r.holdDeath = true; S.crash(r, null, 'reef');
+    for (let i = 0; i < 16; i++) L.step(0.25);
+    /* You swam on meanwhile: the held train set back in your view, as it stands, then one frame. */
+    r.x = r.crashX = y.x + 60; r.z = r.crashZ = y.z - 80; L.step(1 / 60);
+    const slots = []; for (let k = 0; k < RIVAL_LEN; k++) slots.push(M.aPos.getX(RIVAL_BASE + k) === PARKED);
+    /* A label within 60 px of where its leader stood, as drawn. */
+    const v = L.view, ppu = v.pxPerUnit, sx = v.w * ppu / 2 + (r.crashX - L.camera.position.x) * ppu, sy = v.h * ppu / 2 + (r.crashZ - L.camera.position.z) * ppu;
+    const labelThere = [...document.querySelectorAll('#labels div')].filter(d => d.style.display !== 'none').some(d => { const q = d.getBoundingClientRect(); return Math.hypot((q.left + q.right) / 2 - sx, q.bottom - sy) < 60; });
+    const rm = window.__radar.model, rt = rm && rm.trains ? rm.trains.get(r.id) : null;
+    return { drawnBefore, held: r.dead > 0 && r.dead < 1e-4, len: r.followers.length, slotsParked: slots.every(Boolean), labelThere, radarAlive: rt ? rt.alive : null, onScreen: sx > 0 && sx < innerWidth && sy > 0 && sy < innerHeight };
+  });
+  ok('a rival held dead on its card past the beat draws nothing: its slots parked, no label where it stood, not alive on the radar', r.drawnBefore && r.held && r.len === 0 && r.slotsParked && !r.labelThere && r.radarAlive !== true && r.onScreen, JSON.stringify(r));
+  await ctx.close();
+}
 ok('no console errors', errs.length === 0, JSON.stringify(errs.slice(0, 3)));
 clearTimeout(die); await b.close();
 console.log(bad ? 'FAILED ' + bad : 'ALL PASS');
