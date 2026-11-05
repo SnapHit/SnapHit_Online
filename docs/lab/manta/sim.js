@@ -454,7 +454,7 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     t.s = 0; t.followers.length = 0; t.bursting = false; t.burstOwed = 0;
     t.lastPeak = t.peak; t.peak = 0; t.runs++;
     t.dead = 0; t.crashed = 0; t.cut = 0; t.rebuild = 10;
-    t.go = false; t.guard = null; t.guarded = false; t.first = null; t.crossing = null;
+    t.go = false; t.guard = null; t.guarded = false; t.guardEnded = 0; t.first = null; t.crossing = null;
     seedTrail(t);
   }
 
@@ -503,6 +503,16 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     t.guard = { at: time }; t.guarded = true;
     t.first = { at: time, crossed: false, crosser: null };
     return { x: t.x, z: t.z };
+  }
+  /* Is t's leader within a touch (plus `by` units) of any part of another train? */
+  function touchingAny (t, by = 0) {
+    const k = p.trainScale || 1;
+    for (const o of trains) {
+      if (o === t || o.dead > 0) continue;
+      if (Math.hypot(o.x - t.x, o.z - t.z) <= (p.leaderR + p.leaderR) * k + by) return true;
+      for (const f of o.followers) if (Math.abs(f.x - t.x) <= 80 && Math.abs(f.z - t.z) <= 80 && Math.hypot(f.x - t.x, f.z - t.z) <= (p.leaderR + p.followerR) * k + by) return true;
+    }
+    return false;
   }
   /* The crossing (4D): a bot nobody drives or holds for a player (t.keep), out of sight (more than 900
      units from t, and, in a room, outside every phone's view: sim.hidden),
@@ -589,9 +599,19 @@ export function createSim ({ seed = 1, params = {} } = {}) {
     /* THE PROTECTED FIRST RUN (4D): a guard lasts firstFor seconds of its
        run or until the train is firstLen long, and never comes back. Bots
        read t.guarded (bots.js). */
+    /* NEVER UNDER A TRAIN WHEN IT ENDS (4D ruling): once its time or length
+       is up, a guard ends only when the leader has been clear of every
+       other train's body for firstClearFor seconds (firstClearBy units
+       more than a touch). Ended while the shield had the leader under a
+       body, the next step was a crash: 4 of 2,000 first runs crashed on
+       that very step. t.guardEnded marks the end for the page's cue. */
     for (const t of trains) if (t.guard) {
-      if (t.dead > 0 || time - t.guard.at >= p.firstFor || t.followers.length >= p.firstLen) { t.guard = null; t.guarded = false; }
-      else t.guarded = true;
+      if (t.dead > 0) { t.guard = null; t.guarded = false; continue; }
+      t.guarded = true;
+      if (!(time - t.guard.at >= p.firstFor || t.followers.length >= p.firstLen)) continue;
+      if (touchingAny(t, p.firstClearBy)) { t.guard.clearAt = -1; continue; }
+      if (!(t.guard.clearAt >= 0)) t.guard.clearAt = time;
+      if (time - t.guard.clearAt >= p.firstClearFor) { t.guard = null; t.guarded = false; t.guardEnded = time; }
     }
     for (const t of trains) if (t.first && !t.first.crossed && time - t.first.at >= p.crossAt) {
       t.first.crossed = true;

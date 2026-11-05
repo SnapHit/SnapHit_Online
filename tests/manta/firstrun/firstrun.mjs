@@ -38,6 +38,9 @@ if (process.argv[2] === 'sum') { summary(process.argv.slice(3)); process.exit(0)
 const MODE = process.env.MODE || 'after';
 const RUNS = +(process.env.RUNS || 100), SEED = +(process.env.SEED || 1), CAP = +(process.env.CAP || 90);
 const WARM = +(process.env.WARM || 60), OCEAN = +(process.env.OCEAN || 50);
+/* AFTER_GUARD (4D ruling): a run also ends this many seconds after its
+   guard ended (CAP still ends it), to count crashes just after the guard. */
+const AFTER_GUARD = process.env.AFTER_GUARD ? +process.env.AFTER_GUARD : null;
 const SET = process.env.SET ? JSON.parse(process.env.SET) : {};
 
 /* The committed defaults, as the room reads them, scaled as the room's ocean. */
@@ -112,7 +115,7 @@ function ocean (seed) {
 function run (s, steer, begin) {
   begin(s);
   const you = s.you, t0 = s.time, runs = you.runs;
-  let recruit = null, crash = null, cuts60 = 0, cross = null, how = null, longest = 0, guarded = null, len15 = null;
+  let recruit = null, crash = null, cuts60 = 0, cross = null, how = null, longest = 0, guarded = null, len15 = null, guardEnd = null, wasGuard = !!you.guard;
   for (let i = 0; i < Math.round(CAP / STEP); i++) {
     steer(s); s.step();
     const t = s.time - t0;
@@ -125,11 +128,14 @@ function run (s, steer, begin) {
     if (you.first && you.first.crossed && cross === null) cross = you.first.crosser !== null;
     longest = Math.max(longest, you.followers.length);
     if (len15 === null && you.followers.length >= 15) len15 = t;
+    if (wasGuard && !you.guard && guardEnd === null && !(you.dead > 0)) guardEnd = t;
+    wasGuard = !!you.guard;
+    if (AFTER_GUARD !== null && guardEnd !== null && t - guardEnd >= AFTER_GUARD) break;
     if (crash !== null) break;
   }
   /* Back in the water for the next run: through the beat if it crashed. */
   if (crash !== null) { let k = 0; while (you.dead > 0 && k++ < 600) { steer(s); s.step(); s.events.length = 0; } }
-  return { recruit, crash, cuts60, cross, how, longest, runs, guarded, len15 };
+  return { recruit, crash, cuts60, cross, how, longest, runs, guarded, len15, guardEnd };
 }
 
 const restartHere = s => { s.you.crashX = s.you.x; s.you.crashZ = s.you.z; s.restart(s.you); };
@@ -169,6 +175,12 @@ function summary (files) {
       runsWithACut: (o.filter(r => r.cuts60 > 0).length / n * 100).toFixed(1) + '%',
       crossed: crossed + '/' + n, how: hows,
       crashWhileGuarded: o.filter(r => r.guarded).length, crashBefore30: cr.filter(v => v <= 30).length,
-      len15Median: fmt(q(o.map(r => r.len15 === null ? Infinity : r.len15), 0.5)) }));
+      len15Median: fmt(q(o.map(r => r.len15 === null ? Infinity : r.len15), 0.5)),
+      /* 4D ruling: how the guard ended, and crashes just after it. */
+      guardEnded: o.filter(r => r.guardEnd !== null && r.guardEnd !== undefined).length,
+      guardEndMedian: fmt(q(o.filter(r => r.guardEnd != null).map(r => r.guardEnd), 0.5)), guardEndP95: fmt(q(o.filter(r => r.guardEnd != null).map(r => r.guardEnd), 0.95)),
+      crashSameStepAsGuardEnd: o.filter(r => r.guardEnd == null && r.crash !== null && r.crash >= 59.99).length,
+      crashWithin2OfGuardEnd: o.filter(r => r.crash !== null && ((r.guardEnd != null && r.crash - r.guardEnd <= 2) || (r.guardEnd == null && r.crash >= 59.99))).length,
+      crashWithin10OfGuardEnd: o.filter(r => r.crash !== null && ((r.guardEnd != null && r.crash - r.guardEnd <= 10) || (r.guardEnd == null && r.crash >= 59.99))).length }));
   }
 }

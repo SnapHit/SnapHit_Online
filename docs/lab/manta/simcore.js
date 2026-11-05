@@ -46,7 +46,9 @@ export const DEF = {
      times as far, give it a berth of firstRoom units and take no food
      inside that berth (bots.js); and with firstShield, not bursting, it
      slips under a bot's train rather than crashing into it (rules.js),
-     never another player's. At crossAt seconds a bot's short train of
+     never another player's. Once its time is up the guard ends only after
+     the leader has been clear of every train's body (by firstClearBy units
+     more than a touch) for firstClearFor seconds. At crossAt seconds a bot's short train of
      crossLen, brought in from out of sight, crosses crossAhead units in
      front of it, swimming straight for up to crossFor seconds.
      Tuned in Node (the harness firstrun.mjs), a scripted new player in a
@@ -56,7 +58,7 @@ export const DEF = {
      alone reached 74 to 90 percent, as the player still swam into long
      bodies; with the shield no guarded run crashed, so the share past a
      minute is set by how long the guard lasts (50 s: 62 percent). */
-  firstNear: 70, firstClear: 600, firstFor: 60, firstLen: 1000, firstBerth: 2, firstRoom: 450, firstShield: 1,
+  firstNear: 70, firstClear: 600, firstFor: 60, firstLen: 1000, firstBerth: 2, firstRoom: 450, firstShield: 1, firstClearBy: 30, firstClearFor: 0.5,
   crossAt: 30, crossLen: 8, crossAhead: 300, crossFrom: 700, crossFor: 7,
   wildCount: 120,      // v1.10: 300 with instant respawn never ran dry
   regrow: 5,           // the refill time (3C/3D): each missing manta back within it on average
