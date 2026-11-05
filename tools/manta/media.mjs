@@ -331,7 +331,9 @@ function brightPage (B) {
 }
 async function stageBright (name, B = BRIGHT[name], small = 1) {
   const G = brightPage(B), w = G.pw, h = G.ph;
-  const ctx = await browser.newContext({ viewport: { width: Math.round(w * small), height: Math.round(h * small) }, deviceScaleFactor: 1, hasTouch: false });
+  /* Smaller, the page keeps its shape exactly (the view is worked out from it): whole multiples of w and h over their greatest common divisor. */
+  const gcd = (a, b) => b ? gcd(b, a % b) : a, g = gcd(w, h), m = Math.max(1, Math.round(small * g));
+  const ctx = await browser.newContext({ viewport: small === 1 ? { width: w, height: h } : { width: w / g * m, height: h / g * m }, deviceScaleFactor: 1, hasTouch: false });
   const p = await ctx.newPage(); p.setDefaultTimeout(180000); p.setDefaultNavigationTimeout(60000);
   const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', c => { if (c.type() === 'error' && !/popErrorScope/.test(c.text())) errs.push(c.text()); });
   await p.addInitScript(() => { document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); s.textContent = '#chip,#panel,#bar,#board,#len,#radar,#labels,#hint,#signal,#beat,#stats,#plain{display:none!important}html,body{cursor:none}'; document.head.appendChild(s); }); });
@@ -515,7 +517,7 @@ if (MODE === 'covers') {
   let start = 0; if (!PREVIEW) while (start < n && existsSync(fileOf(start))) start++;
   const t0 = Date.now(), rec = { file: null, w, h, frames: n, fps: FPS, drawn: [G.pw * 2, G.ph * 2], crop: [0, G.y0 * 2], from: start, small: start > 1 ? +(process.env.SMALL || 0.2) : 1 };
   if (start < n) {
-    /* Played at SMALL (0.2) of the page's size up to the first frame read
+    /* Played at about SMALL (0.2) of the page's size, its shape exact, up to the first frame read
        back, then the page set to its full size: the view is the same area
        of ocean at any size of one shape, and the light memory the same 512
        texels, so the game and its wakes are the same, and a step costs a
