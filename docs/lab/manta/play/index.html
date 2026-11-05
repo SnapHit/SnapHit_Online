@@ -936,7 +936,10 @@ window.MANTA_LAB = window.MANTA_ROOT + 'lab/manta/';
     var dead = watching || you.dead > 0;
     if (wasDead && !dead) runs++;
     wasDead = dead;
-    if (!watching) best = Math.max(best, you.peak || 0, you.lastPeak || 0, you.followers ? you.followers.length : 0);
+    /* Peaks only (4E): in a room your drawn train includes pickups this
+       phone predicted, which the room may refuse, so its length could put
+       a best here that the card and the score line never show. */
+    if (!watching) best = Math.max(best, you.peak || 0, you.lastPeak || 0);
     /* Your best kept on this device (4D, manta:best), from earlier visits too. */
     var F = window.__lab && window.__lab.follower; if (F && F.best > best) best = F.best;
     $('stats').textContent = 'runs ' + runs + ' · best peak ' + best + ' · cuts landed ' + cuts;

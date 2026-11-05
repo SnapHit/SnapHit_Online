@@ -57,15 +57,19 @@ export function createCard ({ hold = false, touch = false, now = () => performan
   next.textContent = touch ? 'Tap to swim again' : 'Click or press Space to swim again';
 
   /* The run, as it goes: started when your leader is in the water. */
-  let alive = 0, cuts = 0, rank = 0, bestAtStart = null, wasLive = false;
+  let alive = 0, cuts = 0, rank = 0, bestAtStart = null, wasLive = false, bornAt = 0;
   /* The beat, from the crash. */
   let shown = false, t = 0, from = 0, to = 0, newBest = false, popped = false, skipped = false, crashAt = 0, went = false;
   let onSkip = null, onGo = null;
 
-  function run (live, dt, bestNow) {
-    if (live && !wasLive) { alive = 0; cuts = 0; rank = 0; bestAtStart = bestNow; }
+  /* Once a frame: whether your leader is in the water, the run's clock in
+     seconds (follow.js: the simulation's time solo, real time in a room),
+     and your best as it stood before this frame's peak was counted in.
+     Time alive runs from the first frame in the water to the crash's. */
+  function run (live, clockNow, bestNow) {
+    if (live && !wasLive) { alive = 0; cuts = 0; rank = 0; bestAtStart = bestNow; bornAt = clockNow; }
+    if (live || wasLive) alive = Math.max(0, clockNow - bornAt);
     wasLive = live;
-    if (live) alive += Math.max(0, dt);
   }
   function show (peak, bestNow, how, name, reduced) {
     shown = true; t = 0; from = 0; to = Math.max(0, peak | 0); skipped = false; went = false; popped = false; crashAt = now();

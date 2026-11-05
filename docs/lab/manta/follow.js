@@ -49,7 +49,7 @@ export function createFollow (ctx) {
   let lastRecruitAt = -1;
   const popAt = age => ((cut && cut.reduced) || age < 0 || age >= POP_FOR) ? 1
     : 1 + POP_BY * (age <= POP_HOLD ? 1 : Math.pow(1 - (age - POP_HOLD) / (POP_FOR - POP_HOLD), 2));
-  let vigBase = null, vigNow = null, beatT = 0, countFrom = 0, countTo = 0, aliveLen = 0;
+  let vigBase = null, vigNow = null, beatT = 0, countFrom = 0, countTo = 0, aliveLen = 0, cardWas = null;
   const realNow = () => performance.now();
   let kickAt = -1, kickX = 0, kickZ = 0, slashAt = -1, slashOn = false;
   const slashSeg = { x0: 0, z0: 0, x1: 0, z1: 0, r: 1, g: 1, b: 1, k: 1 };
@@ -539,7 +539,12 @@ export function createFollow (ctx) {
       camera.updateMatrixWorld();
     }
 
-    /* The score is the run's peak, and the run ends at a crash. */
+    /* The score is the run's peak, and the run ends at a crash. The best
+       as it stood before this frame folds the run in: the card's "was N"
+       is the best you had when the run began (4E), and a run's first frame
+       can already carry a recruit (a protected first run starts beside wild
+       mantas; a slow frame or a room's first snapshot holds several). */
+    const bestBefore = bestPeak;
     peakLength = you.peak;
     if (!watching) {
       if (you.lastPeak > bestPeak) bestPeak = you.lastPeak;
@@ -564,7 +569,15 @@ export function createFollow (ctx) {
        the peak counting up, a new best, and with the page holding (the
        feedback page, the portal) the prompt for the next run. */
     if (deathCard && !watching) {
-      deathCard.run(!dying, dt, bestPeak);
+      /* The card runs on the run's own clock (4E): solo the simulation's
+         time, which is the game's however fast the page draws; in a room
+         real time, which is the room's. Not this frame's dt, which is
+         clamped to 0.1 s, so a page drawing a frame a second counted a room
+         run of 40 s as 0:03 and the peak's count-up took ten seconds. */
+      const cardNow = ctx.sim.room ? realNow() / 1000 : ctx.sim.time;
+      const cardDt = ctx.sim.room ? (cardWas === null ? 0 : Math.max(0, cardNow - cardWas)) : dt;
+      cardWas = cardNow;
+      deathCard.run(!dying, cardNow, bestBefore);
       if (!dying) {
         const sim = ctx.sim, len = you.followers.length;
         let r = sim.room ? sim.rank : 1;
@@ -573,11 +586,14 @@ export function createFollow (ctx) {
       }
       if (dying && !beatShown) {
         beatShown = true;
-        countTo = Math.max(you.peak, you.lastPeak); countFrom = 0;
+        /* This run's peak (4E): until the next run starts, sim.js and the
+           room keep it in you.peak. lastPeak is the run before this one,
+           so the max put the last run's peak on a shorter run's card. */
+        countTo = you.peak; countFrom = 0;
         const into = you.crashInto, name = into >= 0 ? nameOf(into) : '';
         deathCard.show(countTo, bestPeak, you.crashHow, name, !!(cut && cut.reduced));
       } else if (!dying && beatShown) { beatShown = false; deathCard.hide(); }
-      if (beatShown) { beatT += Math.max(0, dt); deathCard.frame(dt, ctx.sim.params.deathBeat || 1.5); }
+      if (beatShown) { beatT += cardDt; deathCard.frame(cardDt, ctx.sim.params.deathBeat || 1.5); }
       if (!dying) beatT = 0;
     }
     /* The vignette through the beat (post.js owns the uniform; ctx.post is read at call time). */
