@@ -343,7 +343,23 @@ node tools/manta/media.mjs video23 "$OUT"   # raywake-preview-1080x1620.mp4
 node tools/manta/media.mjs plan    "$OUT"   # the video's steering run without frames: lengths, deaths, crashes and cuts
 node tools/manta/media.mjs bright  "$OUT"   # 4D: raywake-cover-bright-1920x1080.png, -800x1200.png, -800x800.png, and each at 320 wide (about 1 min)
 node tools/manta/media.mjs brightstill 1920x1080 "$OUT"   # one bright cover without its title, while tuning
+node tools/manta/media.mjs brightvideo16 "$OUT"   # 4E: raywake-preview-1920x1080.mp4, opening on the bright cover's frame
+node tools/manta/media.mjs brightvideo23 "$OUT"   # 4E: raywake-preview-1080x1620.mp4, the 800x1200 cover's staging at 1080x1620
 ```
+
+The bright videos (4E) take about 30 minutes each here (3.3 s a frame at
+1920x1340, 2.7 at 1080x1944), so they render in pieces: each run keeps
+the frames on disk, plays the game again at about a fifth of the page's
+size (its shape exact) up to the first missing one, draws the frame
+before it again at full size and stops unless it matches the file byte
+for byte, then writes frames for `MAX_S` seconds (480). Run it again
+until it encodes (5 runs a video under 10 minutes each). `PREVIEW=1`
+plays a whole video small and writes every tenth frame, about 4 minutes,
+to see what happens in it first. 4E's 16:9 frame 0, cropped from the
+drawn frame, is byte-identical to the bright cover below its title's
+glow (rows 400 to 1079; 101 dB PSNR from row 320); the 2:3 frame 0 is the
+same moment drawn at 1080x1620, 32 dB PSNR against the 800x1200 cover
+when scaled to it (the burst's sparkle differs in detail).
 
 The bright covers (4D, design doc 10.8) are composed rather than taken:
 the close-up camera held at a closer zoom, your lime train laid along a
