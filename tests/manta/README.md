@@ -284,6 +284,31 @@ What 4D measured with it (CAP 60 unless said; the chosen values are in simcore.j
 
 The same protected runs on to 90 s (60 runs, `CAP=90`): 33 crashed by 90 s, 14 of them inside 10 s of the guard lifting at 60 s; first crash median 85.4 s. The guard moves the first-minute cliff to the 60 s mark; it does not teach the scripted player to avoid bodies.
 
+The guard's end (4D ruling 1a), each protected run taken on to 10 s after its guard ended (`CAP=120 AFTER_GUARD=10`), the old rule (ends at 60 s whatever, `SET='{"firstClearBy":-1e9,"firstClearFor":0}'`) against the new (ends once clear of every body by 30 units for 0.5 s), seeds 501 to 510 for both and 511 to 522 for the new rule only:
+
+| | old rule, 400 runs | new rule, 880 runs |
+|---|---|---|
+| the guard ended, median / latest | 60.02 / 60.02 s | 60.53 / 63.18 s (13 runs after 61 s, 5 after 62) |
+| crashes on the guard's last step | 5 (1.3%) | 0 |
+| crashes within 2 s of the guard ending | 15 (3.8%) | 33 (3.8%) |
+| crashes within 10 s of the guard ending | 90 (22.5%) | 192 (21.8%) |
+
+The fix removes the crashes caused by the guard lifting under a body. The
+crashes in the ten seconds after are this scripted player's ordinary rate
+(it turns away from a train only half the time): the guard ending does
+not cause them, and only the cue (shieldcue.js) can help with them.
+
+### Room browser tests before the 4D merge (ruling 3)
+
+Under wrangler dev, one at a time, on 2 cores with `WATCHDOG_X=3 STEP_MS=6`,
+at the rulings' code (24837e0): roomtest 6 of 6; playmode at 20:0, 150:50
+and 300:100 all pass; bhits `MODE=crash` and `MODE=cut` all pass; budget
+16 of 16; names `PART=first` 5 of 5; full `MODE=play` and `MODE=back` all
+pass; rank, all parts, 9 of 9; plays `MODE=on` 30 of 30; pink at 20:0 6 of
+6. None needed changing for the held death card: bhits' staged room puts
+its trains back itself, and budget's 95 percent check already expected
+the card before solo.
+
 ### Room cost in plain Node, `room-size/` (no browser, no server)
 
 - `cost.mjs` (4B): a room's step cost and bytes per phone, with the room's own `rooms/ocean.js` loaded in Node (a copy in `MANTA_OUT`, patched in memory only: imports pointed at `docs/lab/manta/`, the seat count raised to n-1 when it is lower, and timing hooks), on a clock the harness moves 50 ms a tick and a seeded `crypto`. n-1 phones are seated; each step is timed on its own and given an equal share of its tick's snapshots. `SIZE=scaled` (default) sizes the ocean for n mantas (n-1 trains swim: the room's own solo manta is parked out of the water; arena 2000 x sqrt(n/11), 300 x n/11 wild, each to the nearest 10) by serving the room a params.js with those defaults; `SIZE=room` takes the room as it is. `PLAYERS=bot` steers each player as the bot brain would, so trains grow as bots' do; `PLAYERS=brain` sends no inputs, so the room benches every player and the brain drives all n-1 trains inside the timed steps while every phone is still sent its snapshots (the dearest room there is: the step-cost bar is judged on it). `BYTES=1 ZOOM=near|mid|far|burst` counts what each phone is sent and sends, with WebSocket framing (near 257x570, mid 363x806, far 962x2137, burst 1078x2394 on a 412x915 screen); `BREAKDOWN=1` splits the snapshots' bytes by section, over every second and over the dearest 5%. The step cost is only clean with nothing else running: give it the machine. `N=11,21 PLAYERS=bot WARM_S=300 MEASURE_S=120 node tests/manta/room-size/cost.mjs`: about 2 min for those two; n=51 alone takes about 8 min, so give it its own run. Rows go to `MANTA_OUT/room-cost.json` as each n finishes.
